@@ -25,14 +25,14 @@
 
 ## Milestone 2 — Attack runner CLI (Week 2)
 
-- [ ] `runner/target_config.py` — TargetConfig dataclass, load/save JSON
-- [ ] `runner/http_client.py` — TargetAdapter base + OpenAICompatAdapter
-- [ ] `runner/http_client.py` — CustomRESTAdapter
-- [ ] `runner/attack_runner.py` — async runner, reads prompts, writes results
-- [ ] Graceful stop (SIGINT handler, flush in-flight results)
-- [ ] Progress callback (for later UI integration)
-- [ ] CLI entry point: `python -m runner --config target.json --db run.db`
-- [ ] Tests: mock HTTP responses, verify results written correctly
+- [x] `runner/target_config.py` — TargetConfig dataclass, load/save JSON
+- [x] `runner/http_client.py` — TargetAdapter base + OpenAICompatAdapter
+- [x] `runner/http_client.py` — CustomRESTAdapter
+- [x] `runner/attack_runner.py` — async runner, reads prompts, writes results
+- [x] Graceful stop (SIGINT handler, flush in-flight results)
+- [x] Progress callback (for later UI integration)
+- [x] CLI entry point: `python -m runner --config target.json --db run.db`
+- [x] Tests: mock HTTP responses, verify results written correctly
 
 ## Milestone 3 — Tauri UI (Week 3)
 
