@@ -64,8 +64,8 @@ class ProgressEvent:
 # Type alias for the progress callback the caller can supply.
 # It receives a ProgressEvent after every completed request.
 # Accepts both sync and async callables.
-from typing import Callable, Union
-ProgressCallback = Callable[[ProgressEvent], None] | None
+from typing import Callable, Optional
+ProgressCallback = Optional[Callable[[ProgressEvent], None]]
 
 
 async def run_attack(
