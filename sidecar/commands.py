@@ -20,25 +20,40 @@ from db.repository import (
     Prompt,
     Result,
     Run,
+    Scenario,
+    ScenarioStep,
     Target,
     create_prompt,
+    create_step,
     create_target,
+    create_scenario,
     delete_prompt,
+    delete_scenario,
+    delete_step,
+    delete_steps_by_scenario,
     get_all_prompts,
     get_all_runs,
+    get_all_scenarios,
     get_all_targets,
     get_prompt,
     get_prompts_by_category,
     get_prompts_by_owasp,
     get_results_by_run,
     get_run,
+    get_scenario,
+    get_steps_by_scenario,
     get_target,
     init_db,
     open_db,
+    update_scenario,
+    update_step,
+    update_target,
     upsert_prompt,
+    upsert_target,
     update_run_status,
 )
 from runner.attack_runner import ProgressEvent, run_attack
+from runner.scenario_runner import ScenarioProgressEvent, run_scenario
 from runner.target_config import TargetConfig
 from sidecar.protocol import send_event
 
@@ -282,6 +297,8 @@ def _target_to_dict(t: Target) -> dict:
         "auth_header": t.auth_header,
         "field_mapping": t.field_mapping,
         "system_prompt": t.system_prompt,
+        "session_strategy": t.session_strategy,
+        "session_field": t.session_field,
         "notes": t.notes,
         "created_at": t.created_at,
     }
@@ -290,6 +307,166 @@ def _target_to_dict(t: Target) -> dict:
 def cmd_list_targets(state: SidecarState, params: dict) -> list[dict]:
     db = _require_db(state)
     return [_target_to_dict(t) for t in get_all_targets(db)]
+
+
+def cmd_save_target(state: SidecarState, params: dict) -> dict:
+    """Create or update a target.
+
+    params: {id?, name, url, endpoint_type, auth_type?, auth_header?,
+             field_mapping?, system_prompt?, session_strategy?, session_field?, notes?}
+    """
+    db = _require_db(state)
+    target_id = params.get("id") or str(uuid.uuid4())
+    t = Target(
+        id=target_id,
+        name=params["name"],
+        url=params["url"],
+        endpoint_type=params["endpoint_type"],
+        auth_type=params.get("auth_type", "none"),
+        auth_header=params.get("auth_header"),
+        field_mapping=params.get("field_mapping"),
+        system_prompt=params.get("system_prompt"),
+        session_strategy=params.get("session_strategy", "none"),
+        session_field=params.get("session_field"),
+        notes=params.get("notes"),
+    )
+    upsert_target(db, t)
+    saved = get_target(db, target_id)
+    return _target_to_dict(saved)
+
+
+def cmd_get_target(state: SidecarState, params: dict) -> dict | None:
+    """Get a single target by ID."""
+    db = _require_db(state)
+    t = get_target(db, params["id"])
+    return _target_to_dict(t) if t else None
+
+
+# ---------------------------------------------------------------------------
+# Scenarios
+# ---------------------------------------------------------------------------
+
+def _scenario_to_dict(s: Scenario) -> dict:
+    return {
+        "id": s.id,
+        "name": s.name,
+        "target_id": s.target_id,
+        "sessions": s.sessions,
+        "tags": s.tags,
+        "repeat_count": s.repeat_count,
+        "created_at": s.created_at,
+        "updated_at": s.updated_at,
+    }
+
+
+def _step_to_dict(s: ScenarioStep) -> dict:
+    return {
+        "id": s.id,
+        "scenario_id": s.scenario_id,
+        "step_order": s.step_order,
+        "session": s.session,
+        "prompt_id": s.prompt_id,
+        "prompt_text": s.prompt_text,
+        "delay_ms": s.delay_ms,
+    }
+
+
+def cmd_list_scenarios(state: SidecarState, params: dict) -> list[dict]:
+    db = _require_db(state)
+    return [_scenario_to_dict(s) for s in get_all_scenarios(db)]
+
+
+def cmd_get_scenario(state: SidecarState, params: dict) -> dict | None:
+    """Get scenario with its steps.
+
+    params: {id: str}
+    """
+    db = _require_db(state)
+    s = get_scenario(db, params["id"])
+    if not s:
+        return None
+    steps = get_steps_by_scenario(db, s.id)
+    result = _scenario_to_dict(s)
+    result["steps"] = [_step_to_dict(st) for st in steps]
+    return result
+
+
+def cmd_create_scenario(state: SidecarState, params: dict) -> dict:
+    """Create a new scenario.
+
+    params: {name, target_id?, sessions?, tags?, repeat_count?}
+    """
+    db = _require_db(state)
+    scenario_id = str(uuid.uuid4())
+    s = Scenario(
+        id=scenario_id,
+        name=params["name"],
+        target_id=params.get("target_id"),
+        sessions=params.get("sessions", ["A"]),
+        tags=params.get("tags", []),
+        repeat_count=params.get("repeat_count", 1),
+    )
+    create_scenario(db, s)
+    return _scenario_to_dict(get_scenario(db, scenario_id))
+
+
+def cmd_update_scenario(state: SidecarState, params: dict) -> dict:
+    """Update a scenario.
+
+    params: {id, name?, target_id?, sessions?, tags?, repeat_count?}
+    """
+    db = _require_db(state)
+    existing = get_scenario(db, params["id"])
+    if not existing:
+        raise ValueError(f"Scenario not found: {params['id']}")
+    s = Scenario(
+        id=existing.id,
+        name=params.get("name", existing.name),
+        target_id=params.get("target_id", existing.target_id),
+        sessions=params.get("sessions", existing.sessions),
+        tags=params.get("tags", existing.tags),
+        repeat_count=params.get("repeat_count", existing.repeat_count),
+    )
+    update_scenario(db, s)
+    return _scenario_to_dict(get_scenario(db, s.id))
+
+
+def cmd_delete_scenario(state: SidecarState, params: dict) -> dict:
+    """Delete a scenario and all its steps."""
+    db = _require_db(state)
+    deleted = delete_scenario(db, params["id"])
+    return {"deleted": deleted}
+
+
+def cmd_save_steps(state: SidecarState, params: dict) -> list[dict]:
+    """Replace all steps for a scenario.
+
+    params: {scenario_id: str, steps: [{session, prompt_id?, prompt_text, delay_ms?}]}
+    Replaces all existing steps with the new list.
+    """
+    db = _require_db(state)
+    scenario_id = params["scenario_id"]
+    delete_steps_by_scenario(db, scenario_id)
+
+    for i, step_data in enumerate(params.get("steps", []), start=1):
+        step = ScenarioStep(
+            id=str(uuid.uuid4()),
+            scenario_id=scenario_id,
+            step_order=i,
+            session=step_data.get("session", "A"),
+            prompt_id=step_data.get("prompt_id"),
+            prompt_text=step_data.get("prompt_text", ""),
+            delay_ms=step_data.get("delay_ms", 0),
+        )
+        create_step(db, step)
+
+    return [_step_to_dict(s) for s in get_steps_by_scenario(db, scenario_id)]
+
+
+def cmd_get_steps(state: SidecarState, params: dict) -> list[dict]:
+    """Get all steps for a scenario."""
+    db = _require_db(state)
+    return [_step_to_dict(s) for s in get_steps_by_scenario(db, params["scenario_id"])]
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +502,8 @@ def _result_to_dict(r: Result) -> dict:
         "latency_ms": r.latency_ms,
         "error_message": r.error_message,
         "timestamp": r.timestamp,
+        "step_order": r.step_order,
+        "session_label": r.session_label,
     }
 
 
@@ -404,17 +583,50 @@ async def cmd_start_run(state: SidecarState, params: dict, req_id: str) -> dict:
     return _run_to_dict(run) if run else {"run_id": run_id}
 
 
-def cmd_stop_run(state: SidecarState, params: dict) -> dict:
-    """Request graceful stop of the current run.
+async def cmd_start_scenario(state: SidecarState, params: dict, req_id: str) -> dict:
+    """Execute a scenario.
 
-    The runner checks stop_event and will finish in-flight requests.
+    params: {scenario_id: str, tester_name?: str}
     """
-    # Decision: for v0.1, we cancel the active run task.
-    # In a future version, the runner's stop_event would be exposed directly.
+    db = _require_db(state)
+    tester = params.get("tester_name", "default")
+    stop_event = asyncio.Event()
+    state._stop_event = stop_event
+
+    def on_progress(event: ScenarioProgressEvent) -> None:
+        send_event(req_id, "progress", {
+            "run_id": event.run_id,
+            "step_order": event.step_order,
+            "session": event.session,
+            "completed": event.completed,
+            "total": event.total,
+            "errors": event.errors,
+            "last_status": event.last_status,
+            "last_response_preview": event.last_response_preview,
+        })
+
+    run_id = await run_scenario(
+        db, params["scenario_id"],
+        tester_name=tester,
+        on_progress=on_progress,
+        stop_event=stop_event,
+    )
+    run = get_run(db, run_id)
+    return _run_to_dict(run) if run else {"run_id": run_id}
+
+
+def cmd_stop_run(state: SidecarState, params: dict) -> dict:
+    """Request graceful stop of the current run."""
+    stopped = False
+    # Signal scenario runner via stop_event
+    if hasattr(state, '_stop_event') and state._stop_event:
+        state._stop_event.set()
+        stopped = True
+    # Cancel active task (legacy attack runner)
     if state._active_run_task and not state._active_run_task.done():
         state._active_run_task.cancel()
-        return {"stopped": True}
-    return {"stopped": False}
+        stopped = True
+    return {"stopped": stopped}
 
 
 def cmd_get_run_progress(state: SidecarState, params: dict) -> dict | None:
@@ -445,6 +657,15 @@ SYNC_COMMANDS: dict[str, callable] = {
     "import_csv": cmd_import_csv,
     "seed_library": cmd_seed_library,
     "list_targets": cmd_list_targets,
+    "save_target": cmd_save_target,
+    "get_target": cmd_get_target,
+    "list_scenarios": cmd_list_scenarios,
+    "get_scenario": cmd_get_scenario,
+    "create_scenario": cmd_create_scenario,
+    "update_scenario": cmd_update_scenario,
+    "delete_scenario": cmd_delete_scenario,
+    "save_steps": cmd_save_steps,
+    "get_steps": cmd_get_steps,
     "list_runs": cmd_list_runs,
     "get_run": cmd_get_run,
     "get_results": cmd_get_results,
@@ -455,4 +676,5 @@ SYNC_COMMANDS: dict[str, callable] = {
 # Async commands need the event loop and req_id for streaming events.
 ASYNC_COMMANDS: dict[str, callable] = {
     "start_run": cmd_start_run,
+    "start_scenario": cmd_start_scenario,
 }

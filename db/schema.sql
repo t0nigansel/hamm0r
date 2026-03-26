@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS targets (
     auth_header     TEXT,                  -- header name, e.g. "Authorization"
     field_mapping   TEXT,                  -- JSON: {"message": "input", "response": "output"}
     system_prompt   TEXT,                  -- optional override to test against
+    session_strategy TEXT NOT NULL DEFAULT 'none', -- none | cookie | header | body_field
+    session_field   TEXT,                  -- header/field name for session ID
     notes           TEXT,
     created_at      TEXT NOT NULL
 );
@@ -51,13 +53,15 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS results (
     id              TEXT PRIMARY KEY,      -- UUID
     run_id          TEXT NOT NULL REFERENCES runs(id),
-    prompt_id       TEXT NOT NULL REFERENCES prompts(id),
+    prompt_id       TEXT REFERENCES prompts(id),  -- null for custom scenario steps
     prompt_text     TEXT NOT NULL,         -- snapshot of prompt at time of run
     response_text   TEXT,                  -- null if request failed
     status_code     INTEGER,               -- HTTP status, null if connection error
     latency_ms      INTEGER,
     error_message   TEXT,                  -- null if request succeeded
-    timestamp       TEXT NOT NULL          -- ISO 8601, when request was sent
+    timestamp       TEXT NOT NULL,         -- ISO 8601, when request was sent
+    step_order      INTEGER,               -- scenario step number (null for legacy runs)
+    session_label   TEXT                   -- session name e.g. "A", "B" (null for legacy)
 );
 
 -- OWNED BY evaluat0r — promt0r never writes here
@@ -71,8 +75,33 @@ CREATE TABLE IF NOT EXISTS verdicts (
     evaluated_at    TEXT NOT NULL
 );
 
+-- OWNED BY promt0r — scenario-based testing
+
+CREATE TABLE IF NOT EXISTS scenarios (
+    id          TEXT PRIMARY KEY,          -- UUID
+    name        TEXT NOT NULL,
+    target_id   TEXT REFERENCES targets(id),
+    sessions    TEXT NOT NULL DEFAULT '["A"]',  -- JSON array of session labels
+    tags        TEXT NOT NULL DEFAULT '[]',     -- JSON array of freeform tags
+    repeat_count INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scenario_steps (
+    id          TEXT PRIMARY KEY,          -- UUID
+    scenario_id TEXT NOT NULL REFERENCES scenarios(id) ON DELETE CASCADE,
+    step_order  INTEGER NOT NULL,          -- 1-based ordering
+    session     TEXT NOT NULL DEFAULT 'A', -- session label
+    prompt_id   TEXT,                      -- from library (nullable)
+    prompt_text TEXT NOT NULL,             -- inline or snapshot from library
+    delay_ms    INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(scenario_id, step_order)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_results_run_id ON results(run_id);
 CREATE INDEX IF NOT EXISTS idx_verdicts_result_id ON verdicts(result_id);
 CREATE INDEX IF NOT EXISTS idx_prompts_category ON prompts(category);
 CREATE INDEX IF NOT EXISTS idx_prompts_owasp ON prompts(owasp_ref);
+CREATE INDEX IF NOT EXISTS idx_scenario_steps_scenario ON scenario_steps(scenario_id);

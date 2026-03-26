@@ -43,6 +43,8 @@ class Target:
     auth_header: str | None = None
     field_mapping: dict | None = None
     system_prompt: str | None = None
+    session_strategy: str = "none"
+    session_field: str | None = None
     notes: str | None = None
     created_at: str = ""
 
@@ -75,6 +77,31 @@ class Result:
     status_code: int | None = None
     latency_ms: int | None = None
     error_message: str | None = None
+    step_order: int | None = None
+    session_label: str | None = None
+
+
+@dataclass
+class Scenario:
+    id: str
+    name: str
+    target_id: str | None = None
+    sessions: list[str] = field(default_factory=lambda: ["A"])
+    tags: list[str] = field(default_factory=list)
+    repeat_count: int = 1
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class ScenarioStep:
+    id: str
+    scenario_id: str
+    step_order: int
+    session: str = "A"
+    prompt_id: str | None = None
+    prompt_text: str = ""
+    delay_ms: int = 0
 
 
 @dataclass
@@ -103,9 +130,25 @@ def open_db(path: str | Path) -> sqlite3.Connection:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """Create all tables if they don't exist yet."""
+    """Create all tables if they don't exist yet, and migrate existing ones."""
     schema_sql = _SCHEMA_PATH.read_text()
     conn.executescript(schema_sql)
+    _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add new columns to existing tables (idempotent)."""
+    migrations = [
+        "ALTER TABLE targets ADD COLUMN session_strategy TEXT NOT NULL DEFAULT 'none'",
+        "ALTER TABLE targets ADD COLUMN session_field TEXT",
+        "ALTER TABLE results ADD COLUMN step_order INTEGER",
+        "ALTER TABLE results ADD COLUMN session_label TEXT",
+    ]
+    for sql in migrations:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +203,8 @@ def _row_to_target(row: sqlite3.Row) -> Target:
         auth_header=row["auth_header"],
         field_mapping=_json_loads_dict(row["field_mapping"]),
         system_prompt=row["system_prompt"],
+        session_strategy=row["session_strategy"],
+        session_field=row["session_field"],
         notes=row["notes"],
         created_at=row["created_at"],
     )
@@ -194,6 +239,33 @@ def _row_to_result(row: sqlite3.Row) -> Result:
         status_code=row["status_code"],
         latency_ms=row["latency_ms"],
         error_message=row["error_message"],
+        step_order=row["step_order"],
+        session_label=row["session_label"],
+    )
+
+
+def _row_to_scenario(row: sqlite3.Row) -> Scenario:
+    return Scenario(
+        id=row["id"],
+        name=row["name"],
+        target_id=row["target_id"],
+        sessions=_json_loads_list(row["sessions"]),
+        tags=_json_loads_list(row["tags"]),
+        repeat_count=row["repeat_count"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _row_to_step(row: sqlite3.Row) -> ScenarioStep:
+    return ScenarioStep(
+        id=row["id"],
+        scenario_id=row["scenario_id"],
+        step_order=row["step_order"],
+        session=row["session"],
+        prompt_id=row["prompt_id"],
+        prompt_text=row["prompt_text"],
+        delay_ms=row["delay_ms"],
     )
 
 
@@ -316,8 +388,8 @@ def create_target(db: sqlite3.Connection, target: Target) -> None:
     db.execute(
         """INSERT INTO targets (id, name, url, endpoint_type, auth_type,
                                 auth_header, field_mapping, system_prompt,
-                                notes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                session_strategy, session_field, notes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             target.id,
             target.name,
@@ -327,11 +399,46 @@ def create_target(db: sqlite3.Connection, target: Target) -> None:
             target.auth_header,
             _json_dumps(target.field_mapping),
             target.system_prompt,
+            target.session_strategy,
+            target.session_field,
             target.notes,
             now,
         ),
     )
     db.commit()
+
+
+def update_target(db: sqlite3.Connection, target: Target) -> None:
+    """Update an existing target."""
+    db.execute(
+        """UPDATE targets SET name=?, url=?, endpoint_type=?, auth_type=?,
+                              auth_header=?, field_mapping=?, system_prompt=?,
+                              session_strategy=?, session_field=?, notes=?
+           WHERE id=?""",
+        (
+            target.name,
+            target.url,
+            target.endpoint_type,
+            target.auth_type,
+            target.auth_header,
+            _json_dumps(target.field_mapping),
+            target.system_prompt,
+            target.session_strategy,
+            target.session_field,
+            target.notes,
+            target.id,
+        ),
+    )
+    db.commit()
+
+
+def upsert_target(db: sqlite3.Connection, target: Target) -> None:
+    """Insert or update a target."""
+    existing = get_target(db, target.id)
+    if existing:
+        update_target(db, target)
+    else:
+        create_target(db, target)
 
 
 def get_target(db: sqlite3.Connection, target_id: str) -> Target | None:
@@ -423,8 +530,8 @@ def create_result(db: sqlite3.Connection, result: Result) -> None:
     db.execute(
         """INSERT INTO results (id, run_id, prompt_id, prompt_text,
                                 response_text, status_code, latency_ms,
-                                error_message, timestamp)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                error_message, timestamp, step_order, session_label)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             result.id,
             result.run_id,
@@ -435,6 +542,8 @@ def create_result(db: sqlite3.Connection, result: Result) -> None:
             result.latency_ms,
             result.error_message,
             result.timestamp,
+            result.step_order,
+            result.session_label,
         ),
     )
     db.commit()
@@ -465,3 +574,131 @@ def get_verdicts_by_result(db: sqlite3.Connection, result_id: str) -> list[Verdi
         (result_id,),
     ).fetchall()
     return [_row_to_verdict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Scenarios
+# ---------------------------------------------------------------------------
+
+def create_scenario(db: sqlite3.Connection, scenario: Scenario) -> None:
+    """Insert a new scenario."""
+    now = _now_iso()
+    db.execute(
+        """INSERT INTO scenarios (id, name, target_id, sessions, tags,
+                                  repeat_count, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            scenario.id,
+            scenario.name,
+            scenario.target_id,
+            _json_dumps(scenario.sessions),
+            _json_dumps(scenario.tags),
+            scenario.repeat_count,
+            now,
+            now,
+        ),
+    )
+    db.commit()
+
+
+def update_scenario(db: sqlite3.Connection, scenario: Scenario) -> None:
+    """Update an existing scenario."""
+    now = _now_iso()
+    db.execute(
+        """UPDATE scenarios SET name=?, target_id=?, sessions=?, tags=?,
+                                repeat_count=?, updated_at=?
+           WHERE id=?""",
+        (
+            scenario.name,
+            scenario.target_id,
+            _json_dumps(scenario.sessions),
+            _json_dumps(scenario.tags),
+            scenario.repeat_count,
+            now,
+            scenario.id,
+        ),
+    )
+    db.commit()
+
+
+def get_scenario(db: sqlite3.Connection, scenario_id: str) -> Scenario | None:
+    """Fetch a single scenario by ID."""
+    row = db.execute("SELECT * FROM scenarios WHERE id = ?", (scenario_id,)).fetchone()
+    return _row_to_scenario(row) if row else None
+
+
+def get_all_scenarios(db: sqlite3.Connection) -> list[Scenario]:
+    """Fetch all scenarios ordered by name."""
+    rows = db.execute("SELECT * FROM scenarios ORDER BY name").fetchall()
+    return [_row_to_scenario(r) for r in rows]
+
+
+def delete_scenario(db: sqlite3.Connection, scenario_id: str) -> bool:
+    """Delete a scenario and its steps (CASCADE)."""
+    cursor = db.execute("DELETE FROM scenarios WHERE id = ?", (scenario_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Scenario Steps
+# ---------------------------------------------------------------------------
+
+def create_step(db: sqlite3.Connection, step: ScenarioStep) -> None:
+    """Insert a new scenario step."""
+    db.execute(
+        """INSERT INTO scenario_steps (id, scenario_id, step_order, session,
+                                       prompt_id, prompt_text, delay_ms)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            step.id,
+            step.scenario_id,
+            step.step_order,
+            step.session,
+            step.prompt_id,
+            step.prompt_text,
+            step.delay_ms,
+        ),
+    )
+    db.commit()
+
+
+def update_step(db: sqlite3.Connection, step: ScenarioStep) -> None:
+    """Update an existing step."""
+    db.execute(
+        """UPDATE scenario_steps SET step_order=?, session=?, prompt_id=?,
+                                     prompt_text=?, delay_ms=?
+           WHERE id=?""",
+        (
+            step.step_order,
+            step.session,
+            step.prompt_id,
+            step.prompt_text,
+            step.delay_ms,
+            step.id,
+        ),
+    )
+    db.commit()
+
+
+def get_steps_by_scenario(db: sqlite3.Connection, scenario_id: str) -> list[ScenarioStep]:
+    """Fetch all steps for a scenario, ordered by step_order."""
+    rows = db.execute(
+        "SELECT * FROM scenario_steps WHERE scenario_id = ? ORDER BY step_order",
+        (scenario_id,),
+    ).fetchall()
+    return [_row_to_step(r) for r in rows]
+
+
+def delete_step(db: sqlite3.Connection, step_id: str) -> bool:
+    """Delete a single step."""
+    cursor = db.execute("DELETE FROM scenario_steps WHERE id = ?", (step_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+
+def delete_steps_by_scenario(db: sqlite3.Connection, scenario_id: str) -> int:
+    """Delete all steps for a scenario. Returns count deleted."""
+    cursor = db.execute("DELETE FROM scenario_steps WHERE scenario_id = ?", (scenario_id,))
+    db.commit()
+    return cursor.rowcount
