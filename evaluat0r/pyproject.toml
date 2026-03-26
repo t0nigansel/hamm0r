@@ -1,0 +1,13 @@
+[project]
+name = "evaluat0r"
+version = "0.1.0"
+description = "Qwen-based judge + PDF report generator for promt0r"
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.27",
+    "weasyprint>=60.0",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
