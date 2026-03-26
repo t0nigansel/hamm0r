@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/raw/refs/heads/master/nicedoc.io/tauri-apps/tauri/tauri.conf.schema.json",
+  "productName": "promt0r",
+  "version": "0.1.0",
+  "identifier": "com.promt0r.app",
+  "build": {
+    "frontendDist": "../ui",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "title": "promt0r",
+    "windows": [
+      {
+        "title": "promt0r — AI Security Testing",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}

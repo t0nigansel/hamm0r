@@ -25,28 +25,28 @@
 
 ## Milestone 2 — Attack runner CLI (Week 2)
 
-- [ ] `runner/target_config.py` — TargetConfig dataclass, load/save JSON
-- [ ] `runner/http_client.py` — TargetAdapter base + OpenAICompatAdapter
-- [ ] `runner/http_client.py` — CustomRESTAdapter
-- [ ] `runner/attack_runner.py` — async runner, reads prompts, writes results
-- [ ] Graceful stop (SIGINT handler, flush in-flight results)
-- [ ] Progress callback (for later UI integration)
-- [ ] CLI entry point: `python -m runner --config target.json --db run.db`
-- [ ] Tests: mock HTTP responses, verify results written correctly
+- [x] `runner/target_config.py` — TargetConfig dataclass, load/save JSON
+- [x] `runner/http_client.py` — TargetAdapter base + OpenAICompatAdapter
+- [x] `runner/http_client.py` — CustomRESTAdapter
+- [x] `runner/attack_runner.py` — async runner, reads prompts, writes results
+- [x] Graceful stop (SIGINT handler, flush in-flight results)
+- [x] Progress callback (for later UI integration)
+- [x] CLI entry point: `python -m runner --config target.json --db run.db`
+- [x] Tests: mock HTTP responses, verify results written correctly
 
 ## Milestone 3 — Tauri UI (Week 3)
 
-- [ ] Scaffold Tauri project
-- [ ] Python sidecar integration (spawn Python, JSON over stdin/stdout)
-- [ ] UI: Target config panel (URL, endpoint type, auth)
-- [ ] UI: Prompt library browser (table with filter by category/OWASP)
-- [ ] UI: Add/edit prompt inline
-- [ ] UI: Import prompts from CSV
-- [ ] UI: Run config (tester name, concurrency, delay, output path)
-- [ ] UI: Attack/Stop button
-- [ ] UI: Live progress (progress bar, counters, last prompt/response snippet)
-- [ ] UI: Results table (browse completed results for current run)
-- [ ] New engagement flow: name + target → create .db file
+- [x] Scaffold Tauri project
+- [x] Python sidecar integration (spawn Python, JSON over stdin/stdout)
+- [x] UI: Target config panel (URL, endpoint type, auth)
+- [x] UI: Prompt library browser (table with filter by category/OWASP)
+- [x] UI: Add/edit prompt inline
+- [x] UI: Import prompts from CSV
+- [x] UI: Run config (tester name, concurrency, delay, output path)
+- [x] UI: Attack/Stop button
+- [x] UI: Live progress (progress bar, counters, last prompt/response snippet)
+- [x] UI: Results table (browse completed results for current run)
+- [x] New engagement flow: name + target → create .db file
 
 ## Milestone 4 — evaluat0r v0.1 (Week 4)
 
