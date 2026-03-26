@@ -20,317 +20,408 @@
   </header>
 
   <!-- ================================================================== -->
-  <!-- Tab navigation                                                     -->
+  <!-- Main layout: sidebar + content                                     -->
   <!-- ================================================================== -->
-  <nav id="tabs">
-    <button class="tab active" data-panel="panel-target">Target</button>
-    <button class="tab" data-panel="panel-prompts">Prompts</button>
-    <button class="tab" data-panel="panel-run">Run</button>
-    <button class="tab" data-panel="panel-results">Results</button>
-  </nav>
+  <div id="app-layout">
 
-  <!-- ================================================================== -->
-  <!-- Panel: Target config                                               -->
-  <!-- ================================================================== -->
-  <section id="panel-target" class="panel active">
-    <h2>Target Configuration</h2>
-    <form id="target-form" autocomplete="off">
-      <div class="form-row">
-        <label for="target-name">Name</label>
-        <input id="target-name" type="text" placeholder="e.g. Acme HR Chatbot" required>
-      </div>
-      <div class="form-row">
-        <label for="target-url">URL</label>
-        <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
-      </div>
-      <div class="form-row">
-        <label for="target-endpoint">Endpoint type</label>
-        <select id="target-endpoint">
-          <option value="openai_compat">OpenAI Compatible</option>
-          <option value="custom_rest">Custom REST</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <label for="target-auth-type">Auth</label>
-        <select id="target-auth-type">
-          <option value="none">None</option>
-          <option value="bearer">Bearer token</option>
-          <option value="api_key">API key</option>
-          <option value="basic">Basic auth</option>
-        </select>
-      </div>
-      <div class="form-row" id="auth-value-row" style="display:none">
-        <label for="target-auth-value">Auth value</label>
-        <input id="target-auth-value" type="password" placeholder="Token / key / base64(user:pass)">
-      </div>
-      <div class="form-row" id="auth-header-row" style="display:none">
-        <label for="target-auth-header">Auth header</label>
-        <input id="target-auth-header" type="text" placeholder="Authorization (default)">
-      </div>
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <nav id="sidebar-nav">
+        <button class="nav-item active" data-view="view-targets">Targets</button>
+        <button class="nav-item" data-view="view-prompts">Prompts</button>
+        <button class="nav-item" data-view="view-scenarios">Scenarios</button>
+        <button class="nav-item" data-view="view-runs">Runs</button>
+      </nav>
 
-      <!-- Custom REST field mapping -->
-      <fieldset id="field-mapping-group" style="display:none">
-        <legend>Field Mapping (Custom REST)</legend>
-        <div class="form-row">
-          <label for="map-request">Request field</label>
-          <input id="map-request" type="text" placeholder="message" value="message">
+      <!-- Scenario list (visible when Scenarios nav is active) -->
+      <div id="sidebar-scenario-list" class="sidebar-section" style="display:none">
+        <div class="sidebar-section-header">
+          <span>Scenarios</span>
+          <button id="btn-new-scenario" class="btn-small btn-primary">+</button>
         </div>
-        <div class="form-row">
-          <label for="map-response">Response field</label>
-          <input id="map-response" type="text" placeholder="response" value="response">
-        </div>
-      </fieldset>
-
-      <div class="form-row">
-        <label for="target-system-prompt">System prompt (optional)</label>
-        <textarea id="target-system-prompt" rows="3" placeholder="Override the target's system prompt for testing..."></textarea>
+        <ul id="scenario-list"></ul>
       </div>
-    </form>
-  </section>
 
-  <!-- ================================================================== -->
-  <!-- Panel: Prompt library browser                                      -->
-  <!-- ================================================================== -->
-  <section id="panel-prompts" class="panel">
-    <h2>Prompt Library</h2>
-    <div class="toolbar">
-      <select id="prompt-filter-owasp">
-        <option value="">All OWASP</option>
-        <option value="A01">A01 — Prompt Injection</option>
-        <option value="A02">A02 — Memory Poisoning</option>
-        <option value="A03">A03 — Identity Confusion</option>
-        <option value="A04">A04 — Privilege Escalation</option>
-        <option value="A05">A05 — Excessive Agency</option>
-        <option value="A06">A06 — Data Exfiltration</option>
-        <option value="A07">A07 — Misleading Content</option>
-        <option value="A08">A08 — Supply Chain</option>
-        <option value="A09">A09 — Misinformation</option>
-        <option value="A10">A10 — Unbounded Consumption</option>
-      </select>
-      <select id="prompt-filter-category">
-        <option value="">All categories</option>
-        <option value="prompt_injection">prompt_injection</option>
-        <option value="memory_poisoning">memory_poisoning</option>
-        <option value="identity_confusion">identity_confusion</option>
-        <option value="privilege_escalation">privilege_escalation</option>
-        <option value="excessive_agency">excessive_agency</option>
-        <option value="data_exfiltration">data_exfiltration</option>
-        <option value="misleading_content">misleading_content</option>
-        <option value="supply_chain">supply_chain</option>
-        <option value="misinformation">misinformation</option>
-        <option value="unbounded_consumption">unbounded_consumption</option>
-      </select>
-      <button id="btn-add-prompt" class="btn-primary">+ Add Prompt</button>
-      <button id="btn-import-csv">Import CSV</button>
-      <button id="btn-seed-library">Seed Library</button>
-      <input type="file" id="csv-file-input" accept=".csv" style="display:none">
-    </div>
-
-    <div class="table-wrap">
-      <table id="prompts-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>OWASP</th>
-            <th>Severity</th>
-            <th>Category</th>
-            <th class="col-wide">Text</th>
-            <th>Tags</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="prompts-tbody"></tbody>
-      </table>
-    </div>
-    <div id="prompt-count" class="muted"></div>
-
-    <!-- Inline add/edit form (hidden by default) -->
-    <div id="prompt-editor" class="editor-panel" style="display:none">
-      <h3 id="editor-title">Add Prompt</h3>
-      <form id="prompt-form" autocomplete="off">
-        <div class="form-row">
-          <label for="pe-id">ID</label>
-          <input id="pe-id" type="text" placeholder="A01-018" required>
+      <!-- Target list (visible when Targets nav is active) -->
+      <div id="sidebar-target-list" class="sidebar-section" style="display:none">
+        <div class="sidebar-section-header">
+          <span>Targets</span>
+          <button id="btn-new-target" class="btn-small btn-primary">+</button>
         </div>
-        <div class="form-row">
-          <label for="pe-text">Text</label>
-          <textarea id="pe-text" rows="4" required></textarea>
-        </div>
-        <div class="form-grid-2">
-          <div class="form-row">
-            <label for="pe-category">Category</label>
-            <select id="pe-category" required>
-              <option value="prompt_injection">prompt_injection</option>
-              <option value="memory_poisoning">memory_poisoning</option>
-              <option value="identity_confusion">identity_confusion</option>
-              <option value="privilege_escalation">privilege_escalation</option>
-              <option value="excessive_agency">excessive_agency</option>
-              <option value="data_exfiltration">data_exfiltration</option>
-              <option value="misleading_content">misleading_content</option>
-              <option value="supply_chain">supply_chain</option>
-              <option value="misinformation">misinformation</option>
-              <option value="unbounded_consumption">unbounded_consumption</option>
-            </select>
+        <ul id="target-list"></ul>
+      </div>
+    </aside>
+
+    <!-- Main content area -->
+    <main id="content">
+
+      <!-- ============================================================ -->
+      <!-- View: Targets                                                -->
+      <!-- ============================================================ -->
+      <section id="view-targets" class="view active">
+        <h2>Target Configuration</h2>
+        <p class="muted" id="target-empty-msg">Select a target from the sidebar or create a new one.</p>
+        <form id="target-form" autocomplete="off" style="display:none">
+          <input type="hidden" id="target-id">
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="target-name">Name</label>
+              <input id="target-name" type="text" placeholder="e.g. Acme HR Chatbot" required>
+            </div>
+            <div class="form-row">
+              <label for="target-url">URL</label>
+              <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
+            </div>
           </div>
-          <div class="form-row">
-            <label for="pe-owasp">OWASP Ref</label>
-            <select id="pe-owasp" required>
-              <option value="A01">A01</option><option value="A02">A02</option>
-              <option value="A03">A03</option><option value="A04">A04</option>
-              <option value="A05">A05</option><option value="A06">A06</option>
-              <option value="A07">A07</option><option value="A08">A08</option>
-              <option value="A09">A09</option><option value="A10">A10</option>
-            </select>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="target-endpoint">Endpoint type</label>
+              <select id="target-endpoint">
+                <option value="openai_compat">OpenAI Compatible</option>
+                <option value="custom_rest">Custom REST</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="target-auth-type">Auth</label>
+              <select id="target-auth-type">
+                <option value="none">None</option>
+                <option value="bearer">Bearer token</option>
+                <option value="api_key">API key</option>
+                <option value="basic">Basic auth</option>
+              </select>
+            </div>
           </div>
-          <div class="form-row">
-            <label for="pe-severity">Severity</label>
-            <select id="pe-severity" required>
-              <option value="LOW">LOW</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="HIGH">HIGH</option>
-              <option value="CRITICAL">CRITICAL</option>
-            </select>
+          <div class="form-row" id="auth-value-row" style="display:none">
+            <label for="target-auth-value">Auth value</label>
+            <input id="target-auth-value" type="password" placeholder="Token / key / base64(user:pass)">
           </div>
+          <div class="form-row" id="auth-header-row" style="display:none">
+            <label for="target-auth-header">Auth header</label>
+            <input id="target-auth-header" type="text" placeholder="Authorization (default)">
+          </div>
+
+          <fieldset id="field-mapping-group" style="display:none">
+            <legend>Field Mapping (Custom REST)</legend>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="map-request">Request field</label>
+                <input id="map-request" type="text" placeholder="message" value="message">
+              </div>
+              <div class="form-row">
+                <label for="map-response">Response field</label>
+                <input id="map-response" type="text" placeholder="response" value="response">
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="target-session-strategy">Session strategy</label>
+              <select id="target-session-strategy">
+                <option value="none">None (stateless)</option>
+                <option value="cookie">Cookie-based</option>
+                <option value="header">Custom header</option>
+                <option value="body_field">Body field</option>
+              </select>
+            </div>
+            <div class="form-row" id="session-field-row" style="display:none">
+              <label for="target-session-field">Session field / header name</label>
+              <input id="target-session-field" type="text" placeholder="X-Conversation-Id">
+            </div>
+          </div>
+
           <div class="form-row">
-            <label for="pe-tags">Tags (comma-separated)</label>
-            <input id="pe-tags" type="text" placeholder="direct, role_override">
+            <label for="target-system-prompt">System prompt (optional)</label>
+            <textarea id="target-system-prompt" rows="3" placeholder="Override the target's system prompt for testing..."></textarea>
+          </div>
+
+          <div class="editor-actions">
+            <button type="submit" class="btn-primary">Save Target</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- View: Prompt library                                         -->
+      <!-- ============================================================ -->
+      <section id="view-prompts" class="view">
+        <h2>Prompt Library</h2>
+        <div class="toolbar">
+          <select id="prompt-filter-owasp">
+            <option value="">All OWASP</option>
+            <option value="A01">A01 — Prompt Injection</option>
+            <option value="A02">A02 — Memory Poisoning</option>
+            <option value="A03">A03 — Identity Confusion</option>
+            <option value="A04">A04 — Privilege Escalation</option>
+            <option value="A05">A05 — Excessive Agency</option>
+            <option value="A06">A06 — Data Exfiltration</option>
+            <option value="A07">A07 — Misleading Content</option>
+            <option value="A08">A08 — Supply Chain</option>
+            <option value="A09">A09 — Misinformation</option>
+            <option value="A10">A10 — Unbounded Consumption</option>
+          </select>
+          <select id="prompt-filter-category">
+            <option value="">All categories</option>
+            <option value="prompt_injection">prompt_injection</option>
+            <option value="memory_poisoning">memory_poisoning</option>
+            <option value="identity_confusion">identity_confusion</option>
+            <option value="privilege_escalation">privilege_escalation</option>
+            <option value="excessive_agency">excessive_agency</option>
+            <option value="data_exfiltration">data_exfiltration</option>
+            <option value="misleading_content">misleading_content</option>
+            <option value="supply_chain">supply_chain</option>
+            <option value="misinformation">misinformation</option>
+            <option value="unbounded_consumption">unbounded_consumption</option>
+          </select>
+          <button id="btn-add-prompt" class="btn-primary">+ Add Prompt</button>
+          <button id="btn-import-csv">Import CSV</button>
+          <button id="btn-seed-library">Seed Library</button>
+          <input type="file" id="csv-file-input" accept=".csv" style="display:none">
+        </div>
+
+        <div class="table-wrap">
+          <table id="prompts-table">
+            <thead>
+              <tr>
+                <th>ID</th><th>OWASP</th><th>Severity</th><th>Category</th>
+                <th class="col-wide">Text</th><th>Tags</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="prompts-tbody"></tbody>
+          </table>
+        </div>
+        <div id="prompt-count" class="muted"></div>
+
+        <!-- Inline prompt editor -->
+        <div id="prompt-editor" class="editor-panel" style="display:none">
+          <h3 id="editor-title">Add Prompt</h3>
+          <form id="prompt-form" autocomplete="off">
+            <div class="form-row">
+              <label for="pe-id">ID</label>
+              <input id="pe-id" type="text" placeholder="A01-018" required>
+            </div>
+            <div class="form-row">
+              <label for="pe-text">Text</label>
+              <textarea id="pe-text" rows="4" required></textarea>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="pe-category">Category</label>
+                <select id="pe-category" required>
+                  <option value="prompt_injection">prompt_injection</option>
+                  <option value="memory_poisoning">memory_poisoning</option>
+                  <option value="identity_confusion">identity_confusion</option>
+                  <option value="privilege_escalation">privilege_escalation</option>
+                  <option value="excessive_agency">excessive_agency</option>
+                  <option value="data_exfiltration">data_exfiltration</option>
+                  <option value="misleading_content">misleading_content</option>
+                  <option value="supply_chain">supply_chain</option>
+                  <option value="misinformation">misinformation</option>
+                  <option value="unbounded_consumption">unbounded_consumption</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="pe-owasp">OWASP Ref</label>
+                <select id="pe-owasp" required>
+                  <option value="A01">A01</option><option value="A02">A02</option>
+                  <option value="A03">A03</option><option value="A04">A04</option>
+                  <option value="A05">A05</option><option value="A06">A06</option>
+                  <option value="A07">A07</option><option value="A08">A08</option>
+                  <option value="A09">A09</option><option value="A10">A10</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="pe-severity">Severity</label>
+                <select id="pe-severity" required>
+                  <option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="pe-tags">Tags (comma-separated)</label>
+                <input id="pe-tags" type="text" placeholder="direct, role_override">
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="pe-source">Source</label>
+              <input id="pe-source" type="text" placeholder="internal">
+            </div>
+            <div class="editor-actions">
+              <button type="submit" class="btn-primary" id="pe-submit">Save</button>
+              <button type="button" id="pe-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- View: Scenario builder                                       -->
+      <!-- ============================================================ -->
+      <section id="view-scenarios" class="view">
+        <div id="scenario-empty" class="muted">Select a scenario from the sidebar or create a new one.</div>
+
+        <div id="scenario-builder" style="display:none">
+          <!-- Scenario header -->
+          <div class="scenario-header">
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="sc-name">Scenario name</label>
+                <input id="sc-name" type="text" placeholder="Memory poisoning cross-session">
+              </div>
+              <div class="form-row">
+                <label for="sc-target">Target</label>
+                <select id="sc-target"><option value="">Select target...</option></select>
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="sc-tags">Tags</label>
+                <input id="sc-tags" type="text" placeholder="injection, exfil">
+              </div>
+              <div class="form-row">
+                <label for="sc-repeat">Repeat</label>
+                <input id="sc-repeat" type="number" min="1" value="1">
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="sc-tester">Tester name</label>
+              <input id="sc-tester" type="text" placeholder="Your name" value="default">
+            </div>
+            <div class="editor-actions">
+              <button id="btn-save-scenario" class="btn-primary">Save Scenario</button>
+              <button id="btn-delete-scenario" class="btn-danger">Delete</button>
+            </div>
+          </div>
+
+          <!-- Step timeline -->
+          <h3>Steps</h3>
+          <div id="step-timeline"></div>
+          <button id="btn-add-step" class="btn-small" style="margin-top:0.5rem">+ Add Step</button>
+
+          <!-- Run controls -->
+          <div class="run-controls">
+            <button id="btn-run-scenario" class="btn-danger btn-large">▶ Run Scenario</button>
+            <button id="btn-stop-scenario" class="btn-large" disabled>■ Stop</button>
+          </div>
+
+          <!-- Progress -->
+          <div id="scenario-progress" style="display:none">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar" id="sc-progress-bar"></div>
+            </div>
+            <div class="progress-stats">
+              <span id="sc-progress-completed">0</span> / <span id="sc-progress-total">0</span>
+              completed &nbsp;|&nbsp; <span id="sc-progress-errors">0</span> errors
+            </div>
+          </div>
+
+          <!-- Results (replaces timeline after run) -->
+          <div id="scenario-results" style="display:none">
+            <h3>Results</h3>
+            <div id="scenario-results-list"></div>
           </div>
         </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- View: Runs                                                   -->
+      <!-- ============================================================ -->
+      <section id="view-runs" class="view">
+        <h2>Run History</h2>
+        <table id="runs-table">
+          <thead>
+            <tr>
+              <th>Run ID</th><th>Status</th><th>Completed</th>
+              <th>Errors</th><th>Started</th>
+            </tr>
+          </thead>
+          <tbody id="runs-tbody"></tbody>
+        </table>
+
+        <!-- Results detail for selected run -->
+        <div id="run-results-section" style="display:none">
+          <h3>Results</h3>
+          <div class="table-wrap">
+            <table id="results-table">
+              <thead>
+                <tr>
+                  <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
+                  <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
+                  <th>Latency</th>
+                </tr>
+              </thead>
+              <tbody id="results-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- Add step dialog                                                    -->
+  <!-- ================================================================== -->
+  <div id="step-dialog" class="modal" style="display:none">
+    <div class="modal-content modal-small">
+      <button class="modal-close" id="step-dialog-close">&times;</button>
+      <h3 id="step-dialog-title">Add Step</h3>
+      <form id="step-form" autocomplete="off">
         <div class="form-row">
-          <label for="pe-source">Source</label>
-          <input id="pe-source" type="text" placeholder="internal">
+          <label for="step-session">Session</label>
+          <select id="step-session"></select>
+        </div>
+        <div class="form-row">
+          <label for="step-source-type">Prompt source</label>
+          <select id="step-source-type">
+            <option value="custom">Custom text</option>
+            <option value="library">From library</option>
+          </select>
+        </div>
+        <div class="form-row" id="step-library-row" style="display:none">
+          <label for="step-prompt-id">Library prompt</label>
+          <select id="step-prompt-id"><option value="">Select prompt...</option></select>
+        </div>
+        <div class="form-row" id="step-custom-row">
+          <label for="step-prompt-text">Prompt text</label>
+          <textarea id="step-prompt-text" rows="4"></textarea>
+        </div>
+        <div class="form-row">
+          <label for="step-delay">Delay (ms)</label>
+          <input id="step-delay" type="number" min="0" value="0">
         </div>
         <div class="editor-actions">
-          <button type="submit" class="btn-primary" id="pe-submit">Save</button>
-          <button type="button" id="pe-cancel">Cancel</button>
+          <button type="submit" class="btn-primary">Save Step</button>
+          <button type="button" id="step-cancel">Cancel</button>
         </div>
       </form>
     </div>
-  </section>
+  </div>
 
   <!-- ================================================================== -->
-  <!-- Panel: Run config + attack/stop + progress                         -->
+  <!-- Result detail modal                                                -->
   <!-- ================================================================== -->
-  <section id="panel-run" class="panel">
-    <h2>Run Configuration</h2>
-    <form id="run-form" autocomplete="off">
-      <div class="form-grid-2">
-        <div class="form-row">
-          <label for="run-tester">Tester name</label>
-          <input id="run-tester" type="text" placeholder="Your name" required>
-        </div>
-        <div class="form-row">
-          <label for="run-concurrency">Concurrency</label>
-          <input id="run-concurrency" type="number" min="1" max="10" value="1">
-        </div>
-        <div class="form-row">
-          <label for="run-delay">Delay (ms)</label>
-          <input id="run-delay" type="number" min="0" value="0">
-        </div>
-        <div class="form-row">
-          <label for="run-filter-owasp">OWASP filter</label>
-          <select id="run-filter-owasp">
-            <option value="">All prompts</option>
-            <option value="A01">A01 — Prompt Injection</option>
-            <option value="A03">A03 — Identity Confusion</option>
-            <option value="A06">A06 — Data Exfiltration</option>
-            <option value="A07">A07 — Misleading Content</option>
-          </select>
-        </div>
+  <div id="result-detail" class="modal" style="display:none">
+    <div class="modal-content">
+      <button class="modal-close" id="result-detail-close">&times;</button>
+      <h3>Result Detail</h3>
+      <div class="detail-section">
+        <strong>Prompt:</strong>
+        <pre id="detail-prompt"></pre>
       </div>
-      <div class="form-row">
-        <label>
-          <input id="run-verify-ssl" type="checkbox" checked> Verify SSL
-        </label>
+      <div class="detail-section">
+        <strong>Response:</strong>
+        <pre id="detail-response"></pre>
       </div>
-    </form>
-
-    <div class="run-controls">
-      <button id="btn-attack" class="btn-danger btn-large">▶ Attack</button>
-      <button id="btn-stop" class="btn-large" disabled>■ Stop</button>
+      <div class="detail-meta" id="detail-meta"></div>
     </div>
-
-    <!-- Live progress -->
-    <div id="progress-section" style="display:none">
-      <h3>Progress</h3>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar" id="progress-bar"></div>
-      </div>
-      <div class="progress-stats">
-        <span id="progress-completed">0</span> / <span id="progress-total">0</span>
-        completed &nbsp;|&nbsp; <span id="progress-errors">0</span> errors
-      </div>
-      <div id="progress-last" class="muted"></div>
-    </div>
-
-    <!-- Run history -->
-    <div id="run-history">
-      <h3>Run History</h3>
-      <table id="runs-table">
-        <thead>
-          <tr>
-            <th>Run ID</th>
-            <th>Status</th>
-            <th>Completed</th>
-            <th>Errors</th>
-            <th>Started</th>
-          </tr>
-        </thead>
-        <tbody id="runs-tbody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- ================================================================== -->
-  <!-- Panel: Results table                                               -->
-  <!-- ================================================================== -->
-  <section id="panel-results" class="panel">
-    <h2>Results</h2>
-    <div class="toolbar">
-      <select id="results-run-select">
-        <option value="">Select a run...</option>
-      </select>
-      <span id="results-count" class="muted"></span>
-    </div>
-    <div class="table-wrap">
-      <table id="results-table">
-        <thead>
-          <tr>
-            <th>Prompt ID</th>
-            <th>Status</th>
-            <th class="col-wide">Prompt</th>
-            <th class="col-wide">Response</th>
-            <th>Latency</th>
-            <th>Error</th>
-          </tr>
-        </thead>
-        <tbody id="results-tbody"></tbody>
-      </table>
-    </div>
-
-    <!-- Result detail modal -->
-    <div id="result-detail" class="modal" style="display:none">
-      <div class="modal-content">
-        <button class="modal-close" id="result-detail-close">&times;</button>
-        <h3>Result Detail</h3>
-        <div class="detail-section">
-          <strong>Prompt:</strong>
-          <pre id="detail-prompt"></pre>
-        </div>
-        <div class="detail-section">
-          <strong>Response:</strong>
-          <pre id="detail-response"></pre>
-        </div>
-        <div class="detail-meta" id="detail-meta"></div>
-      </div>
-    </div>
-  </section>
+  </div>
 
   <!-- ================================================================== -->
   <!-- New engagement dialog                                              -->
   <!-- ================================================================== -->
   <div id="engagement-dialog" class="modal" style="display:none">
-    <div class="modal-content">
+    <div class="modal-content modal-small">
       <button class="modal-close" id="engagement-dialog-close">&times;</button>
       <h3>New Engagement</h3>
       <form id="engagement-form" autocomplete="off">
@@ -352,9 +443,7 @@
     </div>
   </div>
 
-  <!-- ================================================================== -->
-  <!-- Toast notifications                                                -->
-  <!-- ================================================================== -->
+  <!-- Toast notifications -->
   <div id="toast-container"></div>
 
   <script src="js/api.js"></script>

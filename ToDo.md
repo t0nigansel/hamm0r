@@ -61,20 +61,30 @@
   - [x] Evidence table (SUCCESS verdicts with prompt + response)
 - [x] CLI: `python -m evaluat0r --db run.db --output report.pdf`
 
+## Milestone 5 — Scenario-based testing UI (Week 5)
+
+- [x] Schema: scenarios + scenario_steps tables, session_strategy on targets
+- [x] Repository: full CRUD for scenarios and steps
+- [x] Scenario runner: multi-session sequential execution with repeat support
+- [x] Sidecar commands: scenario CRUD, save_steps, save_target, start_scenario
+- [x] UI: sidebar layout replacing tab navigation
+- [x] UI: scenario builder with step timeline and session color-coding
+- [x] UI: target editor with session strategy config
+- [x] UI: improved dark mode contrast (WCAG AA)
+- [x] Tests: 29 tests for scenario CRUD, steps, sidecar commands, runner
+
 ---
 
 ## Backlog (post-MVP)
 
-- [ ] Multi-turn prompt support (mode: multiturn)
 - [ ] CustomRESTAdapter field mapping UI
 - [ ] Prompt library versioning (track which version was used in each run)
 - [ ] Compare two runs against the same target (regression testing)
 - [ ] Export prompt library to CSV
 - [ ] Remediation recommendations per OWASP category in report
-- [ ] Dark mode UI
 - [ ] Signed release binaries (Windows + macOS + Linux)
 - [ ] Expand prompt library to 200+ prompts
-- [ ] A02 memory poisoning prompts (requires multi-turn)
+- [ ] A02 memory poisoning prompts (multi-session scenarios)
 - [ ] A04 privilege escalation prompts
 - [ ] A08 supply chain / tool abuse prompts
 
