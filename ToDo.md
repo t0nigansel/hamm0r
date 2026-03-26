@@ -36,17 +36,17 @@
 
 ## Milestone 3 — Tauri UI (Week 3)
 
-- [ ] Scaffold Tauri project
-- [ ] Python sidecar integration (spawn Python, JSON over stdin/stdout)
-- [ ] UI: Target config panel (URL, endpoint type, auth)
-- [ ] UI: Prompt library browser (table with filter by category/OWASP)
-- [ ] UI: Add/edit prompt inline
-- [ ] UI: Import prompts from CSV
-- [ ] UI: Run config (tester name, concurrency, delay, output path)
-- [ ] UI: Attack/Stop button
-- [ ] UI: Live progress (progress bar, counters, last prompt/response snippet)
-- [ ] UI: Results table (browse completed results for current run)
-- [ ] New engagement flow: name + target → create .db file
+- [x] Scaffold Tauri project
+- [x] Python sidecar integration (spawn Python, JSON over stdin/stdout)
+- [x] UI: Target config panel (URL, endpoint type, auth)
+- [x] UI: Prompt library browser (table with filter by category/OWASP)
+- [x] UI: Add/edit prompt inline
+- [x] UI: Import prompts from CSV
+- [x] UI: Run config (tester name, concurrency, delay, output path)
+- [x] UI: Attack/Stop button
+- [x] UI: Live progress (progress bar, counters, last prompt/response snippet)
+- [x] UI: Results table (browse completed results for current run)
+- [x] New engagement flow: name + target → create .db file
 
 ## Milestone 4 — evaluat0r v0.1 (Week 4)
 
