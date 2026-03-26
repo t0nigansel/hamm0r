@@ -66,20 +66,19 @@ class TargetConfig:
         if self.auth_type == "none" or not self.auth_value:
             return {}
 
-        match self.auth_type:
-            case "bearer":
-                header = self.auth_header or "Authorization"
-                return {header: f"Bearer {self.auth_value}"}
-            case "api_key":
-                # Decision: default header for api_key is "X-Api-Key" which is
-                # the most common convention.  Overridable via auth_header.
-                header = self.auth_header or "X-Api-Key"
-                return {header: self.auth_value}
-            case "basic":
-                header = self.auth_header or "Authorization"
-                return {header: f"Basic {self.auth_value}"}
-            case _:
-                return {}
+        if self.auth_type == "bearer":
+            header = self.auth_header or "Authorization"
+            return {header: f"Bearer {self.auth_value}"}
+        elif self.auth_type == "api_key":
+            # Decision: default header for api_key is "X-Api-Key" which is
+            # the most common convention.  Overridable via auth_header.
+            header = self.auth_header or "X-Api-Key"
+            return {header: self.auth_value}
+        elif self.auth_type == "basic":
+            header = self.auth_header or "Authorization"
+            return {header: f"Basic {self.auth_value}"}
+        else:
+            return {}
 
 
 def load_config(path: str | Path) -> TargetConfig:

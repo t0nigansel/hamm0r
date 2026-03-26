@@ -165,16 +165,15 @@ class CustomRESTAdapter(TargetAdapter):
 
 def create_adapter(config: TargetConfig, client: httpx.AsyncClient) -> TargetAdapter:
     """Factory: build the right adapter based on endpoint_type."""
-    match config.endpoint_type:
-        case "openai_compat":
-            return OpenAICompatAdapter(config, client)
-        case "custom_rest":
-            return CustomRESTAdapter(config, client)
-        case "raw_http":
-            # RawHTTPAdapter is in the backlog — not implemented yet.
-            raise NotImplementedError(
-                "raw_http endpoint type is planned for a future version. "
-                "Use openai_compat or custom_rest for now."
-            )
-        case _:
-            raise ValueError(f"Unknown endpoint_type: {config.endpoint_type!r}")
+    if config.endpoint_type == "openai_compat":
+        return OpenAICompatAdapter(config, client)
+    elif config.endpoint_type == "custom_rest":
+        return CustomRESTAdapter(config, client)
+    elif config.endpoint_type == "raw_http":
+        # RawHTTPAdapter is in the backlog — not implemented yet.
+        raise NotImplementedError(
+            "raw_http endpoint type is planned for a future version. "
+            "Use openai_compat or custom_rest for now."
+        )
+    else:
+        raise ValueError(f"Unknown endpoint_type: {config.endpoint_type!r}")
