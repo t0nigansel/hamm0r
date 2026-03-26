@@ -9,19 +9,19 @@
 
 ## Milestone 1 — Data contract + prompt library (Week 1)
 
-- [ ] Create `db/schema.sql` with full schema from DATAMODEL.md
-- [ ] Create `db/repository.py` with all read/write functions
-- [ ] Write DB initialisation function (create tables if not exist)
-- [ ] Create `prompts/library.yaml` with starter set:
-  - [ ] 10 x A01 prompt injection (direct)
-  - [ ] 5 x A01 prompt injection (indirect/RAG)
-  - [ ] 5 x A06 data exfiltration
-  - [ ] 5 x A03 identity confusion
-  - [ ] 5 x A07 misleading content
-  - [ ] 5 x baseline/benign (control prompts)
-- [ ] Create `scripts/seed_prompts.py` — loads YAML into DB
-- [ ] Pydantic schema for prompt validation on load
-- [ ] Tests for repository functions (in-memory SQLite)
+- [x] Create `db/schema.sql` with full schema from DATAMODEL.md
+- [x] Create `db/repository.py` with all read/write functions
+- [x] Write DB initialisation function (create tables if not exist)
+- [x] Create `prompts/library.yaml` with starter set:
+  - [x] 10 x A01 prompt injection (direct)
+  - [x] 5 x A01 prompt injection (indirect/RAG)
+  - [x] 5 x A06 data exfiltration
+  - [x] 5 x A03 identity confusion
+  - [x] 5 x A07 misleading content
+  - [x] 5 x baseline/benign (control prompts)
+- [x] Create `scripts/seed_prompts.py` — loads YAML into DB
+- [x] Pydantic schema for prompt validation on load
+- [x] Tests for repository functions (in-memory SQLite)
 
 ## Milestone 2 — Attack runner CLI (Week 2)
 
