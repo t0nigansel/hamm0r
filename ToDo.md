@@ -50,16 +50,16 @@
 
 ## Milestone 4 — evaluat0r v0.1 (Week 4)
 
-- [ ] Separate `evaluat0r/` module with its own pyproject.toml
-- [ ] Ollama client wrapper (OpenAI-compat local endpoint)
-- [ ] Heuristic pre-filter (regex patterns for obvious success/fail)
-- [ ] Qwen judge: sends prompt+response, parses JSON verdict
-- [ ] Write verdicts to DB
-- [ ] Basic PDF report (HTML template → WeasyPrint)
-  - [ ] Executive summary with overall risk score
-  - [ ] Findings per OWASP category
-  - [ ] Evidence table (SUCCESS verdicts with prompt + response)
-- [ ] CLI: `python -m evaluat0r --db run.db --output report.pdf`
+- [x] Separate `evaluat0r/` module with its own pyproject.toml
+- [x] Ollama client wrapper (OpenAI-compat local endpoint)
+- [x] Heuristic pre-filter (regex patterns for obvious success/fail)
+- [x] Qwen judge: sends prompt+response, parses JSON verdict
+- [x] Write verdicts to DB
+- [x] Basic PDF report (HTML template → WeasyPrint)
+  - [x] Executive summary with overall risk score
+  - [x] Findings per OWASP category
+  - [x] Evidence table (SUCCESS verdicts with prompt + response)
+- [x] CLI: `python -m evaluat0r --db run.db --output report.pdf`
 
 ---
 
