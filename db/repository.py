@@ -41,6 +41,7 @@ class Target:
     endpoint_type: str
     auth_type: str = "none"
     auth_header: str | None = None
+    auth_value: str | None = None
     field_mapping: dict | None = None
     system_prompt: str | None = None
     session_strategy: str = "none"
@@ -141,6 +142,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     migrations = [
         "ALTER TABLE targets ADD COLUMN session_strategy TEXT NOT NULL DEFAULT 'none'",
         "ALTER TABLE targets ADD COLUMN session_field TEXT",
+        "ALTER TABLE targets ADD COLUMN auth_value TEXT",
         "ALTER TABLE results ADD COLUMN step_order INTEGER",
         "ALTER TABLE results ADD COLUMN session_label TEXT",
     ]
@@ -201,6 +203,7 @@ def _row_to_target(row: sqlite3.Row) -> Target:
         endpoint_type=row["endpoint_type"],
         auth_type=row["auth_type"],
         auth_header=row["auth_header"],
+        auth_value=row["auth_value"],
         field_mapping=_json_loads_dict(row["field_mapping"]),
         system_prompt=row["system_prompt"],
         session_strategy=row["session_strategy"],
@@ -387,9 +390,9 @@ def create_target(db: sqlite3.Connection, target: Target) -> None:
     now = _now_iso()
     db.execute(
         """INSERT INTO targets (id, name, url, endpoint_type, auth_type,
-                                auth_header, field_mapping, system_prompt,
+                                auth_header, auth_value, field_mapping, system_prompt,
                                 session_strategy, session_field, notes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             target.id,
             target.name,
@@ -397,6 +400,7 @@ def create_target(db: sqlite3.Connection, target: Target) -> None:
             target.endpoint_type,
             target.auth_type,
             target.auth_header,
+            target.auth_value,
             _json_dumps(target.field_mapping),
             target.system_prompt,
             target.session_strategy,
@@ -412,7 +416,7 @@ def update_target(db: sqlite3.Connection, target: Target) -> None:
     """Update an existing target."""
     db.execute(
         """UPDATE targets SET name=?, url=?, endpoint_type=?, auth_type=?,
-                              auth_header=?, field_mapping=?, system_prompt=?,
+                              auth_header=?, auth_value=?, field_mapping=?, system_prompt=?,
                               session_strategy=?, session_field=?, notes=?
            WHERE id=?""",
         (
@@ -421,6 +425,7 @@ def update_target(db: sqlite3.Connection, target: Target) -> None:
             target.endpoint_type,
             target.auth_type,
             target.auth_header,
+            target.auth_value,
             _json_dumps(target.field_mapping),
             target.system_prompt,
             target.session_strategy,

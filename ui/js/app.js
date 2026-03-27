@@ -150,8 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#target-auth-type').value = t.auth_type;
       $('#target-auth-type').dispatchEvent(new Event('change'));
       $('#target-endpoint').dispatchEvent(new Event('change'));
-      $('#target-auth-value').value = t.auth_header || '';
-      $('#target-auth-header').value = '';
+      $('#target-auth-value').value = t.auth_value || '';
+      $('#target-auth-header').value = t.auth_header || '';
       if (t.field_mapping) {
         $('#map-request').value = t.field_mapping.request_field || 'message';
         $('#map-response').value = t.field_mapping.response_field || 'response';
@@ -180,7 +180,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     if ($('#target-id').value) data.id = $('#target-id').value;
     if (data.auth_type !== 'none') {
-      data.auth_header = $('#target-auth-value').value;
+      data.auth_header = $('#target-auth-header').value.trim() || 'Authorization';
+      data.auth_value = $('#target-auth-value').value;
     }
     if (data.endpoint_type === 'custom_rest') {
       data.field_mapping = {
