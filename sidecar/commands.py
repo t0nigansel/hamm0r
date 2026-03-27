@@ -295,6 +295,7 @@ def _target_to_dict(t: Target) -> dict:
         "endpoint_type": t.endpoint_type,
         "auth_type": t.auth_type,
         "auth_header": t.auth_header,
+        "auth_value": t.auth_value,
         "field_mapping": t.field_mapping,
         "system_prompt": t.system_prompt,
         "session_strategy": t.session_strategy,
@@ -312,7 +313,7 @@ def cmd_list_targets(state: SidecarState, params: dict) -> list[dict]:
 def cmd_save_target(state: SidecarState, params: dict) -> dict:
     """Create or update a target.
 
-    params: {id?, name, url, endpoint_type, auth_type?, auth_header?,
+    params: {id?, name, url, endpoint_type, auth_type?, auth_header?, auth_value?,
              field_mapping?, system_prompt?, session_strategy?, session_field?, notes?}
     """
     db = _require_db(state)
@@ -324,6 +325,7 @@ def cmd_save_target(state: SidecarState, params: dict) -> dict:
         endpoint_type=params["endpoint_type"],
         auth_type=params.get("auth_type", "none"),
         auth_header=params.get("auth_header"),
+        auth_value=params.get("auth_value"),
         field_mapping=params.get("field_mapping"),
         system_prompt=params.get("system_prompt"),
         session_strategy=params.get("session_strategy", "none"),

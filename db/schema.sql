@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS targets (
     endpoint_type   TEXT NOT NULL,         -- openai_compat | custom_rest | raw_http
     auth_type       TEXT NOT NULL DEFAULT 'none',  -- none | bearer | api_key | basic
     auth_header     TEXT,                  -- header name, e.g. "Authorization"
+    auth_value      TEXT,                  -- actual token/key/credentials
     field_mapping   TEXT,                  -- JSON: {"message": "input", "response": "output"}
     system_prompt   TEXT,                  -- optional override to test against
     session_strategy TEXT NOT NULL DEFAULT 'none', -- none | cookie | header | body_field
