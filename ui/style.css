@@ -41,6 +41,15 @@ body {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
 }
+#topbar #logo-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+#topbar #logo-image {
+  height: 40px;
+  width: auto;
+}
 #topbar h1 {
   font-size: 1.1rem;
   font-weight: 700;
