@@ -62,7 +62,7 @@ def _target_to_config(target: Target) -> TargetConfig:
         url=target.url,
         endpoint_type=target.endpoint_type,
         auth_type=target.auth_type,
-        auth_value=None,  # auth_value is stored in auth_header for DB targets
+        auth_value=target.auth_value,
         auth_header=target.auth_header,
         field_mapping=target.field_mapping,
         system_prompt=target.system_prompt,
