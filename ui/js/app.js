@@ -35,6 +35,24 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => el.remove(), 4000);
   }
 
+  // ── Check if DB is open on page load ────────────────────────────────
+  async function checkDatabaseStatus() {
+    try {
+      const status = await API.call('get_db_status', {});
+      if (status.open && status.path) {
+        dbOpen = true;
+        $('#db-label').textContent = status.path;
+        loadTargetList();
+        toast(`Engagement loaded: ${status.path}`, 'success');
+      }
+    } catch (err) {
+      // DB not available yet, that's ok
+    }
+  }
+
+  // Check for existing DB when page loads
+  checkDatabaseStatus();
+
   // ── Sidebar navigation ─────────────────────────────────────────────
   $$('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
