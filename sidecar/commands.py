@@ -109,6 +109,17 @@ def cmd_open_db(state: SidecarState, params: dict) -> dict:
     return {"path": db_path}
 
 
+def cmd_get_db_status(state: SidecarState, params: dict) -> dict:
+    """Check if a database is open and return its path.
+
+    Returns: {open: bool, path: str|null}
+    """
+    return {
+        "open": state.db is not None,
+        "path": state.db_path,
+    }
+
+
 def _require_db(state: SidecarState) -> sqlite3.Connection:
     if state.db is None:
         raise RuntimeError("No database open. Create or open an engagement first.")
@@ -651,6 +662,7 @@ def cmd_get_run_progress(state: SidecarState, params: dict) -> dict | None:
 SYNC_COMMANDS: dict[str, callable] = {
     "create_engagement": cmd_create_engagement,
     "open_db": cmd_open_db,
+    "get_db_status": cmd_get_db_status,
     "list_prompts": cmd_list_prompts,
     "get_prompt": cmd_get_prompt,
     "create_prompt": cmd_create_prompt,
