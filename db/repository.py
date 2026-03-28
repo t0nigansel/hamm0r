@@ -145,6 +145,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "ALTER TABLE targets ADD COLUMN auth_value TEXT",
         "ALTER TABLE results ADD COLUMN step_order INTEGER",
         "ALTER TABLE results ADD COLUMN session_label TEXT",
+        "ALTER TABLE scenarios ADD COLUMN sessions TEXT NOT NULL DEFAULT '[\"A\"]'",
+        "ALTER TABLE scenarios ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE scenarios ADD COLUMN repeat_count INTEGER NOT NULL DEFAULT 1",
     ]
     for sql in migrations:
         try:
