@@ -14,6 +14,7 @@ response string.  The runner doesn't care which adapter is in use.
 from __future__ import annotations
 
 import abc
+import json
 from dataclasses import dataclass
 
 import httpx
@@ -59,11 +60,17 @@ class OpenAICompatAdapter(TargetAdapter):
         # and ignore this field.  If needed, model can be added to field_mapping
         # in a future version, or the target URL can include it in the path.
 
+        # Log request for debugging
+        auth_headers = self.config.auth_headers()
+        print(f"\n[DEBUG] Sending request to: {self.config.url}")
+        print(f"[DEBUG] Headers: {json.dumps(auth_headers, indent=2)}")
+        print(f"[DEBUG] Payload: {json.dumps(payload, indent=2)[:200]}...")
+
         try:
             resp = await self.client.post(
                 self.config.url,
                 json=payload,
-                headers=self.config.auth_headers(),
+                headers=auth_headers,
             )
         except httpx.TimeoutException as exc:
             return AdapterResponse(text=None, status_code=None, error=f"Timeout: {exc}")
@@ -75,6 +82,8 @@ class OpenAICompatAdapter(TargetAdapter):
         if resp.status_code != 200:
             # Record the body for diagnostics but cap it to avoid huge error messages
             body_preview = resp.text[:500] if resp.text else ""
+            print(f"[DEBUG] Response status: {resp.status_code}")
+            print(f"[DEBUG] Response body: {body_preview}")
             return AdapterResponse(
                 text=None,
                 status_code=resp.status_code,
@@ -124,11 +133,17 @@ class CustomRESTAdapter(TargetAdapter):
             sys_field = mapping.get("system_prompt_field", "system_prompt")
             payload[sys_field] = self.config.system_prompt
 
+        # Log request for debugging
+        auth_headers = self.config.auth_headers()
+        print(f"\n[DEBUG] Sending request to: {self.config.url}")
+        print(f"[DEBUG] Headers: {json.dumps(auth_headers, indent=2)}")
+        print(f"[DEBUG] Payload: {json.dumps(payload, indent=2)[:200]}...")
+
         try:
             resp = await self.client.post(
                 self.config.url,
                 json=payload,
-                headers=self.config.auth_headers(),
+                headers=auth_headers,
             )
         except httpx.TimeoutException as exc:
             return AdapterResponse(text=None, status_code=None, error=f"Timeout: {exc}")
@@ -139,6 +154,8 @@ class CustomRESTAdapter(TargetAdapter):
 
         if resp.status_code != 200:
             body_preview = resp.text[:500] if resp.text else ""
+            print(f"[DEBUG] Response status: {resp.status_code}")
+            print(f"[DEBUG] Response body: {body_preview}")
             return AdapterResponse(
                 text=None,
                 status_code=resp.status_code,
