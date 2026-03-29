@@ -552,3 +552,40 @@ tr.clickable { cursor: pointer; }
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Welcome banner ────────────────────────────────────────────────── */
+#target-welcome {
+  background: linear-gradient(135deg, var(--bg-raised) 0%, var(--bg) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 2rem 1rem;
+  padding: 3rem 2rem;
+  animation: welcome-in 0.4s ease;
+}
+#target-welcome img {
+  box-shadow: 0 8px 32px rgba(233, 69, 96, 0.2);
+  border-radius: 8px;
+}
+#target-welcome h2 {
+  font-size: 1.8rem;
+  margin: 1rem 0 0.5rem;
+  background: linear-gradient(135deg, var(--accent), #ff6b81);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+#target-welcome p {
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  color: var(--text-muted);
+}
+#btn-get-started {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+}
+
+@keyframes welcome-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}

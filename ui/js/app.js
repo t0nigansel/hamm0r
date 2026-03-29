@@ -147,15 +147,31 @@ document.addEventListener('DOMContentLoaded', () => {
         li.addEventListener('click', () => openTargetEditor(t.id));
         ul.appendChild(li);
       });
+
+      // Show welcome banner only if no targets exist
+      const welcomeEl = $('#target-welcome');
+      const contentEl = $('#target-content');
+      if (targets.length === 0) {
+        welcomeEl.style.display = '';
+        contentEl.style.display = 'none';
+        $('#target-form').style.display = 'none';
+      } else {
+        welcomeEl.style.display = 'none';
+        contentEl.style.display = '';
+      }
     } catch (err) { toast(err.message, 'error'); }
   }
 
-  $('#btn-new-target').addEventListener('click', () => {
+  function startNewTarget() {
     $('#target-id').value = '';
     $('#target-form').reset();
     $('#target-form').style.display = '';
-    $('#target-empty-msg').style.display = 'none';
-  });
+    $('#target-welcome').style.display = 'none';
+    $('#target-content').style.display = '';
+  }
+
+  $('#btn-new-target').addEventListener('click', startNewTarget);
+  $('#btn-get-started').addEventListener('click', startNewTarget);
 
   async function openTargetEditor(targetId) {
     try {
@@ -179,7 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#target-session-field').value = t.session_field || '';
       $('#target-system-prompt').value = t.system_prompt || '';
       $('#target-form').style.display = '';
-      $('#target-empty-msg').style.display = 'none';
+      $('#target-welcome').style.display = 'none';
+      $('#target-content').style.display = '';
 
       // Highlight in sidebar
       $$('#target-list li').forEach(li => li.classList.toggle('active', li.dataset.id === targetId));
