@@ -56,10 +56,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Sidebar navigation ─────────────────────────────────────────────
   $$('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
-      $$('.nav-item').forEach(b => b.classList.remove('active'));
+      $$('.nav-item').forEach(b => {
+        b.classList.remove('active');
+        b.removeAttribute('aria-current');
+      });
       $$('.view').forEach(v => v.classList.remove('active'));
       btn.classList.add('active');
+      btn.setAttribute('aria-current', 'page');
       $(`#${btn.dataset.view}`).classList.add('active');
+
+      // Update breadcrumb
+      updateBreadcrumb(btn.textContent.trim(), null);
 
       // Show/hide sidebar sections
       $('#sidebar-scenario-list').style.display =
@@ -75,6 +82,82 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btn.dataset.view === 'view-targets') loadTargetList();
       }
     });
+  });
+
+  // ── Breadcrumb management ──────────────────────────────────────────
+  function updateBreadcrumb(section, item) {
+    const breadEl = $('#topbar-breadcrumb');
+    if (!section) {
+      breadEl.style.display = 'none';
+      return;
+    }
+    $('#breadcrumb-section').textContent = section;
+    $('#breadcrumb-item').textContent = item || '';
+    breadEl.style.display = item ? '' : 'none';
+  }
+
+  // ── Form Tab Switching ─────────────────────────────────────────────
+  let currentFormTab = 'basics';
+
+  function switchFormTab(tabName) {
+    // Hide all tab contents
+    $$('.form-tab-content').forEach(tc => {
+      tc.classList.remove('active');
+      tc.style.display = 'none';
+    });
+    // Show selected tab
+    const activeTab = $(`[data-tab="${tabName}"]`);
+    if (activeTab) {
+      activeTab.classList.add('active');
+      activeTab.style.display = 'block';
+    }
+
+    // Update tab buttons
+    $$('.form-tab').forEach(btn => btn.classList.remove('active'));
+    $$(`[data-tab="${tabName}"]`).forEach(btn => {
+      if (btn.classList.contains('form-tab')) btn.classList.add('active');
+    });
+
+    // Update step indicator
+    const stepTexts = {
+      'basics': 'Step 1 of 3: Basic Information',
+      'auth': 'Step 2 of 3: Authentication',
+      'advanced': 'Step 3 of 3: Advanced Options'
+    };
+    $('#form-step-indicator').textContent = stepTexts[tabName] || 'Target Configuration';
+
+    // Update button visibility
+    const isFirst = tabName === 'basics';
+    const isLast = tabName === 'advanced';
+    $('#btn-target-prev').style.display = isFirst ? 'none' : '';
+    $('#btn-target-next').style.display = isLast ? 'none' : '';
+    $('#btn-target-submit').style.display = isLast ? '' : 'none';
+
+    currentFormTab = tabName;
+  }
+
+  // Tab button event listeners
+  $$('.form-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchFormTab(btn.dataset.tab);
+    });
+  });
+
+  // Next/Previous buttons
+  $('#btn-target-next').addEventListener('click', () => {
+    const tabOrder = ['basics', 'auth', 'advanced'];
+    const currentIndex = tabOrder.indexOf(currentFormTab);
+    if (currentIndex < tabOrder.length - 1) {
+      switchFormTab(tabOrder[currentIndex + 1]);
+    }
+  });
+
+  $('#btn-target-prev').addEventListener('click', () => {
+    const tabOrder = ['basics', 'auth', 'advanced'];
+    const currentIndex = tabOrder.indexOf(currentFormTab);
+    if (currentIndex > 0) {
+      switchFormTab(tabOrder[currentIndex - 1]);
+    }
   });
 
   // ── Engagement management ──────────────────────────────────────────
@@ -168,6 +251,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#target-form').style.display = '';
     $('#target-welcome').style.display = 'none';
     $('#target-content').style.display = '';
+    switchFormTab('basics'); // Reset to first tab
+    updateBreadcrumb('Targets', 'New Target');
   }
 
   $('#btn-new-target').addEventListener('click', startNewTarget);
@@ -197,6 +282,8 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#target-form').style.display = '';
       $('#target-welcome').style.display = 'none';
       $('#target-content').style.display = '';
+      switchFormTab('basics'); // Reset to first tab
+      updateBreadcrumb('Targets', t.name);
 
       // Highlight in sidebar
       $$('#target-list li').forEach(li => li.classList.toggle('active', li.dataset.id === targetId));
