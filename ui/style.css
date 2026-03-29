@@ -3,51 +3,18 @@
 
 /* ── Variables ─────────────────────────────────────────────────────── */
 :root {
-  /* Core Base Colors - optimized for security context & eye strain reduction */
-  --bg:          #0f0f1e;  /* Deeper, more professional */
-  --bg-surface:  #1a1a2e;  /* Better visual separation */
-  --bg-raised:   #262642;  /* More pronounced elevation */
-  --bg-input:    #0d0d1a;  /* Darker inputs, better focus visibility */
-  --bg-hover:    #2a2a4a;  /* Explicit hover state */
-
-  /* Text - optimized for long-duration work sessions */
-  --text:        #f0f0f5;  /* Slightly warmer white, reduces blue light strain */
-  --text-muted:  #a8a8c0;  /* Better contrast (WCAG AA) */
-  --text-dim:    #7a7a8a;  /* Very muted text for hints */
-
-  /* Border & dividers */
-  --border:      #2a2a42;  /* Subtler, warm undertone */
-  --border-hover:#3a3a5a;  /* Emphasized on interaction */
-
-  /* Action Colors - Security-focused */
-  --accent:      #ef4444;  /* Primary action (authoritative red) */
-  --accent-hover:#f87171;  /* Lighter on hover */
-  --accent-light:#fca5a5;  /* Disabled/faded state */
-
-  /* Semantic Colors */
-  --success:     #10b981;  /* Threat resolved (professional green) */
-  --success-light:#6ee7b7; /* Light variant for backgrounds */
-  --warning:     #f59e0b;  /* Attention needed (amber) */
-  --warning-light:#fcd34d; /* Light variant */
-  --error:       #dc2626;  /* Critical severity (deep red) */
-  --error-light: #fecaca;  /* Light variant */
-  --info:        #3b82f6;  /* Informational (blue) */
-  --info-light:  #93c5fd;  /* Light variant */
-
-  /* Status & Severity Colors */
-  --status-running: #f59e0b;
-  --status-success: #10b981;
-  --status-failed:  #dc2626;
-  --status-pending: #8b5cf6;
-
-  /* Session Colors (multi-session testing) */
-  --session-a:   #60a5fa;
-  --session-b:   #fb923c;
-  --session-c:   #a78bfa;
-  --session-d:   #10b981;
-  --session-e:   #f472b6;
-
-  /* Styling */
+  --bg:          #1c1c2e;
+  --bg-surface:  #252540;
+  --bg-raised:   #2f2f52;
+  --bg-input:    #212138;
+  --text:        #ececf1;
+  --text-muted:  #a0a0ba;
+  --accent:      #e94560;
+  --accent-hover:#ff6b81;
+  --success:     #4ade80;
+  --warning:     #fbbf24;
+  --error:       #f87171;
+  --border:      #3a3a5c;
   --radius:      6px;
   --font-mono:   'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   --font-sans:   'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -89,24 +56,6 @@ body {
   color: var(--accent);
   letter-spacing: 0.05em;
 }
-
-/* Breadcrumb display in topbar */
-#topbar-breadcrumb {
-  margin-left: 2rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-#topbar-breadcrumb .breadcrumb-sep {
-  color: var(--border-hover);
-}
-#topbar-breadcrumb .breadcrumb-current {
-  color: var(--text);
-  font-weight: 500;
-}
-
 #db-status {
   display: flex;
   align-items: center;
@@ -138,43 +87,22 @@ body {
   padding: 0.5rem 0;
 }
 .nav-item {
-  padding: 0.6rem 1rem;
+  padding: 0.55rem 1rem;
   background: transparent;
   border: none;
   border-left: 3px solid transparent;
-  border-bottom: 2px solid transparent;
   color: var(--text-muted);
   font-size: 0.85rem;
   cursor: pointer;
   text-align: left;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
   border-radius: 0;
-  position: relative;
 }
-.nav-item:hover {
-  color: var(--text);
-  background: var(--bg-hover);
-}
+.nav-item:hover { color: var(--text); background: var(--bg-raised); }
 .nav-item.active {
-  color: var(--text);
+  color: var(--accent);
   border-left-color: var(--accent);
-  background: var(--bg-hover);
-  font-weight: 600;
-}
-.nav-item.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
-  animation: underline-in 0.3s ease;
-}
-
-@keyframes underline-in {
-  from { width: 0; }
-  to { width: 100%; }
+  background: rgba(233, 69, 96, 0.08);
 }
 
 .sidebar-section {
@@ -402,117 +330,6 @@ fieldset legend {
   padding: 0 0.3rem;
 }
 
-/* ── Tabbed Form Interface ─────────────────────────────────────────── */
-#target-form {
-  max-width: 700px;
-}
-
-.form-header {
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--border);
-}
-
-.form-header h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--text);
-  font-weight: 600;
-}
-
-.form-tabs {
-  display: flex;
-  gap: 0;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-}
-
-.form-tab {
-  flex: 1;
-  padding: 0.75rem 1rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  text-align: center;
-  justify-content: center;
-}
-
-.form-tab .tab-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  background: var(--bg-raised);
-  border-radius: 50%;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.form-tab:hover {
-  color: var(--text);
-  border-bottom-color: var(--border-hover);
-}
-
-.form-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-
-.form-tab.active .tab-number {
-  background: var(--accent);
-  color: #fff;
-}
-
-.form-tab-content {
-  animation: fade-in 0.2s ease;
-}
-
-.form-tab-content.active {
-  display: block;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Field hints and helpers */
-.form-row small.field-hint {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-
-.form-row .required {
-  color: var(--error);
-}
-
-.form-row .optional {
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  font-weight: normal;
-}
-
-.editor-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-
 /* ── Buttons ───────────────────────────────────────────────────────── */
 button {
   padding: 0.4rem 0.8rem;
@@ -528,8 +345,6 @@ button:hover { background: var(--border); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
-.btn-secondary { background: var(--bg-raised); border-color: var(--border); color: var(--text); }
-.btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-hover); }
 .btn-danger { background: var(--error); border-color: var(--error); color: #fff; }
 .btn-danger:hover { background: #c0392b; }
 .btn-large { padding: 0.6rem 2rem; font-size: 1rem; font-weight: 600; }

@@ -15,11 +15,6 @@
     <div id="logo-section">
       <img id="logo-image" src="images/logo-light.png" alt="promt0r logo" style="height: 40px;" onerror="this.style.display='none'">
       <h1>promt0r</h1>
-      <div id="topbar-breadcrumb" style="display: none;">
-        <span id="breadcrumb-section"></span>
-        <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current" id="breadcrumb-item"></span>
-      </div>
     </div>
     <div id="db-status">
       <span id="db-label">No engagement open</span>
@@ -82,91 +77,58 @@
 
         <form id="target-form" autocomplete="off" style="display:none">
           <input type="hidden" id="target-id">
-
-          <!-- Form Header with Tab Indicator -->
-          <div class="form-header">
-            <h3 id="form-step-indicator">Step 1 of 3: Basic Information</h3>
-          </div>
-
-          <!-- Tab Navigation -->
-          <div class="form-tabs">
-            <button type="button" class="form-tab active" data-tab="basics" title="Basic target information">
-              <span class="tab-number">1</span> Basics
-            </button>
-            <button type="button" class="form-tab" data-tab="auth" title="Authentication settings">
-              <span class="tab-number">2</span> Authentication
-            </button>
-            <button type="button" class="form-tab" data-tab="advanced" title="Advanced options">
-              <span class="tab-number">3</span> Advanced
-            </button>
-          </div>
-
-          <!-- Tab Content: Basics -->
-          <div class="form-tab-content active" data-tab="basics">
-            <div class="form-grid-2">
-              <div class="form-row">
-                <label for="target-name">Name <span class="required">*</span></label>
-                <input id="target-name" type="text" placeholder="e.g. Acme HR Chatbot" required>
-                <small class="field-hint">Give your target a descriptive name</small>
-              </div>
-              <div class="form-row">
-                <label for="target-url">URL <span class="required">*</span></label>
-                <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
-                <small class="field-hint">The endpoint to test</small>
-              </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-row">
-                <label for="target-endpoint">Endpoint type <span class="required">*</span></label>
-                <select id="target-endpoint" required>
-                  <option value="openai_compat">OpenAI Compatible</option>
-                  <option value="custom_rest">Custom REST</option>
-                </select>
-                <small class="field-hint">Choose your API format</small>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tab Content: Authentication -->
-          <div class="form-tab-content" data-tab="auth" style="display:none">
+          <div class="form-grid-2">
             <div class="form-row">
-              <label for="target-auth-type">Authentication type</label>
+              <label for="target-name">Name</label>
+              <input id="target-name" type="text" placeholder="e.g. Acme HR Chatbot" required>
+            </div>
+            <div class="form-row">
+              <label for="target-url">URL</label>
+              <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="target-endpoint">Endpoint type</label>
+              <select id="target-endpoint">
+                <option value="openai_compat">OpenAI Compatible</option>
+                <option value="custom_rest">Custom REST</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="target-auth-type">Auth</label>
               <select id="target-auth-type">
                 <option value="none">None</option>
                 <option value="bearer">Bearer token</option>
                 <option value="api_key">API key</option>
                 <option value="basic">Basic auth</option>
               </select>
-              <small class="field-hint">How to authenticate with the target</small>
             </div>
-            <div class="form-row" id="auth-value-row" style="display:none">
-              <label for="target-auth-value">Auth value</label>
-              <input id="target-auth-value" type="password" placeholder="Token / key / base64(user:pass)">
-              <small class="field-hint">Your authentication credentials</small>
-            </div>
-            <div class="form-row" id="auth-header-row" style="display:none">
-              <label for="target-auth-header">Auth header</label>
-              <input id="target-auth-header" type="text" placeholder="Authorization (default)">
-              <small class="field-hint">Custom header name for authentication</small>
-            </div>
-
-            <fieldset id="field-mapping-group" style="display:none">
-              <legend>Field Mapping (Custom REST)</legend>
-              <div class="form-grid-2">
-                <div class="form-row">
-                  <label for="map-request">Request field</label>
-                  <input id="map-request" type="text" placeholder="message" value="message">
-                </div>
-                <div class="form-row">
-                  <label for="map-response">Response field</label>
-                  <input id="map-response" type="text" placeholder="response" value="response">
-                </div>
-              </div>
-            </fieldset>
+          </div>
+          <div class="form-row" id="auth-value-row" style="display:none">
+            <label for="target-auth-value">Auth value</label>
+            <input id="target-auth-value" type="password" placeholder="Token / key / base64(user:pass)">
+          </div>
+          <div class="form-row" id="auth-header-row" style="display:none">
+            <label for="target-auth-header">Auth header</label>
+            <input id="target-auth-header" type="text" placeholder="Authorization (default)">
           </div>
 
-          <!-- Tab Content: Advanced -->
-          <div class="form-tab-content" data-tab="advanced" style="display:none">
+          <fieldset id="field-mapping-group" style="display:none">
+            <legend>Field Mapping (Custom REST)</legend>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="map-request">Request field</label>
+                <input id="map-request" type="text" placeholder="message" value="message">
+              </div>
+              <div class="form-row">
+                <label for="map-response">Response field</label>
+                <input id="map-response" type="text" placeholder="response" value="response">
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="form-grid-2">
             <div class="form-row">
               <label for="target-session-strategy">Session strategy</label>
               <select id="target-session-strategy">
@@ -175,26 +137,20 @@
                 <option value="header">Custom header</option>
                 <option value="body_field">Body field</option>
               </select>
-              <small class="field-hint">How to manage session state</small>
             </div>
             <div class="form-row" id="session-field-row" style="display:none">
               <label for="target-session-field">Session field / header name</label>
               <input id="target-session-field" type="text" placeholder="X-Conversation-Id">
-              <small class="field-hint">Name of the session identifier</small>
-            </div>
-
-            <div class="form-row">
-              <label for="target-system-prompt">System prompt <span class="optional">(optional)</span></label>
-              <textarea id="target-system-prompt" rows="3" placeholder="Override the target's system prompt for testing..."></textarea>
-              <small class="field-hint">Leave blank to use the target's default system prompt</small>
             </div>
           </div>
 
-          <!-- Form Actions -->
+          <div class="form-row">
+            <label for="target-system-prompt">System prompt (optional)</label>
+            <textarea id="target-system-prompt" rows="3" placeholder="Override the target's system prompt for testing..."></textarea>
+          </div>
+
           <div class="editor-actions">
-            <button type="button" class="btn-secondary" id="btn-target-prev" style="display:none">← Previous</button>
-            <button type="button" class="btn-secondary" id="btn-target-next">Next →</button>
-            <button type="submit" class="btn-primary" id="btn-target-submit" style="display:none">Save Target</button>
+            <button type="submit" class="btn-primary">Save Target</button>
           </div>
         </form>
       </section>
