@@ -56,9 +56,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Sidebar navigation ─────────────────────────────────────────────
   $$('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
-      $$('.nav-item').forEach(b => b.classList.remove('active'));
+      $$('.nav-item').forEach(b => {
+        b.classList.remove('active');
+        b.removeAttribute('aria-current');
+      });
       $$('.view').forEach(v => v.classList.remove('active'));
       btn.classList.add('active');
+      btn.setAttribute('aria-current', 'page');
       $(`#${btn.dataset.view}`).classList.add('active');
 
       // Show/hide sidebar sections
