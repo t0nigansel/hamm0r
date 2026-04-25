@@ -1,0 +1,40 @@
+name: Security Review
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Gate the environment-protected key behind manual approval.
+    environment: security-review
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # We need at least the previous commit to produce a diff.
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install anthropic httpx
+
+      - name: Run security review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_BEFORE_SHA: ${{ github.event.before }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python .github/scripts/security_review.py

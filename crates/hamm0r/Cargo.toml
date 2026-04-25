@@ -1,0 +1,29 @@
+[package]
+name = "hamm0r"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hamm0r"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio = { workspace = true }
+storage = { path = "../storage" }
+runner = { path = "../runner" }
+# The `analyzer` dep is only pulled in when the `analyzer` feature is on.
+analyzer = { path = "../analyzer", optional = true }
+
+[features]
+# Off by default — the analyzer is a multi-GB opt-in download.
+# CI checks: `cargo tree -p hamm0r --no-default-features` must not list `analyzer`.
+analyzer = ["dep:analyzer"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

@@ -1,0 +1,18 @@
+[package]
+name = "analyzer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+# The analyzer crate is only compiled when the `analyzer` feature is enabled
+# on the `hamm0r` binary crate. It must never appear in the default dep tree.
+# CI enforces this via:
+#   cargo tree -p hamm0r --no-default-features   (must not list `analyzer`)
+#
+# LLM runtime (llama-cpp-2) will be added here in Milestone 6.
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+storage = { path = "../storage" }
