@@ -1,111 +1,105 @@
 # hamm0r
+*Ninja Hamm0r of Righteousness.*
 
 Local-first AI security testing tool for LLM-based systems.
 
-`hamm0r` helps you run OWASP-style attack prompts against AI endpoints, capture and signal-detect responses, promote findings, and export PDF reports — all without any cloud calls or external database server.
+`hamm0r` fires OWASP-style attack prompts against AI endpoints, records raw responses, and — with the optional analyzer — produces verdict-annotated HTML reports. No cloud accounts, no external servers, no config files required.
 
 ## Highlights
 
-- **Local-first**: no cloud calls, no external DB server.
-- **Engagement folders**: each engagement is a directory under `data/engagements/<slug>/` containing plain JSON files.
-- **Workbench**: fire single prompts, inspect signals, diff responses, promote findings.
-- **Scenario builder**: multi-step, multi-session attack flows.
-- **OWASP coverage grid**: live coverage view across A01–A10.
-- **Mutation engine**: base64, rot13, unicode homoglyphs, role-prefix, emoji-smuggle variants.
-- **PDF reports** via WeasyPrint + Jinja2.
+- **Local-first**: no cloud calls, no external DB, air-gap friendly
+- **Single binary**: Rust + Tauri 2 — no Python runtime, no Node, no sidecar
+- **Engagement folders**: each engagement is a directory under `~/hamm0r/engagements/<slug>/` containing plain YAML/JSONL files you own
+- **Scenario builder**: multi-step, multi-session attack flows with independent iterations
+- **OWASP coverage**: prompts tagged to OWASP Top 10 for LLM Applications 2025
+- **Analyzer (opt-in)**: local LLM judge (llama-cpp-2 + GGUF) — downloaded on first activation, never required for core use
+- **HTML reports**: single self-contained file, opens in any browser, no rendering dependency
 
 ## Architecture
 
 ```text
-ui/          Plain HTML/CSS/JS frontend
-sidecar/     Command handlers + dev server bridge
-runner/      Async HTTP client, signal detection, mutation generator
-evaluat0r/   Verdict judge (Ollama/Qwen) + report templates
-prompts/     Curated prompt library (library.yaml)
-data/        Runtime data (JSON, gitignored)
-scripts/     Seed and install helpers
-tests/       pytest suite
+crates/
+  hamm0r/    Tauri 2 shell — commands, window management
+  runner/    Async HTTP client, adapter layer, session manager
+  storage/   File I/O layer — YAML configs, JSONL run logs
+  analyzer/  Local LLM judge (opt-in, off by default)
+prompts/     Bundled starter attack library (YAML)
 ```
 
-Data layout:
+User data layout (`~/hamm0r/`):
 
 ```text
-data/
-  prompts.json                          ← shared prompt library
+~/hamm0r/
+  prompts/            ← YAML prompt library (one file per category)
+  targets/            ← YAML target configs
+  requests/           ← YAML request templates
+  scenarios/          ← YAML scenario definitions
   engagements/
     <slug>/
-      meta.json
-      targets.json
-      runs.json
-      results.json
-      findings.json
-      artifacts/                        ← exported PDFs
+      meta.yaml
+      run-NNN.jsonl         ← append-only run log
+      run-NNN.verdicts.jsonl  ← analyzer output (when present)
+      run-NNN-<attempt>.txt   ← raw response bodies
+  analyzer/           ← downloaded model + runtime (opt-in)
 ```
 
-## Quick Start
+## How to Install
 
-### 1. Install
+### Prerequisites
+
+| Tool | Version | Install |
+| ---- | ------- | ------- |
+| Rust (via rustup) | stable (≥ 1.88) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Tauri CLI | 2.x | `cargo install tauri-cli --version "^2"` |
+| System webview | — | macOS: built-in · Windows: WebView2 (ships with Win10+) · Linux: `libwebkit2gtk-4.1` |
+
+On **macOS** also install Xcode Command Line Tools if not present:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-pip install -e ./evaluat0r   # optional — only needed for PDF export / LLM judging
+xcode-select --install
 ```
 
-For dev/test tools:
+On **Linux** (Debian/Ubuntu) install the Tauri system dependencies:
 
 ```bash
-pip install -e ".[dev]"
+sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 ```
 
-### 2. Seed the prompt library (recommended)
+### Build & run (development)
 
 ```bash
-python scripts/seed_prompts.py
+git clone https://github.com/t0nigansel/hamm0r.git
+cd hamm0r
+PATH=~/.cargo/bin:$PATH cargo tauri dev
 ```
 
-This writes `data/prompts.json` with the built-in OWASP attack library.
+The app window opens automatically. The starter prompt library is seeded into `~/hamm0r/` on first launch.
 
-### 3. Start the dev server
+### Build a release binary
 
 ```bash
-python -m sidecar.dev_server
+PATH=~/.cargo/bin:$PATH cargo tauri build
 ```
 
-Then open: `http://localhost:9274`
-
-Optionally auto-open an engagement on start:
-
-```bash
-python -m sidecar.dev_server --engagement acme-chatbot
-```
-
-### 4. Create an engagement in the UI
-
-Click **+** in the topbar → give it a name → check "Seed with default prompt library" → **Create**.
+The installer is placed in `target/release/bundle/`.
 
 ## Workflow
 
-1. **Targets** (T sidebar) — add the LLM endpoint you want to test.
-2. **Workbench** (W sidebar) — select a target, pick or write a prompt, fire it.
-3. Inspect signals (PII, system-prompt leakage, injection echo, internal hostnames).
-4. **Promote** interesting results to findings with a severity rating.
-5. **Export PDF** from the findings drawer.
+1. **Targets** — add the LLM endpoint you want to test (URL, auth header, session strategy)
+2. **Scenarios** — pick prompts from the library or write your own, chain them into multi-step flows
+3. **Run** — fire the scenario; responses are written to the engagement folder in real time
+4. **Analyze** *(optional)* — activate the analyzer to get per-response verdicts and an HTML report
 
-## evaluat0r (optional LLM judging)
+## Analyzer (optional LLM judging)
 
-Requires Ollama with `qwen2.5:14b` (or another model).
+The analyzer is a separate opt-in component. It is **not required** to run attacks or record responses.
 
-```bash
-ollama pull qwen2.5:14b
-python -m evaluat0r --engagement <slug> --output report.pdf
-```
+Activate it from the UI: **Settings → Activate analyz0r**. hamm0r will detect your hardware, download the appropriate GGUF model variant, and install it to `~/hamm0r/analyzer/`. After activation, any completed run can be analyzed in-process — no Ollama, no external service.
 
 ## Tests
 
 ```bash
-pytest
+PATH=~/.cargo/bin:$PATH cargo test
 ```
 
 ## License
