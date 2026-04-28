@@ -1,0 +1,8 @@
+/Users/tonigansel/workspace/hamm0r/target/debug/deps/json_patch-9617139c69bd3701.d: /Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/lib.rs /Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/diff.rs
+
+/Users/tonigansel/workspace/hamm0r/target/debug/deps/libjson_patch-9617139c69bd3701.rlib: /Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/lib.rs /Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/diff.rs
+
+/Users/tonigansel/workspace/hamm0r/target/debug/deps/libjson_patch-9617139c69bd3701.rmeta: /Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/lib.rs /Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/diff.rs
+
+/Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/lib.rs:
+/Users/tonigansel/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/json-patch-3.0.1/src/diff.rs:

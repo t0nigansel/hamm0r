@@ -46,8 +46,7 @@ pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Request>> {
 pub fn delete(dir: &Path, id: &str) -> anyhow::Result<()> {
     let path = dir.join(format!("{id}.yaml"));
     if path.exists() {
-        std::fs::remove_file(&path)
-            .with_context(|| format!("cannot delete {}", path.display()))?;
+        std::fs::remove_file(&path).with_context(|| format!("cannot delete {}", path.display()))?;
     }
     Ok(())
 }
@@ -72,7 +71,9 @@ mod tests {
             name: "OpenAI Chat Completion".into(),
             method: "POST".into(),
             url: "https://api.openai.com/v1/chat/completions".into(),
-            auth: AuthConfig::Bearer { token_env: "OPENAI_API_KEY".into() },
+            auth: AuthConfig::Bearer {
+                token_env: "OPENAI_API_KEY".into(),
+            },
             headers: [("Content-Type".into(), "application/json".into())].into(),
             body: BodyConfig {
                 format: BodyFormat::Json,

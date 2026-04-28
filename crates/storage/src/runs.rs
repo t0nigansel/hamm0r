@@ -57,6 +57,18 @@ pub struct RunAttempt {
     pub ts: String,
     pub prompt_id: String,
     pub payload_id: String,
+    /// Scenario step identifier when the run came from a scenario.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
+    /// 1-based iteration index when scenario repeat > 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iteration: Option<u32>,
+    /// Session label used for this attempt (for example A/B/C).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    /// Prompt snapshot text used for this attempt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_text: Option<String>,
     pub request: RequestEnvelope,
     pub response: ResponseEnvelope,
     pub timing: Timing,
@@ -146,6 +158,37 @@ pub fn read_all(run_path: &Path) -> anyhow::Result<Vec<RunRecord>> {
     Ok(records)
 }
 
+/// Read the raw text of one response body file by run ID and sequence number.
+pub fn read_response_body(
+    engagement_dir: &Path,
+    run_id: &str,
+    seq: u32,
+) -> anyhow::Result<Option<String>> {
+    read_body_at(
+        &engagement_dir
+            .join("responses")
+            .join(run_id)
+            .join(format!("{seq:04}.txt")),
+    )
+}
+
+/// Read a response body file using its relative path as stored in `RunAttempt.body_file`.
+pub fn read_body_by_relative_path(
+    engagement_dir: &Path,
+    relative_path: &str,
+) -> anyhow::Result<Option<String>> {
+    read_body_at(&engagement_dir.join(relative_path))
+}
+
+fn read_body_at(path: &Path) -> anyhow::Result<Option<String>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    std::fs::read_to_string(path)
+        .map(Some)
+        .with_context(|| format!("cannot read response body: {}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,6 +211,10 @@ mod tests {
             ts: "2026-04-25T09:00:01Z".into(),
             prompt_id: "injection-classics".into(),
             payload_id: "inj-001".into(),
+            step_id: None,
+            iteration: None,
+            session: None,
+            prompt_text: None,
             request: RequestEnvelope {
                 method: "POST".into(),
                 url: "https://api.example.com".into(),

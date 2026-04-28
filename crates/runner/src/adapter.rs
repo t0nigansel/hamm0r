@@ -6,6 +6,7 @@ use serde_json_path::JsonPath;
 use storage::types::{AdapterType, AuthConfig, BodyFormat, ExtractConfig, Request};
 
 use crate::error::RunnerError;
+use crate::session::SessionStrategy;
 use crate::template;
 
 /// The result of one HTTP exchange.
@@ -35,7 +36,10 @@ fn apply_auth(
             })?;
             builder = builder.bearer_auth(token);
         }
-        AuthConfig::Basic { user_env, password_env } => {
+        AuthConfig::Basic {
+            user_env,
+            password_env,
+        } => {
             let user = std::env::var(user_env).map_err(|_| RunnerError::MissingEnvVar {
                 var: user_env.clone(),
             })?;
@@ -44,7 +48,10 @@ fn apply_auth(
             })?;
             builder = builder.basic_auth(user, Some(pass));
         }
-        AuthConfig::CustomHeader { header_name, value_env } => {
+        AuthConfig::CustomHeader {
+            header_name,
+            value_env,
+        } => {
             let value = std::env::var(value_env).map_err(|_| RunnerError::MissingEnvVar {
                 var: value_env.clone(),
             })?;
@@ -95,10 +102,27 @@ pub async fn execute(
     request: &Request,
     payload: &str,
 ) -> Result<AdapterResponse, RunnerError> {
+    execute_with_session(http, request, payload, &SessionStrategy::None, "default").await
+}
+
+/// Send one HTTP request with optional per-session injection strategy.
+pub async fn execute_with_session(
+    http: &reqwest::Client,
+    request: &Request,
+    payload: &str,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
+) -> Result<AdapterResponse, RunnerError> {
     match request.adapter {
-        AdapterType::CustomRest => execute_custom_rest(http, request, payload).await,
-        AdapterType::OpenAiCompat => execute_openai_compat(http, request, payload).await,
-        AdapterType::RawHttp => execute_raw_http(http, request, payload).await,
+        AdapterType::CustomRest => {
+            execute_custom_rest(http, request, payload, session_strategy, session_value).await
+        }
+        AdapterType::OpenAiCompat => {
+            execute_openai_compat(http, request, payload, session_strategy, session_value).await
+        }
+        AdapterType::RawHttp => {
+            execute_raw_http(http, request, payload, session_strategy, session_value).await
+        }
     }
 }
 
@@ -108,14 +132,20 @@ async fn execute_custom_rest(
     http: &reqwest::Client,
     request: &Request,
     payload: &str,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
 ) -> Result<AdapterResponse, RunnerError> {
-    let rendered_headers = template::render_headers(&request.headers, payload)?;
+    let mut rendered_headers = template::render_headers(&request.headers, payload)?;
+    apply_session_header(&mut rendered_headers, session_strategy, session_value);
 
     let mut builder = http
         .request(
-            request.method.parse().map_err(|_| RunnerError::Extraction {
-                reason: format!("invalid HTTP method: {}", request.method),
-            })?,
+            request
+                .method
+                .parse()
+                .map_err(|_| RunnerError::Extraction {
+                    reason: format!("invalid HTTP method: {}", request.method),
+                })?,
             &request.url,
         )
         .headers(to_header_map(&rendered_headers)?);
@@ -124,16 +154,28 @@ async fn execute_custom_rest(
 
     builder = match request.body.format {
         BodyFormat::Json => {
-            let body_str = serde_json::to_string(&request.body.content)
-                .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
+            let body = inject_session_body_field(
+                request.body.content.clone(),
+                session_strategy,
+                session_value,
+            );
+
+            let body_str = serde_json::to_string(&body).map_err(|e| RunnerError::Extraction {
+                reason: e.to_string(),
+            })?;
             let rendered = template::render(&body_str, payload)?;
-            let json: serde_json::Value = serde_json::from_str(&rendered)
-                .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
+            let json: serde_json::Value =
+                serde_json::from_str(&rendered).map_err(|e| RunnerError::Extraction {
+                    reason: e.to_string(),
+                })?;
             builder.json(&json)
         }
         BodyFormat::Form => {
-            let body_str = serde_json::to_string(&request.body.content)
-                .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
+            let body_str = serde_json::to_string(&request.body.content).map_err(|e| {
+                RunnerError::Extraction {
+                    reason: e.to_string(),
+                }
+            })?;
             let rendered = template::render(&body_str, payload)?;
             builder.body(rendered)
         }
@@ -153,6 +195,8 @@ async fn execute_openai_compat(
     http: &reqwest::Client,
     request: &Request,
     payload: &str,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
 ) -> Result<AdapterResponse, RunnerError> {
     // Merge the request body content with the payload substituted into the
     // messages array. If content already has `messages`, honour that structure;
@@ -160,21 +204,29 @@ async fn execute_openai_compat(
     let mut body = request.body.content.clone();
     if let Some(messages) = body.get_mut("messages") {
         // Substitute {{ prompt }} inside the messages array.
-        let msgs_str = serde_json::to_string(messages)
-            .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
+        let msgs_str = serde_json::to_string(messages).map_err(|e| RunnerError::Extraction {
+            reason: e.to_string(),
+        })?;
         let rendered = template::render(&msgs_str, payload)?;
-        *messages = serde_json::from_str(&rendered)
-            .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
+        *messages = serde_json::from_str(&rendered).map_err(|e| RunnerError::Extraction {
+            reason: e.to_string(),
+        })?;
     } else {
         body["messages"] = serde_json::json!([{"role": "user", "content": payload}]);
     }
 
-    let rendered_headers = template::render_headers(&request.headers, payload)?;
+    body = inject_session_body_field(body, session_strategy, session_value);
+
+    let mut rendered_headers = template::render_headers(&request.headers, payload)?;
+    apply_session_header(&mut rendered_headers, session_strategy, session_value);
     let mut builder = http
         .request(
-            request.method.parse().map_err(|_| RunnerError::Extraction {
-                reason: format!("invalid HTTP method: {}", request.method),
-            })?,
+            request
+                .method
+                .parse()
+                .map_err(|_| RunnerError::Extraction {
+                    reason: format!("invalid HTTP method: {}", request.method),
+                })?,
             &request.url,
         )
         .headers(to_header_map(&rendered_headers)?)
@@ -191,18 +243,24 @@ async fn execute_raw_http(
     http: &reqwest::Client,
     request: &Request,
     payload: &str,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
 ) -> Result<AdapterResponse, RunnerError> {
     let body_str = match &request.body.content {
         serde_json::Value::String(s) => template::render(s, payload)?,
         other => template::render(&other.to_string(), payload)?,
     };
 
-    let rendered_headers = template::render_headers(&request.headers, payload)?;
+    let mut rendered_headers = template::render_headers(&request.headers, payload)?;
+    apply_session_header(&mut rendered_headers, session_strategy, session_value);
     let mut builder = http
         .request(
-            request.method.parse().map_err(|_| RunnerError::Extraction {
-                reason: format!("invalid HTTP method: {}", request.method),
-            })?,
+            request
+                .method
+                .parse()
+                .map_err(|_| RunnerError::Extraction {
+                    reason: format!("invalid HTTP method: {}", request.method),
+                })?,
             &request.url,
         )
         .headers(to_header_map(&rendered_headers)?)
@@ -250,11 +308,47 @@ fn to_header_map(
 ) -> Result<reqwest::header::HeaderMap, RunnerError> {
     let mut map = reqwest::header::HeaderMap::new();
     for (k, v) in headers {
-        let name = reqwest::header::HeaderName::from_bytes(k.as_bytes())
-            .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
-        let value = reqwest::header::HeaderValue::from_str(v)
-            .map_err(|e| RunnerError::Extraction { reason: e.to_string() })?;
+        let name = reqwest::header::HeaderName::from_bytes(k.as_bytes()).map_err(|e| {
+            RunnerError::Extraction {
+                reason: e.to_string(),
+            }
+        })?;
+        let value =
+            reqwest::header::HeaderValue::from_str(v).map_err(|e| RunnerError::Extraction {
+                reason: e.to_string(),
+            })?;
         map.insert(name, value);
     }
     Ok(map)
+}
+
+fn apply_session_header(
+    rendered_headers: &mut HashMap<String, String>,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
+) {
+    if let SessionStrategy::Header { header_name } = session_strategy {
+        rendered_headers.insert(header_name.clone(), session_value.to_owned());
+    }
+}
+
+fn inject_session_body_field(
+    body: serde_json::Value,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
+) -> serde_json::Value {
+    if let SessionStrategy::BodyField { field_name } = session_strategy {
+        match body {
+            serde_json::Value::Object(mut map) => {
+                map.insert(
+                    field_name.clone(),
+                    serde_json::Value::String(session_value.to_owned()),
+                );
+                serde_json::Value::Object(map)
+            }
+            other => other,
+        }
+    } else {
+        body
+    }
 }

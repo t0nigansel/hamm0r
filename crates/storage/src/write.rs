@@ -10,9 +10,9 @@ use tempfile::NamedTempFile;
 /// atomic on POSIX (and best-effort on Windows). Callers never see a partial
 /// write at `dest`.
 pub fn atomic_write(dest: &Path, contents: &[u8]) -> anyhow::Result<()> {
-    let dir = dest.parent().with_context(|| {
-        format!("destination path has no parent: {}", dest.display())
-    })?;
+    let dir = dest
+        .parent()
+        .with_context(|| format!("destination path has no parent: {}", dest.display()))?;
 
     fs::create_dir_all(dir)
         .with_context(|| format!("could not create directory: {}", dir.display()))?;

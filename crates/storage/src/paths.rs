@@ -62,4 +62,8 @@ impl HammorPaths {
     pub fn analyzer_dir(&self) -> PathBuf {
         self.root.join("analyzer")
     }
+
+    pub fn analyzer_models_dir(&self) -> PathBuf {
+        self.analyzer_dir().join("models")
+    }
 }

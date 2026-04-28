@@ -32,7 +32,11 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new(strategy: SessionStrategy, timeout_seconds: u32) -> Self {
-        Self { strategy, timeout_seconds, clients: HashMap::new() }
+        Self {
+            strategy,
+            timeout_seconds,
+            clients: HashMap::new(),
+        }
     }
 
     /// Get or create the `reqwest::Client` for the given session label.
@@ -41,7 +45,9 @@ impl SessionManager {
             let client = match &self.strategy {
                 SessionStrategy::Cookie => reqwest::Client::builder()
                     .connect_timeout(std::time::Duration::from_secs(10))
-                    .timeout(std::time::Duration::from_secs(u64::from(self.timeout_seconds)))
+                    .timeout(std::time::Duration::from_secs(u64::from(
+                        self.timeout_seconds,
+                    )))
                     .cookie_store(true)
                     .use_rustls_tls()
                     .build()

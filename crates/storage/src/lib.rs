@@ -6,6 +6,7 @@ pub mod runs;
 pub mod scenarios;
 pub mod targets;
 pub mod types;
+pub mod verdicts;
 pub mod write;
 
 pub use paths::HammorPaths;

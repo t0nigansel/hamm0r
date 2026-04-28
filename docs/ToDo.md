@@ -103,44 +103,44 @@ right before there is anything to break.
 
 ## Milestone 5 — Scenarios (Week 5)
 
-- [ ] Scenario builder UI per `UI-Scenarios.md`: header, step
+- [x] Scenario builder UI per `UI-Scenarios.md`: header, step
   timeline, session color-coding
-- [ ] Add Step dialog: library prompt or custom text
-- [ ] Library prompt snapshot at *edit* time into `prompt_text`
+- [x] Add Step dialog: library prompt or custom text
+- [x] Library prompt snapshot at *edit* time into `prompt_text`
   (regression test: editing the library does not change saved
   scenarios)
-- [ ] Save/load scenarios to/from `~/hamm0r/scenarios/<slug>.yaml`
-- [ ] Repeat field with N independent iterations per run
-- [ ] Sequential multi-session execution in the runner
-- [ ] Run results show `iteration` and `step_id` clearly when
+- [x] Save/load scenarios to/from `~/hamm0r/scenarios/<slug>.yaml`
+- [x] Repeat field with N independent iterations per run
+- [x] Sequential multi-session execution in the runner
+- [x] Run results show `iteration` and `step_id` clearly when
   `repeat > 1`
-- [ ] Quick Run uses the same code path: creates a transient
+- [x] Quick Run uses the same code path: creates a transient
   one-step scenario
 
 ## Milestone 6 — Analyzer activation + verdicts (Week 6)
 
-- [ ] Manifest format for the analyzer bundle
-  (`https://hamm0r.example/analyzer/manifest.json` — URL TBD)
-- [ ] "Activate analyz0r" UI flow: hardware detection → variant
+- [x] Manifest format for the analyzer bundle
+  (`https://hamm0r.io/analyzer/manifest.json` — URL TBD, falls back to bundled)
+- [x] "Activate analyz0r" UI flow: hardware detection → variant
   selection → download with progress → install to
   `~/hamm0r/analyzer/`
-- [ ] `analyzer` crate: `llama-cpp-2` integration, GGUF loading from
-  `~/hamm0r/analyzer/models/`
-- [ ] Judge prompt template per `PROMPTS_SPEC.md`, with `owasp_ref`
+- [x] `analyzer` crate: `llama-cpp-2` integration, GGUF loading from
+  `~/hamm0r/analyzer/models/` (Qwen2.5-3B Q4_K_M; SHA256 TODO)
+- [x] Judge prompt template per `PROMPTS_SPEC.md`, with `owasp_ref`
   line omitted when missing
-- [ ] Verdict writer: `run-NNN.verdicts.jsonl` alongside the run file
-- [ ] Inference on `tokio::task::spawn_blocking` so the UI stays
+- [x] Verdict writer: `run-NNN.verdicts.jsonl` alongside the run file
+- [x] Inference on `tokio::task::spawn_blocking` so the UI stays
   responsive
-- [ ] Tauri command `start_analysis(run_id)` + progress events
+- [x] Tauri command `start_analysis(run_id)` + progress events
 
 ## Milestone 7 — HTML report + dogfood (Week 7)
 
-- [ ] Single-file HTML report rendered via `minijinja` (already in
+- [x] Single-file HTML report rendered via `minijinja` (already in
   core)
-- [ ] Inline CSS, no external assets, no JS — opens in any browser
-- [ ] Sections: executive summary, findings grouped by category
+- [x] Inline CSS, no external assets, no JS — opens in any browser
+- [x] Sections: executive summary, findings grouped by category
   (filename) and by `owasp_ref` when present, evidence table
-- [ ] Snapshot tests via `insta` against a fixture run
+- [x] Snapshot tests via `insta` against a fixture run
 - [ ] Dogfood pass: run hamm0r against the internal Azure-OpenAI CV
   app, write a report, fix whatever feels wrong in the UX
 

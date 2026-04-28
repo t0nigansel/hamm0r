@@ -15,6 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingStepIndex = -1; // -1 = add, >= 0 = edit
   let currentRunId = null;
   let progressPollTimer = null;
+  const ARCHIVED_ENGAGEMENTS_KEY = 'hamm0r.archivedEngagements.v1';
+
+  const engagementDetail = {
+    slug: null,
+    name: '',
+    activeRunId: null,
+    runs: [],
+    resultsByRunId: new Map(),
+    targets: [],
+    scenarios: [],
+    targetMatch: null,
+    scenarioName: '—',
+  };
 
   // ── DOM refs ───────────────────────────────────────────────────────
   const $ = (sel) => document.querySelector(sel);
@@ -186,6 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Workbench state ────────────────────────────────────────────────
   const wb = {
     activeTargetId: null,
+    activeTarget: null,
+    availableTargets: [],
     selectedPromptId: null,
     selectedPrompt: null,
     activeCardEl: null,
@@ -373,22 +388,52 @@ document.addEventListener('DOMContentLoaded', () => {
     switchDetailTab('diff');
   }
 
+  function setWorkbenchInteractivity(enabled) {
+    $('#btn-wb-fire').disabled = !enabled;
+    $('#btn-wb-baseline').disabled = !enabled;
+    $('#btn-wb-judge-all').disabled = !enabled;
+    $('#wb-prompt-textarea').disabled = !enabled;
+    $('#wb-prompt-textarea').placeholder = enabled
+      ? 'select a prompt from the library or type an attack prompt…'
+      : 'pick a target first…';
+  }
+
+  function renderWorkbenchEmptyState() {
+    const stream = $('#wb-response-stream');
+    let empty = $('#wb-response-empty');
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.id = 'wb-response-empty';
+      empty.className = 'response-empty';
+      stream.appendChild(empty);
+    }
+
+    if (!wb.activeTargetId) {
+      empty.innerHTML = `
+        <div class="response-empty-title">Pick Target</div>
+        <div class="response-empty-subtitle">Select a target to start working in Workbench.</div>
+        <div class="response-empty-actions">
+          <button class="btn btn-primary" id="wb-empty-pick-target">Pick Target</button>
+          <a href="#" class="response-empty-banner" id="wb-empty-start-engagement">Looking for guided testing? Start an Engagement →</a>
+        </div>`;
+      $('#wb-empty-pick-target')?.addEventListener('click', () => openWorkbenchTargetDialog());
+      $('#wb-empty-start-engagement')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        openEngagementWizard();
+      });
+      return;
+    }
+
+    empty.innerHTML = `<div class="response-empty-title">Ready</div><div class="response-empty-subtitle">fire a prompt to begin</div>`;
+  }
+
   function resetResponseStream() {
     const stream = $('#wb-response-stream');
     stream.querySelectorAll('.response-card').forEach(el => el.remove());
-    if (!$('#wb-response-empty')) {
-      const empty = document.createElement('div');
-      empty.id = 'wb-response-empty';
-      empty.className = 'response-empty';
-      empty.innerHTML = `<div class="ascii">
- ___  ____  ___  ____
-| _ \\| ___|/ __||_  _|
-|  _/|  _| \\__ \\  ||
-|_|  |____||___/  ||
-      </div>fire a prompt to begin`;
-      stream.appendChild(empty);
-    }
+    renderWorkbenchEmptyState();
   }
+  setWorkbenchInteractivity(false);
+  renderWorkbenchEmptyState();
 
   // ── Check if DB is open on page load ────────────────────────────────
   async function checkDatabaseStatus() {
@@ -405,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Always load global data (targets + prompts live outside engagements)
       loadWorkbenchTargets();
       loadPickerPrompts();
+      loadHomeRecentEngagements();
     }
   }
 
@@ -423,14 +469,18 @@ document.addEventListener('DOMContentLoaded', () => {
     loadWorkbenchTargets();
     loadPickerPrompts();   // also updates coverage grid client-side
     loadFindings();
+    if ($('#view-home').classList.contains('active')) {
+      loadHomeRecentEngagements();
+    }
     // refresh engagement list if runs view is visible
-    if ($('#view-runs').classList.contains('active')) loadEngagementList();
+    if ($('#view-runs').classList.contains('active')) loadEngagementList({ autoOpen: false });
   }
 
   checkDatabaseStatus();
 
   // ── T-05 · Sidebar navigation ──────────────────────────────────────
   const VIEW_LABELS = {
+    'view-home': 'home',
     'view-workbench': 'workbench',
     'view-targets': 'targets',
     'view-library': 'library',
@@ -450,12 +500,14 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#breadcrumb-view').textContent = VIEW_LABELS[viewId] || viewId;
 
 
+    if (viewId === 'view-home') loadHomeRecentEngagements();
     if (viewId === 'view-library') loadPrompts();
     if (viewId === 'view-targets') loadTargetList();
     if (viewId === 'view-workbench') { loadWorkbenchTargets(); loadPickerPrompts(); if (dbOpen) loadFindings(); }
+    if (viewId === 'view-runs') loadEngagementList();
+    if (viewId !== 'view-runs') clearEngagementRoute({ replace: true });
     if (dbOpen) {
       if (viewId === 'view-scenarios') loadScenarioList();
-      if (viewId === 'view-runs') loadEngagementList();
     }
   }
 
@@ -470,12 +522,571 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Engagement management ──────────────────────────────────────────
+  const WIZARD_STORAGE_KEY = 'hamm0r.engagementWizard.v1';
+  const WIZARD_SCENARIOS = [
+    {
+      id: 'quick_scan',
+      name: 'Quick Scan',
+      description: 'Small OWASP sample, single-shot, optimized for first signal.',
+      estimatedPrompts: 20,
+      estimatedRuntime: '~3m',
+      coverage: ['A01', 'A02', 'A03', 'A06'],
+      defaultOwaspRefs: ['A01', 'A02', 'A03', 'A06'],
+      defaultCustomLibraries: [],
+    },
+    {
+      id: 'owasp_full',
+      name: 'OWASP LLM Top 10 Full',
+      description: 'Complete A01–A10 coverage for broader baseline validation.',
+      estimatedPrompts: 120,
+      estimatedRuntime: '~18m',
+      coverage: ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'],
+      defaultOwaspRefs: ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'],
+      defaultCustomLibraries: [],
+    },
+    {
+      id: 'injection_deep_dive',
+      name: 'Prompt Injection Deep Dive',
+      description: 'A01-focused run with higher depth and mutation-like pressure.',
+      estimatedPrompts: 48,
+      estimatedRuntime: '~9m',
+      coverage: ['A01'],
+      defaultOwaspRefs: ['A01'],
+      defaultCustomLibraries: ['injection-classics'],
+    },
+    {
+      id: 'jailbreak_battery',
+      name: 'Jailbreak Battery',
+      description: 'Curated jailbreak-focused prompts for refusal and bypass checks.',
+      estimatedPrompts: 36,
+      estimatedRuntime: '~7m',
+      coverage: ['A01', 'A07'],
+      defaultOwaspRefs: ['A01', 'A07'],
+      defaultCustomLibraries: [],
+    },
+    {
+      id: 'custom',
+      name: 'Custom',
+      description: 'Pick everything manually.',
+      estimatedPrompts: 0,
+      estimatedRuntime: 'custom',
+      coverage: [],
+      defaultOwaspRefs: [],
+      defaultCustomLibraries: [],
+    },
+  ];
+
+  function defaultWizardState() {
+    return {
+      step: 1,
+      targetMode: 'existing',
+      existingTargetId: '',
+      newTarget: {
+        name: '',
+        baseUrl: '',
+        protocol: 'openai_compat',
+        auth: 'none',
+        authEnv: '',
+        authHeader: '',
+        sessionHandling: 'none',
+        sessionField: '',
+      },
+      tested: {
+        ok: false,
+        message: 'Run a target check before continuing.',
+      },
+      scenarioId: 'quick_scan',
+      selectedOwaspRefs: ['A01', 'A02', 'A03', 'A06'],
+      selectedCustomLibraries: [],
+      engagementName: '',
+      saveAsTemplate: false,
+    };
+  }
+
+  function loadWizardState() {
+    try {
+      const raw = localStorage.getItem(WIZARD_STORAGE_KEY);
+      if (!raw) return defaultWizardState();
+      const parsed = JSON.parse(raw);
+      return {
+        ...defaultWizardState(),
+        ...parsed,
+        newTarget: {
+          ...defaultWizardState().newTarget,
+          ...(parsed.newTarget || {}),
+        },
+        tested: {
+          ...defaultWizardState().tested,
+          ...(parsed.tested || {}),
+        },
+      };
+    } catch (_err) {
+      return defaultWizardState();
+    }
+  }
+
+  let wizardState = loadWizardState();
+  const wizardCatalog = {
+    targets: [],
+    prompts: [],
+    customLibraries: [],
+  };
+
+  function persistWizardState() {
+    try {
+      localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(wizardState));
+    } catch (_err) {
+      // ignore persistence failures silently
+    }
+  }
+
+  function resetWizardState() {
+    wizardState = defaultWizardState();
+    try {
+      localStorage.removeItem(WIZARD_STORAGE_KEY);
+    } catch (_err) {
+      // ignore
+    }
+  }
+
+  function wizardScenarioById(id) {
+    return WIZARD_SCENARIOS.find(s => s.id === id) || WIZARD_SCENARIOS[0];
+  }
+
+  function clearWizardTestStatus() {
+    wizardState.tested = {
+      ok: false,
+      message: 'Run a target check before continuing.',
+    };
+  }
+
+  function applyWizardScenarioDefaults(scenarioId, force = false) {
+    const scenario = wizardScenarioById(scenarioId);
+    if (!scenario) return;
+
+    if (force || (wizardState.selectedOwaspRefs.length === 0 && wizardState.selectedCustomLibraries.length === 0)) {
+      wizardState.selectedOwaspRefs = [...scenario.defaultOwaspRefs];
+      wizardState.selectedCustomLibraries = [...scenario.defaultCustomLibraries];
+    }
+  }
+
+  function wizardSelectedPrompts() {
+    return wizardCatalog.prompts.filter((p) => {
+      const inOwasp = wizardState.selectedOwaspRefs.includes(p.owasp_ref);
+      const inCustom = wizardState.selectedCustomLibraries.includes(p.category || '');
+      return inOwasp || inCustom;
+    });
+  }
+
+  function wizardTargetDisplayName() {
+    if (wizardState.targetMode === 'existing') {
+      const t = wizardCatalog.targets.find(x => x.id === wizardState.existingTargetId);
+      return t?.name || 'not selected';
+    }
+    return wizardState.newTarget.name || 'new target';
+  }
+
+  function wizardEstimatedRuntime(promptCount) {
+    const minutes = Math.max(1, Math.ceil(promptCount / 7));
+    return `~${minutes}m`;
+  }
+
+  function wizardEstimatedCost(promptCount) {
+    // rough UX estimate only (input/output + judge combined)
+    const low = (promptCount * 0.002).toFixed(2);
+    const high = (promptCount * 0.008).toFixed(2);
+    return `~$${low} - $${high}`;
+  }
+
+  function wizardSetStep(step) {
+    wizardState.step = Math.max(1, Math.min(4, Number(step) || 1));
+    persistWizardState();
+    renderWizard();
+  }
+
+  function wizardProtocolToEndpoint(protocol) {
+    if (protocol === 'openai_compat') return 'openai_compat';
+    return 'custom_rest';
+  }
+
+  function wizardAuthToApi(auth) {
+    if (auth === 'custom_header') return 'api_key';
+    return auth;
+  }
+
+  function wizardSuggestEngagementName() {
+    const scenario = wizardScenarioById(wizardState.scenarioId);
+    return `${wizardTargetDisplayName()} · ${scenario.name}`;
+  }
+
+  async function loadWizardCatalog() {
+    const [targets, prompts] = await Promise.all([
+      API.call('list_targets', {}),
+      API.call('list_prompts', {}),
+    ]);
+
+    wizardCatalog.targets = targets || [];
+    wizardCatalog.prompts = prompts || [];
+    wizardCatalog.customLibraries = [...new Set((prompts || []).map(p => p.category).filter(Boolean))].sort();
+
+    if (wizardState.targetMode === 'existing' && !wizardState.existingTargetId && wizardCatalog.targets.length > 0) {
+      wizardState.existingTargetId = wizardCatalog.targets[0].id;
+    }
+
+    if (!wizardState.engagementName) {
+      wizardState.engagementName = wizardSuggestEngagementName();
+    }
+    persistWizardState();
+  }
+
+  function renderWizardStep1() {
+    const existingBtn = $('#wizard-target-mode-existing');
+    const newBtn = $('#wizard-target-mode-new');
+    const existingRow = $('#wizard-existing-row');
+    const newRow = $('#wizard-new-row');
+    const existingSelect = $('#wizard-existing-target');
+
+    existingBtn.classList.toggle('active', wizardState.targetMode === 'existing');
+    newBtn.classList.toggle('active', wizardState.targetMode === 'new');
+    existingRow.style.display = wizardState.targetMode === 'existing' ? '' : 'none';
+    newRow.style.display = wizardState.targetMode === 'new' ? '' : 'none';
+
+    existingSelect.innerHTML = '';
+    if (wizardCatalog.targets.length === 0) {
+      existingSelect.innerHTML = '<option value="">No targets saved yet</option>';
+    } else {
+      wizardCatalog.targets.forEach((t) => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        existingSelect.appendChild(opt);
+      });
+    }
+    existingSelect.value = wizardState.existingTargetId || existingSelect.value || '';
+
+    $('#wizard-new-target-name').value = wizardState.newTarget.name;
+    $('#wizard-new-base-url').value = wizardState.newTarget.baseUrl;
+    $('#wizard-new-protocol').value = wizardState.newTarget.protocol;
+    $('#wizard-new-auth').value = wizardState.newTarget.auth;
+    $('#wizard-new-auth-env').value = wizardState.newTarget.authEnv;
+    $('#wizard-new-auth-header').value = wizardState.newTarget.authHeader;
+    $('#wizard-new-session').value = wizardState.newTarget.sessionHandling;
+    $('#wizard-new-session-field').value = wizardState.newTarget.sessionField;
+
+    const auth = wizardState.newTarget.auth;
+    $('#wizard-new-auth-env-row').style.display = auth === 'none' ? 'none' : '';
+    $('#wizard-new-auth-header-row').style.display = auth === 'custom_header' ? '' : 'none';
+
+    const sessionHandling = wizardState.newTarget.sessionHandling;
+    $('#wizard-new-session-row').style.display = sessionHandling === 'none' ? 'none' : '';
+
+    const note = $('#wizard-test-status');
+    note.textContent = wizardState.tested.message;
+    note.classList.remove('ok', 'error');
+    note.classList.add(wizardState.tested.ok ? 'ok' : (wizardState.tested.message.includes('failed') ? 'error' : ''));
+  }
+
+  function renderWizardStep2() {
+    const grid = $('#wizard-scenario-cards');
+    grid.innerHTML = '';
+    WIZARD_SCENARIOS.forEach((scenario) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = `wizard-scenario-card${wizardState.scenarioId === scenario.id ? ' active' : ''}`;
+      const badges = scenario.coverage.length
+        ? scenario.coverage.map(c => `<span class="wizard-badge">${esc(c)}</span>`).join('')
+        : '<span class="wizard-badge">manual</span>';
+      card.innerHTML = `
+        <h4>${esc(scenario.name)}</h4>
+        <p>${esc(scenario.description)}</p>
+        <div class="wizard-scenario-meta">
+          <span>${scenario.estimatedPrompts ? `${scenario.estimatedPrompts} prompts` : 'custom size'}</span>
+          <span>${esc(scenario.estimatedRuntime)}</span>
+        </div>
+        <div class="wizard-scenario-badges">${badges}</div>
+      `;
+      card.addEventListener('click', () => {
+        wizardState.scenarioId = scenario.id;
+        applyWizardScenarioDefaults(scenario.id, true);
+        clearWizardTestStatus();
+        if (!wizardState.engagementName || wizardState.engagementName === wizardSuggestEngagementName()) {
+          wizardState.engagementName = wizardSuggestEngagementName();
+        }
+        persistWizardState();
+        renderWizard();
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  function renderWizardStep3() {
+    const owaspWrap = $('#wizard-lib-owasp');
+    const customWrap = $('#wizard-lib-custom');
+    const refs = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'];
+
+    owaspWrap.innerHTML = '';
+    refs.forEach((ref) => {
+      const label = document.createElement('label');
+      label.className = 'wizard-check';
+      label.innerHTML = `<input type="checkbox" value="${ref}" ${wizardState.selectedOwaspRefs.includes(ref) ? 'checked' : ''}><span>${ref}</span>`;
+      label.querySelector('input').addEventListener('change', (e) => {
+        if (e.target.checked) wizardState.selectedOwaspRefs.push(ref);
+        else wizardState.selectedOwaspRefs = wizardState.selectedOwaspRefs.filter(x => x !== ref);
+        wizardState.selectedOwaspRefs = [...new Set(wizardState.selectedOwaspRefs)];
+        persistWizardState();
+        updateWizardLibraryCounter();
+      });
+      owaspWrap.appendChild(label);
+    });
+
+    customWrap.innerHTML = '';
+    if (wizardCatalog.customLibraries.length === 0) {
+      customWrap.innerHTML = '<span class="wizard-inline-note">No custom libraries found.</span>';
+    } else {
+      wizardCatalog.customLibraries.forEach((lib) => {
+        const label = document.createElement('label');
+        label.className = 'wizard-check';
+        label.innerHTML = `<input type="checkbox" value="${esc(lib)}" ${wizardState.selectedCustomLibraries.includes(lib) ? 'checked' : ''}><span>${esc(lib)}</span>`;
+        label.querySelector('input').addEventListener('change', (e) => {
+          if (e.target.checked) wizardState.selectedCustomLibraries.push(lib);
+          else wizardState.selectedCustomLibraries = wizardState.selectedCustomLibraries.filter(x => x !== lib);
+          wizardState.selectedCustomLibraries = [...new Set(wizardState.selectedCustomLibraries)];
+          persistWizardState();
+          updateWizardLibraryCounter();
+        });
+        customWrap.appendChild(label);
+      });
+    }
+
+    updateWizardLibraryCounter();
+  }
+
+  function updateWizardLibraryCounter() {
+    const selected = wizardSelectedPrompts();
+    $('#wizard-lib-counter').textContent = `${selected.length} prompts selected, ${selected.length} judged`;
+  }
+
+  function renderWizardStep4() {
+    const selectedPrompts = wizardSelectedPrompts();
+    const review = $('#wizard-review-list');
+    const scenario = wizardScenarioById(wizardState.scenarioId);
+    const refs = wizardState.selectedOwaspRefs.join(', ') || 'none';
+    const custom = wizardState.selectedCustomLibraries.join(', ') || 'none';
+    const estRuntime = wizardEstimatedRuntime(selectedPrompts.length);
+    const estCost = wizardEstimatedCost(selectedPrompts.length);
+
+    review.innerHTML = `
+      <div class="wizard-review-row"><span class="k">Target</span><span class="v">${esc(wizardTargetDisplayName())}</span></div>
+      <div class="wizard-review-row"><span class="k">Scenario</span><span class="v">${esc(scenario.name)}</span></div>
+      <div class="wizard-review-row"><span class="k">Libraries</span><span class="v">${esc(`${refs} · ${custom}`)}</span></div>
+      <div class="wizard-review-row"><span class="k">Prompts</span><span class="v">${selectedPrompts.length}</span></div>
+      <div class="wizard-review-row"><span class="k">Estimated Runtime</span><span class="v">${esc(estRuntime)}</span></div>
+      <div class="wizard-review-row"><span class="k">Estimated Cost</span><span class="v">${esc(estCost)}</span></div>
+    `;
+    $('#wizard-engagement-name').value = wizardState.engagementName || wizardSuggestEngagementName();
+    $('#wizard-save-template').checked = !!wizardState.saveAsTemplate;
+  }
+
+  function renderWizard() {
+    const step = wizardState.step;
+    $$('.wizard-step').forEach((el, idx) => el.classList.toggle('active', idx + 1 === step));
+    $$('.wizard-progress-item').forEach((el, idx) => el.classList.toggle('active', idx + 1 === step));
+
+    $('#wizard-prev').style.visibility = step === 1 ? 'hidden' : 'visible';
+    $('#wizard-next').style.display = step === 4 ? 'none' : '';
+    $('#wizard-fire').style.display = step === 4 ? '' : 'none';
+
+    if (step === 1) renderWizardStep1();
+    if (step === 2) renderWizardStep2();
+    if (step === 3) renderWizardStep3();
+    if (step === 4) renderWizardStep4();
+  }
+
+  async function openEngagementWizard() {
+    $('#wizard-modal').style.display = 'flex';
+    try {
+      await loadWizardCatalog();
+      applyWizardScenarioDefaults(wizardState.scenarioId, false);
+      renderWizard();
+    } catch (err) {
+      toast(`Wizard load failed: ${err.message}`, 'error');
+    }
+  }
+
+  function closeEngagementWizard() {
+    $('#wizard-modal').style.display = 'none';
+    persistWizardState();
+  }
+
+  function validateWizardTargetStep() {
+    if (wizardState.targetMode === 'existing') {
+      if (!wizardState.existingTargetId) {
+        wizardState.tested = { ok: false, message: 'Connection test failed: pick an existing target first.' };
+        persistWizardState();
+        renderWizard();
+        return false;
+      }
+      wizardState.tested = { ok: true, message: 'Connection test passed: existing target configuration looks valid.' };
+      persistWizardState();
+      renderWizard();
+      return true;
+    }
+
+    const target = wizardState.newTarget;
+    if (!target.name.trim()) {
+      wizardState.tested = { ok: false, message: 'Connection test failed: target name is required.' };
+      persistWizardState();
+      renderWizard();
+      return false;
+    }
+    try {
+      // eslint-disable-next-line no-new
+      new URL(target.baseUrl);
+    } catch (_err) {
+      wizardState.tested = { ok: false, message: 'Connection test failed: base URL is invalid.' };
+      persistWizardState();
+      renderWizard();
+      return false;
+    }
+    if (target.auth !== 'none' && !target.authEnv.trim()) {
+      wizardState.tested = { ok: false, message: 'Connection test failed: auth env var is required.' };
+      persistWizardState();
+      renderWizard();
+      return false;
+    }
+    if (target.auth === 'custom_header' && !target.authHeader.trim()) {
+      wizardState.tested = { ok: false, message: 'Connection test failed: custom header name is required.' };
+      persistWizardState();
+      renderWizard();
+      return false;
+    }
+    wizardState.tested = { ok: true, message: 'Connection test passed: new target configuration looks valid.' };
+    persistWizardState();
+    renderWizard();
+    return true;
+  }
+
+  function wizardCanContinueFromStep() {
+    if (wizardState.step === 1) {
+      if (!wizardState.tested.ok) {
+        toast('Run "Test connection" before continuing', 'info');
+        return false;
+      }
+    }
+    if (wizardState.step === 3) {
+      if (wizardSelectedPrompts().length === 0) {
+        toast('Select at least one library before continuing', 'info');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function fireWizardEngagement() {
+    const fireBtn = $('#wizard-fire');
+    const originalText = fireBtn.textContent;
+    fireBtn.disabled = true;
+    fireBtn.textContent = 'Starting…';
+
+    try {
+      const selectedPrompts = wizardSelectedPrompts();
+      if (selectedPrompts.length === 0) {
+        throw new Error('No prompts selected for this engagement.');
+      }
+
+      let target = null;
+      if (wizardState.targetMode === 'existing') {
+        target = wizardCatalog.targets.find(t => t.id === wizardState.existingTargetId) || null;
+        if (!target) throw new Error('Selected target was not found.');
+      } else {
+        const nt = wizardState.newTarget;
+        const targetId = `target-${Date.now().toString(36)}`;
+        target = await API.call('save_target', {
+          id: targetId,
+          name: nt.name.trim(),
+          url: nt.baseUrl.trim(),
+          endpoint_type: wizardProtocolToEndpoint(nt.protocol),
+          auth_type: wizardAuthToApi(nt.auth),
+          auth_env: nt.authEnv.trim() || null,
+          auth_header: nt.authHeader.trim() || null,
+          session_strategy: nt.sessionHandling,
+          session_field: nt.sessionField.trim() || null,
+          request_field: nt.protocol === 'openai_compat' ? null : 'prompt',
+          response_field: nt.protocol === 'openai_compat' ? null : 'response',
+          notes: nt.protocol === 'anthropic'
+            ? 'Wizard protocol anthropic mapped to custom_rest adapter.'
+            : null,
+        });
+        wizardCatalog.targets = [target, ...wizardCatalog.targets.filter(t => t.id !== target.id)];
+      }
+
+      const scenario = wizardScenarioById(wizardState.scenarioId);
+      const engagementName = (wizardState.engagementName || '').trim() || `${target.name} · ${scenario.name}`;
+      const created = await API.call('create_engagement', { name: engagementName });
+      await API.call('open_db', { path: created.slug });
+      dbOpen = true;
+      onDbOpen(created.name || engagementName, created.slug);
+
+      if (wizardState.saveAsTemplate) {
+        try {
+          const templateScenario = await API.call('create_scenario', { name: `${scenario.name} Template` });
+          await API.call('update_scenario', {
+            id: templateScenario.id,
+            name: `${scenario.name} Template`,
+            target_id: target.id,
+            repeat_count: 1,
+          });
+          await API.call('save_steps', {
+            scenario_id: templateScenario.id,
+            steps: selectedPrompts.map((p) => ({
+              session: 'A',
+              prompt_id: p.id,
+              prompt_text: p.text,
+              delay_ms: 0,
+            })),
+          });
+        } catch (_err) {
+          toast('Engagement started, but template save failed.', 'info');
+        }
+      }
+
+      const payloads = selectedPrompts.map((p, idx) => ({
+        prompt_id: p.id,
+        payload_id: `wizard-${String(idx + 1).padStart(3, '0')}`,
+        text: p.text,
+      }));
+
+      const runId = await API.call('start_run', {
+        request_id: target.id,
+        payloads,
+        parallelism: 4,
+      });
+
+      closeEngagementWizard();
+      resetWizardState();
+      showView('view-runs');
+      $('#runs-section-title').textContent = created.name || engagementName;
+      $('#runs-section').style.display = '';
+      $('#runs-empty').style.display = 'none';
+      $('#run-results-section').style.display = 'none';
+      loadEngagementList();
+      loadRuns();
+      toast(`Engagement started (${runId})`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      fireBtn.disabled = false;
+      fireBtn.textContent = originalText;
+    }
+  }
+
   async function openEngagementDialog() {
     $('#engagement-dialog').style.display = 'flex';
     const list = $('#engagement-list');
     list.innerHTML = '<div class="eng-list-empty">loading…</div>';
     try {
-      const engagements = await API.call('list_engagements', {});
+      const engagements = (await API.call('list_engagements', {}))
+        .filter(eng => !isEngagementArchived(eng.slug));
       list.innerHTML = '';
       if (engagements.length === 0) {
         list.innerHTML = '<div class="eng-list-empty">no engagements yet — create one below</div>';
@@ -505,8 +1116,152 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  $('#btn-new-engagement').addEventListener('click', openEngagementDialog);
+  function loadArchivedEngagementSlugs() {
+    try {
+      const raw = localStorage.getItem(ARCHIVED_ENGAGEMENTS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch (_err) {
+      return [];
+    }
+  }
+
+  const archivedEngagementSlugs = new Set(loadArchivedEngagementSlugs());
+
+  function saveArchivedEngagementSlugs() {
+    try {
+      localStorage.setItem(ARCHIVED_ENGAGEMENTS_KEY, JSON.stringify([...archivedEngagementSlugs]));
+    } catch (_err) {
+      // ignore storage errors
+    }
+  }
+
+  function isEngagementArchived(slug) {
+    return !!slug && archivedEngagementSlugs.has(slug);
+  }
+
+  function archiveEngagementSlug(slug) {
+    if (!slug) return;
+    archivedEngagementSlugs.add(slug);
+    saveArchivedEngagementSlugs();
+  }
+
+  function getEngagementSlugFromRoute() {
+    const path = window.location.pathname || '/';
+    const match = path.match(/\/engagements\/([^/]+)$/);
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch (_err) {
+      return match[1];
+    }
+  }
+
+  function setEngagementRoute(slug, { replace = false } = {}) {
+    if (!slug || !window.history?.pushState) return;
+    const nextPath = `/engagements/${encodeURIComponent(slug)}`;
+    if (window.location.pathname === nextPath) return;
+    const method = replace ? 'replaceState' : 'pushState';
+    window.history[method]({ engagementSlug: slug }, '', nextPath);
+  }
+
+  function clearEngagementRoute({ replace = false } = {}) {
+    if (!window.history?.pushState) return;
+    if (!getEngagementSlugFromRoute()) return;
+    const method = replace ? 'replaceState' : 'pushState';
+    window.history[method]({}, '', '/');
+  }
+
+  function normalizeLandingStatus(runs) {
+    if (!runs || runs.length === 0) return { label: 'No Runs', css: 'none' };
+    const latest = runs[0];
+    const status = String(latest.status || '').toLowerCase();
+    if (status === 'running') return { label: 'Running', css: 'running' };
+    if (status === 'completed') return { label: 'Done', css: 'done' };
+    if (status === 'crashed' || status === 'aborted') return { label: 'Failed', css: 'failed' };
+    return { label: status || 'Unknown', css: 'none' };
+  }
+
+  function formatLandingDate(iso) {
+    if (!iso) return 'unknown date';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const y = String(d.getFullYear());
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  async function quickResumeEngagement(eng) {
+    showView('view-runs');
+    await openEngagementDetail(eng, { syncRoute: true });
+    toast(`Resumed: ${eng.name}`, 'success');
+  }
+
+  async function loadHomeRecentEngagements() {
+    const list = $('#home-recent-list');
+    if (!list) return;
+
+    list.innerHTML = '<div class="landing-empty">loading recent engagements…</div>';
+    try {
+      const engagements = (await API.call('list_engagements', {}))
+        .filter(eng => !isEngagementArchived(eng.slug));
+      const recent = [...engagements]
+        .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+        .slice(0, 5);
+
+      if (recent.length === 0) {
+        list.innerHTML = '<div class="landing-empty">no engagements yet — start your first one</div>';
+        return;
+      }
+
+      const rows = await Promise.all(recent.map(async (eng) => {
+        try {
+          const runs = await API.call('list_runs', { engagement_slug: eng.slug });
+          return { eng, runs };
+        } catch (err) {
+          return { eng, runs: [] };
+        }
+      }));
+
+      list.innerHTML = '';
+      rows.forEach(({ eng, runs }) => {
+        const status = normalizeLandingStatus(runs);
+        const row = document.createElement('div');
+        row.className = 'landing-recent-row';
+        row.innerHTML = `
+          <div class="landing-recent-main">
+            <span class="landing-recent-name">${esc(eng.name)}</span>
+            <span class="landing-recent-meta">${esc(formatLandingDate(eng.created_at))} · ${runs.length} run${runs.length === 1 ? '' : 's'}</span>
+          </div>
+          <span class="landing-status ${status.css}">${esc(status.label)}</span>
+          <button class="btn btn-ghost btn-home-resume" type="button">Resume</button>
+        `;
+        row.querySelector('.landing-recent-main').addEventListener('click', () => {
+          quickResumeEngagement(eng).catch(err => toast(err.message, 'error'));
+        });
+        row.querySelector('.btn-home-resume').addEventListener('click', () => {
+          quickResumeEngagement(eng).catch(err => toast(err.message, 'error'));
+        });
+        list.appendChild(row);
+      });
+    } catch (err) {
+      list.innerHTML = '<div class="landing-empty">could not load recent engagements</div>';
+      toast(err.message, 'error');
+    }
+  }
+
+  $('#btn-new-engagement').addEventListener('click', openEngagementWizard);
   $('#btn-open-engagement').addEventListener('click', openEngagementDialog);
+  $('#btn-home-start-engagement')?.addEventListener('click', openEngagementWizard);
+  $('#btn-home-open-workbench')?.addEventListener('click', () => showView('view-workbench'));
+  $('#btn-home-refresh-recents')?.addEventListener('click', () => {
+    loadHomeRecentEngagements();
+  });
+  $('#btn-help')?.addEventListener('click', () => {
+    toast('I believe in you. Swing again.', 'info');
+  });
   $('#engagement-dialog-close').addEventListener('click', () => {
     $('#engagement-dialog').style.display = 'none';
   });
@@ -520,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!name) return;
     try {
       const result = await API.call('create_engagement', { name });
+      await API.call('open_db', { path: result.slug });
       dbOpen = true;
       $('#engagement-dialog').style.display = 'none';
       $('#eng-name').value = '';
@@ -532,34 +1288,167 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { toast(err.message, 'error'); }
   });
 
+  // ── Wizard bindings ────────────────────────────────────────────────
+  $('#wizard-close').addEventListener('click', closeEngagementWizard);
+  $('#wizard-cancel').addEventListener('click', closeEngagementWizard);
+  $('#wizard-prev').addEventListener('click', () => wizardSetStep(wizardState.step - 1));
+  $('#wizard-next').addEventListener('click', () => {
+    if (!wizardCanContinueFromStep()) return;
+    wizardSetStep(wizardState.step + 1);
+  });
+  $('#wizard-fire').addEventListener('click', fireWizardEngagement);
+  $('#wizard-test-connection').addEventListener('click', validateWizardTargetStep);
+
+  $('#wizard-target-mode-existing').addEventListener('click', () => {
+    wizardState.targetMode = 'existing';
+    clearWizardTestStatus();
+    persistWizardState();
+    renderWizard();
+  });
+  $('#wizard-target-mode-new').addEventListener('click', () => {
+    wizardState.targetMode = 'new';
+    clearWizardTestStatus();
+    persistWizardState();
+    renderWizard();
+  });
+  $('#wizard-existing-target').addEventListener('change', (e) => {
+    wizardState.existingTargetId = e.target.value;
+    clearWizardTestStatus();
+    persistWizardState();
+  });
+
+  const wizardInputBindings = [
+    ['wizard-new-target-name', 'name'],
+    ['wizard-new-base-url', 'baseUrl'],
+    ['wizard-new-protocol', 'protocol'],
+    ['wizard-new-auth', 'auth'],
+    ['wizard-new-auth-env', 'authEnv'],
+    ['wizard-new-auth-header', 'authHeader'],
+    ['wizard-new-session', 'sessionHandling'],
+    ['wizard-new-session-field', 'sessionField'],
+  ];
+  wizardInputBindings.forEach(([id, key]) => {
+    const el = $(`#${id}`);
+    el.addEventListener('input', () => {
+      wizardState.newTarget[key] = el.value;
+      clearWizardTestStatus();
+      persistWizardState();
+      if (id === 'wizard-new-auth' || id === 'wizard-new-session') renderWizardStep1();
+    });
+    el.addEventListener('change', () => {
+      wizardState.newTarget[key] = el.value;
+      clearWizardTestStatus();
+      persistWizardState();
+      if (id === 'wizard-new-auth' || id === 'wizard-new-session') renderWizardStep1();
+    });
+  });
+
+  $('#wizard-engagement-name').addEventListener('input', (e) => {
+    wizardState.engagementName = e.target.value;
+    persistWizardState();
+  });
+  $('#wizard-save-template').addEventListener('change', (e) => {
+    wizardState.saveAsTemplate = !!e.target.checked;
+    persistWizardState();
+  });
+
   // ── Workbench: target selector ─────────────────────────────────────
   async function loadWorkbenchTargets() {
     try {
       const targets = await API.call('list_targets', {});
-      const sel = $('#wb-target-select');
-      sel.innerHTML = '<option value="">Select target…</option>';
-      targets.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.name;
-        sel.appendChild(opt);
-      });
-      if (targets.length > 0 && !wb.activeTargetId) {
-        sel.value = targets[0].id;
-        setWorkbenchTarget(targets[0]);
+      wb.availableTargets = targets;
+      renderWorkbenchTargetDialogList();
+
+      if (targets.length === 0) {
+        clearWorkbenchTarget(true);
+        return;
       }
+
+      if (wb.activeTargetId) {
+        const active = targets.find(t => t.id === wb.activeTargetId);
+        if (active) {
+          setWorkbenchTarget(active);
+          return;
+        }
+      }
+
+      clearWorkbenchTarget(true);
     } catch (err) { toast(`Failed to load targets: ${err.message}`, 'error'); }
+  }
+
+  function renderWorkbenchTargetDialogList() {
+    const list = $('#wb-target-dialog-list');
+    if (!list) return;
+
+    list.innerHTML = '';
+    if (wb.availableTargets.length === 0) {
+      list.innerHTML = '<div class="eng-list-empty">No targets yet. Create one in Targets.</div>';
+      return;
+    }
+
+    wb.availableTargets.forEach((t) => {
+      const row = document.createElement('div');
+      row.className = 'engagement-card';
+      row.innerHTML = `
+        <span class="eng-name">${esc(t.name)}</span>
+        <span class="eng-meta">${esc((t.url || '').replace(/^https?:\/\//, ''))}</span>`;
+      row.addEventListener('click', () => {
+        setWorkbenchTarget(t);
+        closeWorkbenchTargetDialog();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function openWorkbenchTargetDialog() {
+    renderWorkbenchTargetDialogList();
+    $('#wb-target-dialog').style.display = 'flex';
+  }
+
+  function closeWorkbenchTargetDialog() {
+    $('#wb-target-dialog').style.display = 'none';
+  }
+
+  function clearWorkbenchTarget(resetCards = true) {
+    wb.activeTargetId = null;
+    wb.activeTarget = null;
+    $('#wb-target-name').textContent = 'Pick Target';
+    $('#wb-target-url').textContent = '';
+    $('#wb-target-selector').title = 'Pick target';
+    $('#wb-target-selector').classList.remove('has-target');
+    $('#wb-status-dot').classList.remove('online');
+    $('#wb-meta-endpoint').innerHTML = '<strong>—</strong>';
+    $('#wb-meta-auth').textContent = '—';
+    $('#wb-meta-session').textContent = '—';
+    $('#btn-wb-promote').style.display = 'none';
+    setWorkbenchInteractivity(false);
+
+    if (resetCards) {
+      wb.activeCardEl = null;
+      wb.baselineCardEl = null;
+      wb.baselineResultId = null;
+      updateBaselineIndicators();
+      resetResponseStream();
+      resetDetailPane();
+    } else {
+      renderWorkbenchEmptyState();
+    }
   }
 
   function setWorkbenchTarget(t) {
     const targetChanged = wb.activeTargetId && wb.activeTargetId !== t.id;
     wb.activeTargetId = t.id;
+    wb.activeTarget = t;
     $('#wb-target-name').textContent = t.name;
     $('#wb-target-url').textContent = '→ ' + (t.url || '');
+    $('#wb-target-selector').title = `Switch target (current: ${t.name})`;
+    $('#wb-target-selector').classList.add('has-target');
     $('#wb-status-dot').classList.add('online');
     $('#wb-meta-endpoint').innerHTML = `<strong>${esc(t.endpoint_type || '—')}</strong>`;
     $('#wb-meta-auth').textContent = t.auth_type || 'none';
     $('#wb-meta-session').textContent = t.session_strategy || 'none';
+    $('#btn-wb-promote').style.display = '';
+    setWorkbenchInteractivity(true);
 
     if (targetChanged) {
       wb.activeCardEl = null;
@@ -568,16 +1457,31 @@ document.addEventListener('DOMContentLoaded', () => {
       updateBaselineIndicators();
       resetResponseStream();
       resetDetailPane();
+    } else if (!$$('#wb-response-stream .response-card').length) {
+      renderWorkbenchEmptyState();
     }
   }
 
-  $('#wb-target-select').addEventListener('change', async (e) => {
-    const id = e.target.value;
-    if (!id) return;
-    try {
-      const t = await API.call('get_target', { id });
-      if (t) setWorkbenchTarget(t);
-    } catch (err) { toast(`Failed to load target: ${err.message}`, 'error'); }
+  $('#wb-target-selector').addEventListener('click', openWorkbenchTargetDialog);
+  $('#wb-target-dialog-close').addEventListener('click', closeWorkbenchTargetDialog);
+  $('#wb-target-dialog-cancel').addEventListener('click', closeWorkbenchTargetDialog);
+  $('#wb-target-manage').addEventListener('click', () => {
+    closeWorkbenchTargetDialog();
+    showView('view-targets');
+  });
+  $('#wb-empty-pick-target')?.addEventListener('click', openWorkbenchTargetDialog);
+  $('#wb-empty-start-engagement')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openEngagementWizard();
+  });
+  $('#btn-wb-promote').addEventListener('click', () => {
+    if (!wb.activeTargetId) return;
+    resetWizardState();
+    wizardState.targetMode = 'existing';
+    wizardState.existingTargetId = wb.activeTargetId;
+    wizardState.tested = { ok: true, message: 'Target pre-selected from Workbench.' };
+    persistWizardState();
+    openEngagementWizard();
   });
 
   // ── Workbench: prompt picker ───────────────────────────────────────
@@ -1210,7 +2114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!dbOpen) { toast('Open an engagement first', 'error'); return; }
     try {
       const result = await API.call('export_findings_pdf', {});
-      toast(`PDF saved: ${result.path}`, 'success');
+      toast(`Report saved: ${result.path}`, 'success');
     } catch (err) { toast(err.message, 'error'); }
   });
 
@@ -1910,17 +2814,244 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── E-01/E-02 · Engagement list in Runs view ─────────────────────
-  async function loadEngagementList() {
+  function setEngagementDetailTab(tab) {
+    $$('.eng-detail-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.engTab === tab);
+    });
+    $$('.eng-detail-panel').forEach((panel) => {
+      panel.classList.toggle('active', panel.id === `eng-panel-${tab}`);
+    });
+  }
+
+  $$('.eng-detail-tab').forEach((btn) => {
+    btn.addEventListener('click', () => setEngagementDetailTab(btn.dataset.engTab));
+  });
+
+  function formatEngagementDateTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const y = String(d.getFullYear());
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${day} ${hh}:${mm}`;
+  }
+
+  function shortText(text, max = 120) {
+    const value = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!value) return '—';
+    return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+  }
+
+  function sequenceMatchesRepeated(actual, expected) {
+    if (!actual.length || !expected.length) return false;
+    if (actual.length % expected.length !== 0) return false;
+    for (let i = 0; i < actual.length; i += 1) {
+      if (String(actual[i] || '') !== String(expected[i % expected.length] || '')) return false;
+    }
+    return true;
+  }
+
+  function inferScenarioNameFromResults(results, targetId) {
+    const promptIds = results
+      .map(r => String(r.prompt_id || '').trim())
+      .filter(Boolean);
+    if (!promptIds.length) return '—';
+
+    const candidates = engagementDetail.scenarios
+      .filter(sc => !targetId || !sc.target_id || sc.target_id === targetId);
+
+    for (const sc of candidates) {
+      const scPromptIds = (sc.steps || [])
+        .map(s => String(s.prompt_id || '').trim())
+        .filter(Boolean);
+      if (scPromptIds.length && sequenceMatchesRepeated(promptIds, scPromptIds)) {
+        return sc.name;
+      }
+    }
+
+    if (promptIds.length === 1) return 'Workbench single-shot';
+    return 'Custom / Wizard run';
+  }
+
+  async function hydrateEngagementDetailCatalogs() {
+    if (!engagementDetail.targets.length) {
+      try { engagementDetail.targets = await API.call('list_targets', {}); } catch (_err) { engagementDetail.targets = []; }
+    }
+    if (!engagementDetail.scenarios.length) {
+      try { engagementDetail.scenarios = await API.call('list_scenarios', {}); } catch (_err) { engagementDetail.scenarios = []; }
+    }
+  }
+
+  function resolveTargetFromResults(results) {
+    const requestUrl = String(results.find(r => r.request_url)?.request_url || '').trim();
+    if (!requestUrl) return { id: null, name: '—', url: '' };
+
+    const match = engagementDetail.targets.find(t => String(t.url || '').trim() === requestUrl);
+    if (match) {
+      return { id: match.id, name: match.name, url: match.url };
+    }
+
+    return {
+      id: null,
+      name: requestUrl.replace(/^https?:\/\//, ''),
+      url: requestUrl,
+    };
+  }
+
+  function renderEngagementTimeline(results) {
+    const list = $('#eng-timeline-list');
+    if (!results.length) {
+      list.innerHTML = '<div class="eng-timeline-empty">Select a run to inspect the timeline.</div>';
+      return;
+    }
+
+    const sorted = [...results].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
+    list.innerHTML = '';
+    sorted.forEach((r) => {
+      const statusClass = r.error_message ? 'status-error' : 'status-ok';
+      const statusText = r.error_message ? 'error' : `${r.status_code || '?'}`;
+      const row = document.createElement('div');
+      row.className = 'eng-timeline-row';
+      row.innerHTML = `
+        <div class="eng-timeline-ts">${esc(formatEngagementDateTime(r.received_at || r.sent_at || ''))}</div>
+        <div class="eng-timeline-session">${esc(r.session_label || '-')}</div>
+        <div class="eng-timeline-body">
+          <div class="eng-timeline-top">
+            <span class="run-status-badge ${statusClass === 'status-ok' ? 'completed' : 'error'}">${esc(statusText)}</span>
+            <span class="eng-timeline-prompt">${esc(shortText(r.prompt_text, 120))}</span>
+          </div>
+          <div class="eng-timeline-response">${esc(shortText(r.response_text || r.error_message || ''))}</div>
+        </div>
+        <div class="eng-timeline-latency">${r.latency_ms != null ? `${r.latency_ms}ms` : '—'}</div>
+      `;
+      row.addEventListener('click', () => showResultDetail(r));
+      list.appendChild(row);
+    });
+  }
+
+  function renderEngagementReport(results, run) {
+    const summary = $('#eng-report-summary');
+    const coverage = $('#eng-report-coverage');
+    const preview = $('#eng-report-preview');
+
+    if (!results.length) {
+      summary.textContent = 'Select a run to build the report snapshot.';
+      coverage.innerHTML = '';
+      preview.textContent = 'No report data yet.';
+      return;
+    }
+
+    const total = results.length;
+    const failed = results.filter(r => !!r.error_message || Number(r.status_code || 0) === 0).length;
+    const successful = total - failed;
+    const judged = results.filter(r => String(r.judge_verdict || '').trim()).length;
+    const avgLatency = results
+      .map(r => Number(r.latency_ms))
+      .filter(v => Number.isFinite(v))
+      .reduce((acc, v, _, arr) => acc + (v / arr.length), 0);
+
+    summary.textContent = `Run ${run?.id || '—'} · ${successful}/${total} successful · ${failed} failed · ${judged} judged`;
+
+    const owaspByPrompt = new Map((wb.allPrompts || []).map(p => [p.id, p.owasp_ref || null]));
+    const counts = {};
+    results.forEach((r) => {
+      const ref = owaspByPrompt.get(r.prompt_id);
+      if (!ref) return;
+      counts[ref] = (counts[ref] || 0) + 1;
+    });
+
+    const refs = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'];
+    coverage.innerHTML = refs
+      .map(ref => `<span class="eng-report-chip">${ref}: ${counts[ref] || 0}</span>`)
+      .join('');
+
+    preview.textContent = [
+      `engagement: ${engagementDetail.name}`,
+      `slug: ${engagementDetail.slug}`,
+      `run: ${run?.id || '—'}`,
+      `status: ${run?.status || '—'}`,
+      `started_at: ${run?.started_at || '—'}`,
+      `results_total: ${total}`,
+      `results_successful: ${successful}`,
+      `results_failed: ${failed}`,
+      `avg_latency_ms: ${Number.isFinite(avgLatency) ? avgLatency.toFixed(1) : 'n/a'}`,
+    ].join('\n');
+  }
+
+  function updateEngagementHeader(run, results) {
+    const target = resolveTargetFromResults(results);
+    engagementDetail.targetMatch = target;
+    engagementDetail.scenarioName = inferScenarioNameFromResults(results, target.id);
+
+    const endCandidates = [...results]
+      .map(r => r.received_at || r.sent_at || '')
+      .filter(Boolean)
+      .sort();
+    const endAt = endCandidates[endCandidates.length - 1] || '';
+
+    $('#eng-detail-target').textContent = target.name || '—';
+    $('#eng-detail-scenario').textContent = engagementDetail.scenarioName || '—';
+    $('#eng-detail-status').textContent = run?.status || '—';
+    $('#eng-detail-start').textContent = formatEngagementDateTime(run?.started_at || '');
+    $('#eng-detail-end').textContent = formatEngagementDateTime(endAt);
+  }
+
+  function highlightActiveEngagementCard(slug) {
+    $$('#engagement-cards .target-card-row').forEach((c) => {
+      c.classList.toggle('active', c.dataset.slug === slug);
+    });
+  }
+
+  function renderRunsViewEmptyState(message) {
+    $('#runs-empty').textContent = message;
+    $('#runs-empty').style.display = '';
+    $('#eng-detail').style.display = 'none';
+  }
+
+  async function openEngagementDetail(eng, { syncRoute = true, selectRunId = null } = {}) {
+    const result = await API.call('open_db', { path: eng.slug });
+    dbOpen = true;
+    onDbOpen(result.name || eng.name, result.slug);
+
+    engagementDetail.slug = eng.slug;
+    engagementDetail.name = result.name || eng.name;
+    engagementDetail.activeRunId = null;
+    engagementDetail.resultsByRunId.clear();
+
+    $('#eng-detail-title').textContent = engagementDetail.name;
+    $('#eng-detail-slug').textContent = `/engagements/${eng.slug}`;
+    $('#runs-empty').style.display = 'none';
+    $('#eng-detail').style.display = '';
+    $('#run-results-section').style.display = 'none';
+    setEngagementDetailTab('results');
+    highlightActiveEngagementCard(eng.slug);
+
+    await hydrateEngagementDetailCatalogs();
+    await loadRuns({ engagementSlug: eng.slug, autoSelectFirst: true, preferredRunId: selectRunId });
+
+    if (syncRoute) setEngagementRoute(eng.slug);
+  }
+
+  async function loadEngagementList({ preferredSlug = null, autoOpen = true, syncRoute = true } = {}) {
     const container = $('#engagement-cards');
     container.innerHTML = '<div style="padding:12px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);">loading…</div>';
     try {
-      const engagements = await API.call('list_engagements', {});
+      const routeSlug = getEngagementSlugFromRoute();
+      const desiredSlug = preferredSlug || routeSlug || activeEngagementSlug || null;
+      const engagements = (await API.call('list_engagements', {}))
+        .filter(eng => !isEngagementArchived(eng.slug));
+
       container.innerHTML = '';
       if (engagements.length === 0) {
         container.innerHTML = '<div style="padding:12px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);">no engagements yet</div>';
+        renderRunsViewEmptyState('Select an engagement to view its runs.');
         return;
       }
-      engagements.forEach(eng => {
+
+      engagements.forEach((eng) => {
         const card = document.createElement('div');
         card.className = 'target-card-row';
         card.dataset.slug = eng.slug;
@@ -1935,52 +3066,56 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>${runs} run${runs !== 1 ? 's' : ''}</span>
             ${findings ? `<span style="color:var(--warn)">${findings} finding${findings !== 1 ? 's' : ''}</span>` : ''}
           </div>`;
-        card.addEventListener('click', async () => {
-          try {
-            const result = await API.call('open_db', { path: eng.slug });
-            dbOpen = true;
-            onDbOpen(result.name || eng.name, result.slug);
-            // highlight active card
-            $$('#engagement-cards .target-card-row').forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            // show runs for this engagement
-            $('#runs-section-title').textContent = result.name || eng.name;
-            $('#runs-section').style.display = '';
-            $('#runs-empty').style.display = 'none';
-            $('#run-results-section').style.display = 'none';
-            loadRuns();
-          } catch (err) { toast(err.message, 'error'); }
+        card.addEventListener('click', () => {
+          openEngagementDetail(eng, { syncRoute: true }).catch(err => toast(err.message, 'error'));
         });
         container.appendChild(card);
       });
-      // auto-show runs if an engagement is already open
-      if (activeEngagementSlug && dbOpen) {
-        const activeCard = container.querySelector(`[data-slug="${activeEngagementSlug}"]`);
-        if (activeCard) {
-          $('#runs-section-title').textContent = activeCard.querySelector('.target-card-name').textContent;
-          $('#runs-section').style.display = '';
-          $('#runs-empty').style.display = 'none';
-          loadRuns();
+
+      if (autoOpen && desiredSlug) {
+        const selected = engagements.find(eng => eng.slug === desiredSlug);
+        if (selected) {
+          await openEngagementDetail(selected, { syncRoute });
+          return;
         }
       }
-    } catch (err) { toast(err.message, 'error'); }
+
+      if (!engagementDetail.slug) {
+        renderRunsViewEmptyState('Select an engagement to view its runs.');
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+      renderRunsViewEmptyState('Could not load engagements.');
+    }
   }
 
-  $('#btn-runs-new-engagement').addEventListener('click', openEngagementDialog);
+  $('#btn-runs-new-engagement').addEventListener('click', openEngagementWizard);
 
   // ── Runs view ──────────────────────────────────────────────────────
+  function markActiveRunRow(runId) {
+    $$('#runs-tbody tr').forEach((tr) => {
+      tr.classList.toggle('active', tr.dataset.runId === runId);
+    });
+  }
 
-  async function loadRuns() {
-    if (!dbOpen) return;
+  async function loadRuns({ engagementSlug = activeEngagementSlug, autoSelectFirst = false, preferredRunId = null } = {}) {
+    if (!engagementSlug) return;
     try {
-      const runs = await API.call('list_runs', {});
+      const runs = await API.call('list_runs', { engagement_slug: engagementSlug });
+      engagementDetail.runs = runs;
       const tbody = $('#runs-tbody');
       tbody.innerHTML = '';
+
       if (runs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;padding:20px;">no runs yet — fire a prompt from the workbench</td></tr>';
+        $('#run-results-section').style.display = 'none';
+        renderEngagementTimeline([]);
+        renderEngagementReport([], null);
+        updateEngagementHeader(null, []);
         return;
       }
-      runs.forEach(r => {
+
+      runs.forEach((r) => {
         const tr = document.createElement('tr');
         tr.className = 'clickable';
         tr.dataset.runId = r.id;
@@ -1995,24 +3130,36 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>`;
         tr.addEventListener('click', (e) => {
           if (e.target.closest('button')) return;
-          loadRunResults(r.id);
+          loadRunResults(r.id, { engagementSlug, switchToResultsTab: false }).catch(err => toast(err.message, 'error'));
         });
         tr.querySelector('.btn-view-results').addEventListener('click', (e) => {
           e.stopPropagation();
-          loadRunResults(r.id);
+          loadRunResults(r.id, { engagementSlug, switchToResultsTab: true }).catch(err => toast(err.message, 'error'));
         });
         tbody.appendChild(tr);
       });
-    } catch (err) { toast(err.message, 'error'); }
+
+      const fallbackRunId = preferredRunId || engagementDetail.activeRunId;
+      const chosen = runs.find(r => r.id === fallbackRunId) || (autoSelectFirst ? runs[0] : null);
+      if (chosen) {
+        await loadRunResults(chosen.id, { engagementSlug, switchToResultsTab: false });
+      }
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
-  async function loadRunResults(runId) {
+  async function loadRunResults(runId, { engagementSlug = activeEngagementSlug, switchToResultsTab = false } = {}) {
     try {
-      const results = await API.call('get_results', { run_id: runId });
+      const results = await API.call('get_results', { engagement_slug: engagementSlug, run_id: runId });
+      engagementDetail.activeRunId = runId;
+      engagementDetail.resultsByRunId.set(runId, results);
+      markActiveRunRow(runId);
+
       $('#run-results-section').style.display = '';
       const tbody = $('#results-tbody');
       tbody.innerHTML = '';
-      results.forEach(r => {
+      results.forEach((r) => {
         const statusClass = r.error_message ? 'status-error' : 'status-ok';
         const statusText = r.error_message ? 'ERROR' : `${r.status_code || '?'}`;
         const tr = document.createElement('tr');
@@ -2028,8 +3175,162 @@ document.addEventListener('DOMContentLoaded', () => {
         tr.addEventListener('click', () => showResultDetail(r));
         tbody.appendChild(tr);
       });
-    } catch (err) { toast(err.message, 'error'); }
+
+      const runSummary = engagementDetail.runs.find(r => r.id === runId) || null;
+      updateEngagementHeader(runSummary, results);
+      renderEngagementTimeline(results);
+      renderEngagementReport(results, runSummary);
+
+      if (switchToResultsTab) setEngagementDetailTab('results');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
+
+  function buildMarkdownReport(results, run) {
+    const target = engagementDetail.targetMatch?.name || '—';
+    const scenario = engagementDetail.scenarioName || '—';
+    const status = run?.status || '—';
+    const total = results.length;
+    const failed = results.filter(r => !!r.error_message || Number(r.status_code || 0) === 0).length;
+    const successful = total - failed;
+
+    const lines = [
+      `# Engagement Report`,
+      ``,
+      `- Engagement: ${engagementDetail.name}`,
+      `- Slug: ${engagementDetail.slug}`,
+      `- Run: ${run?.id || '—'}`,
+      `- Target: ${target}`,
+      `- Scenario: ${scenario}`,
+      `- Status: ${status}`,
+      `- Started: ${formatEngagementDateTime(run?.started_at || '')}`,
+      `- Total results: ${total}`,
+      `- Successful: ${successful}`,
+      `- Failed: ${failed}`,
+      ``,
+      `## Attempts`,
+      ``,
+      `| Seq | Prompt ID | Status | Latency | Session |`,
+      `| --- | --- | --- | --- | --- |`,
+    ];
+
+    results
+      .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
+      .forEach((r) => {
+        const statusText = r.error_message ? 'ERROR' : String(r.status_code || '?');
+        lines.push(`| ${r.step_order || '-'} | ${r.prompt_id || '-'} | ${statusText} | ${r.latency_ms != null ? `${r.latency_ms}ms` : '-'} | ${r.session_label || '-'} |`);
+      });
+
+    return lines.join('\n');
+  }
+
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  $('#btn-eng-rerun')?.addEventListener('click', async () => {
+    const runId = engagementDetail.activeRunId;
+    if (!engagementDetail.slug || !runId) {
+      toast('Select a run first', 'info');
+      return;
+    }
+    const targetId = engagementDetail.targetMatch?.id;
+    if (!targetId) {
+      toast('Re-run requires a known target mapping. Select a run tied to an existing target URL.', 'error');
+      return;
+    }
+
+    const source = engagementDetail.resultsByRunId.get(runId) || [];
+    const payloads = source
+      .filter(r => String(r.prompt_text || '').trim())
+      .map((r, idx) => ({
+        prompt_id: r.prompt_id || `rerun-${idx + 1}`,
+        payload_id: `rerun-${String(idx + 1).padStart(3, '0')}`,
+        text: r.prompt_text,
+      }));
+
+    if (!payloads.length) {
+      toast('No prompt payloads available for re-run', 'error');
+      return;
+    }
+
+    const btn = $('#btn-eng-rerun');
+    btn.disabled = true;
+    try {
+      const newRunId = await API.call('start_run', {
+        engagement_slug: engagementDetail.slug,
+        request_id: targetId,
+        payloads,
+        parallelism: 4,
+      });
+      toast(`Re-run started: ${newRunId}`, 'success');
+      await loadRuns({
+        engagementSlug: engagementDetail.slug,
+        autoSelectFirst: true,
+        preferredRunId: newRunId,
+      });
+      setEngagementDetailTab('results');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('#btn-eng-export-md')?.addEventListener('click', () => {
+    const runId = engagementDetail.activeRunId;
+    if (!runId) {
+      toast('Select a run first', 'info');
+      return;
+    }
+    const results = engagementDetail.resultsByRunId.get(runId) || [];
+    const run = engagementDetail.runs.find(r => r.id === runId) || null;
+    const markdown = buildMarkdownReport(results, run);
+    const filename = `${engagementDetail.slug || 'engagement'}-${runId}.md`;
+    downloadTextFile(filename, markdown);
+    toast('Markdown report exported', 'success');
+  });
+
+  $('#btn-eng-export-pdf')?.addEventListener('click', async () => {
+    const runId = engagementDetail.activeRunId;
+    if (!runId) {
+      toast('Select a run first', 'info');
+      return;
+    }
+    try {
+      const report = await API.call('export_findings_pdf', { run_id: runId });
+      toast(`Report generated: ${report.path}`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
+  $('#btn-eng-archive')?.addEventListener('click', async () => {
+    const slug = engagementDetail.slug;
+    if (!slug) {
+      toast('Open an engagement first', 'info');
+      return;
+    }
+    if (!confirm(`Archive engagement "${engagementDetail.name}" in the UI list?`)) return;
+
+    archiveEngagementSlug(slug);
+    clearEngagementRoute({ replace: true });
+    engagementDetail.slug = null;
+    engagementDetail.activeRunId = null;
+    renderRunsViewEmptyState('Select an engagement to view its runs.');
+    await loadEngagementList({ autoOpen: false });
+    loadHomeRecentEngagements();
+    toast('Engagement archived from visible lists', 'success');
+  });
 
   // ── Result detail modal ────────────────────────────────────────────
   function showResultDetail(r) {
@@ -2048,6 +3349,28 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#result-detail-close').addEventListener('click', () => {
     $('#result-detail').style.display = 'none';
   });
+
+  async function applyEngagementRouteFromLocation() {
+    const slug = getEngagementSlugFromRoute();
+    if (!slug) return false;
+
+    if (!$('#view-runs').classList.contains('active')) {
+      showView('view-runs');
+    } else {
+      await loadEngagementList({ preferredSlug: slug, autoOpen: true, syncRoute: false });
+    }
+    return true;
+  }
+
+  window.addEventListener('popstate', () => {
+    applyEngagementRouteFromLocation().catch(err => toast(err.message, 'error'));
+  });
+
+  setTimeout(() => {
+    applyEngagementRouteFromLocation().catch(() => {
+      // ignore invalid route on cold start
+    });
+  }, 0);
 
   // ── Progress polling ───────────────────────────────────────────────
   function startProgressPoll(runId) {
@@ -2108,4 +3431,219 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.target === modal) modal.style.display = 'none';
     });
   });
+
+  // Mark the initial view so the sidebar reflects the active state on load.
+  showView('view-home');
+
+  // ── Analyzer activation ────────────────────────────────────────────
+  initAnalyzerUI();
+});
+
+// ============================================================
+// Analyzer activation flow
+// ============================================================
+(function initAnalyzerUI() {
+  // Hardware class label lookup
+  const HW_LABELS = {
+    apple_silicon: 'Apple Silicon (Metal)',
+    x86_64_avx2:  'x86-64 AVX2 (CPU)',
+    generic:       'Generic CPU (slow)',
+  };
+
+  let selectedVariantId = null;
+  let downloadUnlisten = null;
+  let analyzerStatus = null;
+
+  function openAnalyzerModal() {
+    $('#analyzer-modal').style.display = 'flex';
+    refreshAnalyzerModal();
+  }
+
+  async function refreshAnalyzerModal() {
+    // Reset state
+    selectedVariantId = null;
+    $('#btn-analyzer-install').disabled = true;
+    $('#analyzer-download-section').style.display = 'none';
+    $('#analyzer-variants').innerHTML = '<div class="analyzer-loading">loading…</div>';
+
+    try {
+      analyzerStatus = await API.call('get_analyzer_status');
+      const hw = analyzerStatus.hardware;
+      $('#analyzer-hw-badge').textContent = HW_LABELS[hw] || hw;
+      $('#analyzer-hw-badge').dataset.hw = hw;
+
+      if (analyzerStatus.installed) {
+        $('#analyzer-install-badge').textContent =
+          `installed: ${analyzerStatus.model_file}`;
+        $('#analyzer-install-badge').dataset.state = 'installed';
+        $('#btn-analyzer-uninstall').style.display = '';
+        $('#btn-analyzer-install').textContent = 'Re-download';
+      } else {
+        $('#analyzer-install-badge').textContent = 'not installed';
+        $('#analyzer-install-badge').dataset.state = 'none';
+        $('#btn-analyzer-uninstall').style.display = 'none';
+        $('#btn-analyzer-install').textContent = 'Download & Install';
+      }
+
+      const manifest = await API.call('fetch_analyzer_manifest');
+      renderVariants(manifest.variants, hw);
+    } catch (err) {
+      $('#analyzer-variants').innerHTML =
+        `<div class="analyzer-loading" style="color:var(--red)">Failed to load: ${esc(err.message)}</div>`;
+    }
+  }
+
+  function renderVariants(variants, hw) {
+    if (!variants || variants.length === 0) {
+      $('#analyzer-variants').innerHTML =
+        '<div class="analyzer-loading">No variants available.</div>';
+      return;
+    }
+
+    // Sort: recommended match first, then recommended others, then rest
+    const sorted = [...variants].sort((a, b) => {
+      const aMatch = a.hardware === hw && a.recommended;
+      const bMatch = b.hardware === hw && b.recommended;
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+      return b.recommended - a.recommended;
+    });
+
+    $('#analyzer-variants').innerHTML = sorted.map(v => {
+      const isMatch = v.hardware === hw;
+      const sizeGb = (v.model.size_bytes / 1e9).toFixed(1);
+      const hwLabel = HW_LABELS[v.hardware] || v.hardware;
+      return `
+        <div class="analyzer-variant${isMatch ? ' analyzer-variant-match' : ''}"
+             data-variant-id="${esc(v.id)}">
+          <div class="analyzer-variant-header">
+            <span class="analyzer-variant-label">${esc(v.label)}</span>
+            ${v.recommended ? '<span class="chip" style="margin-left:6px;font-size:10px;">recommended</span>' : ''}
+          </div>
+          <div class="analyzer-variant-meta">
+            <span>${esc(hwLabel)}</span>
+            <span>${sizeGb} GB</span>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Auto-select the first recommended match
+    const autoSelect = sorted.find(v => v.hardware === hw && v.recommended) || sorted[0];
+    if (autoSelect) selectVariant(autoSelect.id);
+
+    $('#analyzer-variants').querySelectorAll('.analyzer-variant').forEach(card => {
+      card.addEventListener('click', () => selectVariant(card.dataset.variantId));
+    });
+  }
+
+  function selectVariant(id) {
+    selectedVariantId = id;
+    $('#analyzer-variants').querySelectorAll('.analyzer-variant').forEach(card => {
+      card.classList.toggle('analyzer-variant-selected', card.dataset.variantId === id);
+    });
+    $('#btn-analyzer-install').disabled = false;
+  }
+
+  // ── Install button ──────────────────────────────────────────────────
+  $('#btn-analyzer-install').addEventListener('click', async () => {
+    if (!selectedVariantId) return;
+
+    // Show progress section
+    $('#analyzer-download-section').style.display = '';
+    $('#btn-analyzer-install').disabled = true;
+    $('#analyzer-progress-bar').style.width = '0%';
+    $('#analyzer-progress-text').textContent = 'Starting download…';
+    $('#analyzer-progress-pct').textContent = '0%';
+    $('#analyzer-progress-bytes').textContent = '';
+
+    // Subscribe to progress events before firing the command
+    if (downloadUnlisten) { downloadUnlisten(); downloadUnlisten = null; }
+    downloadUnlisten = await window.__TAURI__.event.listen(
+      'analyzer-download-progress',
+      (ev) => onDownloadProgress(ev.payload)
+    );
+
+    try {
+      await API.call('download_and_install_analyzer', { variant_id: selectedVariantId });
+    } catch (err) {
+      showToast(`Download failed: ${err.message}`, 'error');
+      $('#analyzer-download-section').style.display = 'none';
+      $('#btn-analyzer-install').disabled = false;
+    }
+  });
+
+  function onDownloadProgress(p) {
+    const pct = Math.round(p.percent);
+    $('#analyzer-progress-bar').style.width = `${pct}%`;
+    $('#analyzer-progress-pct').textContent = `${pct}%`;
+
+    if (p.bytes_total > 0) {
+      const dl = (p.bytes_downloaded / 1e6).toFixed(0);
+      const tot = (p.bytes_total / 1e6).toFixed(0);
+      $('#analyzer-progress-bytes').textContent = `${dl} MB / ${tot} MB`;
+    }
+
+    if (p.error) {
+      $('#analyzer-progress-text').textContent = `Error: ${p.error}`;
+      $('#btn-analyzer-install').disabled = false;
+      if (downloadUnlisten) { downloadUnlisten(); downloadUnlisten = null; }
+      return;
+    }
+
+    if (p.finished) {
+      $('#analyzer-progress-text').textContent = 'Installed!';
+      $('#analyzer-progress-pct').textContent = '100%';
+      if (downloadUnlisten) { downloadUnlisten(); downloadUnlisten = null; }
+      // Refresh status
+      refreshAnalyzerModal();
+      // Refresh home CTA
+      checkAnalyzerCta();
+      showToast('Analyz0r activated. Judgments will use the local LLM on next analysis run.', 'ok');
+    } else {
+      $('#analyzer-progress-text').textContent = 'Downloading…';
+    }
+  }
+
+  // ── Uninstall button ────────────────────────────────────────────────
+  $('#btn-analyzer-uninstall').addEventListener('click', async () => {
+    try {
+      await API.call('uninstall_analyzer');
+      showToast('Analyzer model removed.', 'ok');
+      refreshAnalyzerModal();
+      checkAnalyzerCta();
+    } catch (err) {
+      showToast(`Uninstall failed: ${err.message}`, 'error');
+    }
+  });
+
+  // ── Close handlers ──────────────────────────────────────────────────
+  $('#analyzer-modal-close').addEventListener('click', () => {
+    $('#analyzer-modal').style.display = 'none';
+  });
+  $('#analyzer-modal-cancel').addEventListener('click', () => {
+    $('#analyzer-modal').style.display = 'none';
+  });
+
+  // ── Settings sidebar entry-point ────────────────────────────────────
+  document.querySelector('[data-nav="settings"]').addEventListener('click', openAnalyzerModal);
+
+  // ── Home CTA ────────────────────────────────────────────────────────
+  $('#btn-home-activate-analyzer').addEventListener('click', openAnalyzerModal);
+
+  async function checkAnalyzerCta() {
+    try {
+      const status = await API.call('get_analyzer_status');
+      $('#analyzer-cta-card').style.display = status.installed ? 'none' : '';
+    } catch (_) {
+      $('#analyzer-cta-card').style.display = '';
+    }
+  }
+
+  // Show CTA on home view whenever it becomes active
+  document.querySelector('[data-view="view-home"]').addEventListener('click', () => {
+    checkAnalyzerCta();
+  });
+
+  // Check on first load
+  if (window.__TAURI__) checkAnalyzerCta();
 });

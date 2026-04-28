@@ -46,8 +46,7 @@ pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Target>> {
 pub fn delete(dir: &Path, id: &str) -> anyhow::Result<()> {
     let path = dir.join(format!("{id}.yaml"));
     if path.exists() {
-        std::fs::remove_file(&path)
-            .with_context(|| format!("cannot delete {}", path.display()))?;
+        std::fs::remove_file(&path).with_context(|| format!("cannot delete {}", path.display()))?;
     }
     Ok(())
 }

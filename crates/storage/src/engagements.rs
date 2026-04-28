@@ -36,9 +36,12 @@ pub fn list(engagements_dir: &Path) -> anyhow::Result<Vec<EngagementMeta>> {
 
     let mut results = Vec::new();
 
-    for entry in std::fs::read_dir(engagements_dir)
-        .with_context(|| format!("cannot read engagements directory: {}", engagements_dir.display()))?
-    {
+    for entry in std::fs::read_dir(engagements_dir).with_context(|| {
+        format!(
+            "cannot read engagements directory: {}",
+            engagements_dir.display()
+        )
+    })? {
         let entry = entry?;
         let meta_path = entry.path().join(ENGAGEMENT_YAML);
 

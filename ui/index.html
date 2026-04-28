@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>hamm0r — AI Security Testing</title>
-  <link rel="icon" type="image/png" href="images/favIcon.png">
-  <link rel="stylesheet" href="style.css?v=20260425">
+  <link rel="icon" type="image/png" href="images/hamm0r_favicon_32x32.png?v=1">
+  <link rel="stylesheet" href="style.css?v=20260425b">
 </head>
 <body>
 
@@ -15,9 +15,11 @@
        T-03 · Topbar
        ================================================================ -->
   <div class="topbar">
-    <div class="brand">hamm0r</div>
+    <div class="brand">
+      <img class="brand-banner" src="images/hamm0r_banner_transparent.png" alt="hamm0r">
+    </div>
     <div class="breadcrumb">
-      <span id="breadcrumb-view">workbench</span>
+      <span id="breadcrumb-view">home</span>
       <span class="sep">/</span>
       <span class="current" id="breadcrumb-engagement">no engagement open</span>
     </div>
@@ -28,8 +30,7 @@
       </div>
       <button class="icon-btn" id="btn-new-engagement" title="New engagement">+</button>
       <button class="icon-btn" id="btn-open-engagement" title="Open engagement">⏏</button>
-      <button class="icon-btn" title="Settings">⚙</button>
-      <button class="icon-btn" title="Help">?</button>
+      <button class="icon-btn" id="btn-help" title="Help">?</button>
     </div>
   </div>
 
@@ -37,30 +38,12 @@
        T-04 · Sidebar (icon-only)
        ================================================================ -->
   <div class="sidebar">
-    <button class="nav-item sidebar-item active" data-view="view-workbench" title="Workbench">
+    <button class="nav-item sidebar-item" data-view="view-home" title="Home">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="M3 9h18" />
-        <path d="M9 21V9" />
+        <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+        <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       </svg>
-      <span class="label">Workbench</span>
-    </button>
-    <button class="nav-item sidebar-item" data-view="view-scenarios" title="Scenarios">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect width="8" height="8" x="3" y="3" rx="2" />
-        <path d="M7 11v4a2 2 0 0 0 2 2h4" />
-        <rect width="8" height="8" x="13" y="13" rx="2" />
-      </svg>
-      <span class="label">Scenarios</span>
-    </button>
-    <button class="nav-item sidebar-item" data-view="view-library" title="Library">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="m16 6 4 14" />
-        <path d="M12 6v14" />
-        <path d="M8 8v12" />
-        <path d="M4 4v16" />
-      </svg>
-      <span class="label">Prompt Library</span>
+      <span class="label">Home</span>
     </button>
     <button class="nav-item sidebar-item" data-view="view-runs" title="Engagements">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -69,9 +52,8 @@
         <path d="M8 14v2.2l1.6 1" />
         <circle cx="8" cy="16" r="6" />
       </svg>
-      <span class="label">Engagements &amp; Runs</span>
+      <span class="label">Engagements</span>
     </button>
-    <div class="nav-spacer"></div>
     <button class="nav-item sidebar-item" data-view="view-targets" title="Targets">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
@@ -82,8 +64,38 @@
       </svg>
       <span class="label">Targets</span>
     </button>
+    <button class="nav-item sidebar-item" data-view="view-library" title="Libraries">
+      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m16 6 4 14" />
+        <path d="M12 6v14" />
+        <path d="M8 8v12" />
+        <path d="M4 4v16" />
+      </svg>
+      <span class="label">Libraries</span>
+    </button>
+    <button class="nav-item sidebar-item" data-view="view-scenarios" title="Scenarios">
+      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect width="8" height="8" x="3" y="3" rx="2" />
+        <path d="M7 11v4a2 2 0 0 0 2 2h4" />
+        <rect width="8" height="8" x="13" y="13" rx="2" />
+      </svg>
+      <span class="label">Scenarios</span>
+    </button>
+    <button class="nav-item sidebar-item" data-view="view-workbench" title="Workbench">
+      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="M3 9h18" />
+        <path d="M9 21V9" />
+      </svg>
+      <span class="label">Workbench</span>
+    </button>
+    <div class="nav-spacer"></div>
     <button class="nav-item sidebar-item" data-nav="settings" title="Settings">
-      ⚙<span class="label">Settings</span>
+      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+      <span class="label">Settings</span>
     </button>
   </div>
 
@@ -93,19 +105,57 @@
   <div class="main">
 
     <!-- ==============================================================
+         Landing view (default)
+         ============================================================== -->
+    <section id="view-home" class="view">
+      <div class="landing-wrap">
+        <div class="landing-cta-grid">
+          <button id="btn-home-start-engagement" class="landing-card landing-card-primary">
+            <span class="landing-eyebrow">Guided Flow</span>
+            <strong>Start Engagement</strong>
+            <span>Target + Scenario + Library in one guided flow.</span>
+          </button>
+          <button id="btn-home-open-workbench" class="landing-card">
+            <span class="landing-eyebrow">Power User</span>
+            <strong>Open Workbench</strong>
+            <span>Free-play prompts against a target without wizard overhead.</span>
+          </button>
+        </div>
+
+        <div id="analyzer-cta-card" class="analyzer-cta" style="display:none">
+          <div class="analyzer-cta-inner">
+            <span class="analyzer-cta-eyebrow">Optional</span>
+            <strong>Activate Analyz0r</strong>
+            <span>Download the local LLM judge (~1.9 GB) for on-device verdict scoring.</span>
+            <button id="btn-home-activate-analyzer" class="btn btn-ghost" style="margin-top:0.5rem;align-self:flex-start">Activate →</button>
+          </div>
+        </div>
+
+        <div class="landing-recent">
+          <div class="landing-recent-header">
+            <h2>Recent Engagements</h2>
+            <button id="btn-home-refresh-recents" class="btn btn-ghost" style="padding:4px 10px;font-size:11px;">Refresh</button>
+          </div>
+          <div id="home-recent-list" class="landing-recent-list">
+            <div class="landing-empty">loading recent engagements…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==============================================================
          T-06/07/08/09/10/11/12 · Workbench view (default active)
          ============================================================== -->
-    <section id="view-workbench" class="view active">
+    <section id="view-workbench" class="view">
 
       <!-- T-07 · Target bar -->
       <div class="target-bar">
-        <div class="target-selector" id="wb-target-selector">
+        <button class="target-selector" id="wb-target-selector" type="button" title="Pick target">
           <span class="status-dot" id="wb-status-dot"></span>
-          <span class="target-name" id="wb-target-name">no target</span>
+          <span class="target-name" id="wb-target-name">Pick Target</span>
           <span class="target-url" id="wb-target-url"></span>
           <span class="chev">▾</span>
-          <select id="wb-target-select" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%;" title="Select target"></select>
-        </div>
+        </button>
         <div class="target-meta" id="wb-target-meta">
           <span id="wb-meta-endpoint"><strong>—</strong></span>
           <span>auth: <strong id="wb-meta-auth">—</strong></span>
@@ -114,6 +164,7 @@
         <div class="target-bar-right">
           <button class="btn btn-ghost" id="btn-wb-baseline">Set Baseline</button>
           <button class="btn btn-ghost" id="btn-wb-judge-all">Judge All</button>
+          <button class="btn btn-ghost" id="btn-wb-promote" style="display:none" title="Turn this Workbench session into a tracked Engagement">Promote to Engagement</button>
           <button class="btn btn-primary" id="btn-wb-fire">
             <span>▶ Fire</span>
             <span class="kbd">⌘↵</span>
@@ -205,13 +256,12 @@
 
           <div class="response-stream" id="wb-response-stream">
             <div class="response-empty" id="wb-response-empty">
-              <div class="ascii">
- ___  ____  ___  ____
-| _ \| ___|/ __||_  _|
-|  _/|  _| \__ \  ||
-|_|  |____||___/  ||
+              <div class="response-empty-title">Pick Target</div>
+              <div class="response-empty-subtitle">Select a target to start working in Workbench.</div>
+              <div class="response-empty-actions">
+                <button class="btn btn-primary" id="wb-empty-pick-target">Pick Target</button>
+                <a href="#" class="response-empty-banner" id="wb-empty-start-engagement">Looking for guided testing? Start an Engagement →</a>
               </div>
-              fire a prompt to begin
             </div>
           </div>
         </div>
@@ -260,7 +310,7 @@
             <span class="findings-stat findings-stat-crit"><strong id="findings-stat-crit">0</strong> critical</span>
             <span class="findings-stat findings-stat-high"><strong id="findings-stat-high">0</strong> high</span>
             <span class="findings-stat"><strong id="findings-stat-med">0</strong> medium</span>
-            <button class="btn btn-ghost" id="btn-export-pdf" style="padding:3px 10px;font-size:11px;" onclick="event.stopPropagation()">Export PDF</button>
+            <button class="btn btn-ghost" id="btn-export-pdf" style="padding:3px 10px;font-size:11px;" onclick="event.stopPropagation()">Export Report</button>
           </div>
         </div>
         <div class="findings-body" id="findings-body">
@@ -585,32 +635,77 @@
             Select an engagement to view its runs.
           </div>
 
-          <div id="runs-section" style="display:none">
-            <h2 id="runs-section-title" style="font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1rem;color:var(--text-1);">Runs</h2>
-            <table id="runs-table">
-              <thead>
-                <tr>
-                  <th>Run ID</th><th>Status</th><th>Progress</th>
-                  <th>Errors</th><th>Started</th><th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="runs-tbody"></tbody>
-            </table>
+          <div id="eng-detail" style="display:none">
+            <div class="eng-detail-header">
+              <div>
+                <h2 id="eng-detail-title">Engagement Detail</h2>
+                <div class="eng-detail-slug" id="eng-detail-slug">/engagements/—</div>
+              </div>
+              <div class="eng-detail-actions">
+                <button id="btn-eng-rerun" class="btn btn-primary">Re-run</button>
+                <button id="btn-eng-export-md" class="btn btn-ghost">Export MD</button>
+                <button id="btn-eng-export-pdf" class="btn btn-ghost">Export PDF</button>
+                <button id="btn-eng-archive" class="btn btn-ghost">Archive</button>
+              </div>
+            </div>
 
-            <div id="run-results-section" style="display:none">
-              <h3 style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin:1.5rem 0 0.75rem;color:var(--text-2);">Results</h3>
-              <div class="table-wrap">
-                <table id="results-table">
+            <div class="eng-detail-meta">
+              <span>Target: <strong id="eng-detail-target">—</strong></span>
+              <span>Scenario: <strong id="eng-detail-scenario">—</strong></span>
+              <span>Status: <strong id="eng-detail-status">—</strong></span>
+              <span>Start: <strong id="eng-detail-start">—</strong></span>
+              <span>End: <strong id="eng-detail-end">—</strong></span>
+            </div>
+
+            <div class="eng-detail-tabs">
+              <button type="button" class="eng-detail-tab active" data-eng-tab="results">Results</button>
+              <button type="button" class="eng-detail-tab" data-eng-tab="timeline">Timeline</button>
+              <button type="button" class="eng-detail-tab" data-eng-tab="report">Report</button>
+            </div>
+
+            <div class="eng-detail-panel active" id="eng-panel-results">
+              <div id="runs-section">
+                <h3 id="runs-section-title" style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;color:var(--text-2);">Runs</h3>
+                <table id="runs-table">
                   <thead>
                     <tr>
-                      <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
-                      <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
-                      <th>Latency</th>
+                      <th>Run ID</th><th>Status</th><th>Progress</th>
+                      <th>Errors</th><th>Started</th><th>Actions</th>
                     </tr>
                   </thead>
-                  <tbody id="results-tbody"></tbody>
+                  <tbody id="runs-tbody"></tbody>
                 </table>
+
+                <div id="run-results-section" style="display:none">
+                  <h3 style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin:1.5rem 0 0.75rem;color:var(--text-2);">Results</h3>
+                  <div class="table-wrap">
+                    <table id="results-table">
+                      <thead>
+                        <tr>
+                          <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
+                          <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
+                          <th>Latency</th>
+                        </tr>
+                      </thead>
+                      <tbody id="results-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            <div class="eng-detail-panel" id="eng-panel-timeline">
+              <div id="eng-timeline-list" class="eng-timeline-list">
+                <div class="eng-timeline-empty">Select a run to inspect the timeline.</div>
+              </div>
+            </div>
+
+            <div class="eng-detail-panel" id="eng-panel-report">
+              <div id="eng-report-summary" class="eng-report-summary">
+                Select a run to build the report snapshot.
+              </div>
+              <div id="eng-report-coverage" class="eng-report-coverage"></div>
+              <pre id="eng-report-preview" class="eng-report-preview">No report data yet.</pre>
             </div>
           </div>
         </div>
@@ -684,6 +779,158 @@
 </div>
 
 <!-- ================================================================
+     Workbench target picker
+     ================================================================ -->
+<div id="wb-target-dialog" class="modal" style="display:none">
+  <div class="modal-content modal-small">
+    <button class="modal-close" id="wb-target-dialog-close">&times;</button>
+    <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Pick Target</h3>
+    <div id="wb-target-dialog-list" class="engagement-list">
+      <div class="eng-list-empty">loading…</div>
+    </div>
+    <div class="editor-actions" style="margin-top:1rem;">
+      <button type="button" id="wb-target-manage" class="btn btn-ghost">Manage Targets</button>
+      <button type="button" id="wb-target-dialog-cancel" class="btn btn-ghost">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     Engagement wizard
+     ================================================================ -->
+<div id="wizard-modal" class="modal" style="display:none">
+  <div class="modal-content wizard-modal">
+    <button class="modal-close" id="wizard-close">&times;</button>
+    <h3 class="modal-heading">New Engagement Wizard</h3>
+
+    <div class="wizard-progress" id="wizard-progress">
+      <span class="wizard-progress-item active" data-step="1">1 · Target</span>
+      <span class="wizard-progress-item" data-step="2">2 · Scenario</span>
+      <span class="wizard-progress-item" data-step="3">3 · Library</span>
+      <span class="wizard-progress-item" data-step="4">4 · Review &amp; Fire</span>
+    </div>
+
+    <div class="wizard-body">
+      <section class="wizard-step active" id="wizard-step-1">
+        <div class="wizard-row">
+          <label>Target mode</label>
+          <div class="wizard-toggle">
+            <button type="button" class="wizard-toggle-btn active" id="wizard-target-mode-existing">Use Existing</button>
+            <button type="button" class="wizard-toggle-btn" id="wizard-target-mode-new">Create New</button>
+          </div>
+        </div>
+
+        <div id="wizard-existing-row">
+          <div class="wizard-row">
+            <label for="wizard-existing-target">Existing target</label>
+            <select id="wizard-existing-target"></select>
+          </div>
+        </div>
+
+        <div id="wizard-new-row" style="display:none">
+          <div class="form-grid-2">
+            <div class="wizard-row">
+              <label for="wizard-new-target-name">Name</label>
+              <input id="wizard-new-target-name" type="text" placeholder="Acme Chatbot">
+            </div>
+            <div class="wizard-row">
+              <label for="wizard-new-base-url">Base URL</label>
+              <input id="wizard-new-base-url" type="url" placeholder="https://api.example.com/v1/chat/completions">
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="wizard-row">
+              <label for="wizard-new-protocol">Protocol</label>
+              <select id="wizard-new-protocol">
+                <option value="openai_compat">openai_compat</option>
+                <option value="anthropic">anthropic</option>
+                <option value="custom">custom</option>
+              </select>
+            </div>
+            <div class="wizard-row">
+              <label for="wizard-new-auth">Auth</label>
+              <select id="wizard-new-auth">
+                <option value="none">none</option>
+                <option value="bearer">bearer</option>
+                <option value="api_key">api_key</option>
+                <option value="custom_header">custom_header</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="wizard-row" id="wizard-new-auth-env-row" style="display:none">
+              <label for="wizard-new-auth-env">Auth env var</label>
+              <input id="wizard-new-auth-env" type="text" placeholder="OPENAI_API_KEY">
+            </div>
+            <div class="wizard-row" id="wizard-new-auth-header-row" style="display:none">
+              <label for="wizard-new-auth-header">Custom header</label>
+              <input id="wizard-new-auth-header" type="text" placeholder="X-API-Key">
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="wizard-row">
+              <label for="wizard-new-session">Session handling</label>
+              <select id="wizard-new-session">
+                <option value="none">none</option>
+                <option value="cookie">cookie</option>
+                <option value="header">header</option>
+                <option value="body_field">body_field</option>
+              </select>
+            </div>
+            <div class="wizard-row" id="wizard-new-session-row" style="display:none">
+              <label for="wizard-new-session-field">Session field/header name</label>
+              <input id="wizard-new-session-field" type="text" placeholder="X-Session-Id">
+            </div>
+          </div>
+        </div>
+
+        <div class="wizard-actions-inline">
+          <button type="button" class="btn btn-ghost" id="wizard-test-connection">Test connection</button>
+          <span id="wizard-test-status" class="wizard-inline-note">Run a target check before continuing.</span>
+        </div>
+      </section>
+
+      <section class="wizard-step" id="wizard-step-2">
+        <div id="wizard-scenario-cards" class="wizard-scenario-grid"></div>
+      </section>
+
+      <section class="wizard-step" id="wizard-step-3">
+        <div class="wizard-row">
+          <label>OWASP libraries</label>
+          <div id="wizard-lib-owasp" class="wizard-chip-grid"></div>
+        </div>
+        <div class="wizard-row">
+          <label>Custom libraries</label>
+          <div id="wizard-lib-custom" class="wizard-chip-grid"></div>
+        </div>
+        <div class="wizard-summary-line" id="wizard-lib-counter">0 prompts selected, 0 judged</div>
+      </section>
+
+      <section class="wizard-step" id="wizard-step-4">
+        <div id="wizard-review-list" class="wizard-review"></div>
+        <div class="wizard-row">
+          <label for="wizard-engagement-name">Engagement name</label>
+          <input id="wizard-engagement-name" type="text" placeholder="Acme quick scan Q2">
+        </div>
+        <label class="wizard-checkbox-row">
+          <input id="wizard-save-template" type="checkbox">
+          <span>Save as Template (scenario preset)</span>
+        </label>
+      </section>
+    </div>
+
+    <div class="wizard-footer">
+      <button type="button" class="btn btn-ghost" id="wizard-cancel">Cancel</button>
+      <div class="wizard-footer-right">
+        <button type="button" class="btn btn-ghost" id="wizard-prev">Back</button>
+        <button type="button" class="btn btn-primary" id="wizard-next">Continue</button>
+        <button type="button" class="btn btn-primary" id="wizard-fire" style="display:none">▶ Fire</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
      New engagement dialog
      ================================================================ -->
 <div id="engagement-dialog" class="modal" style="display:none">
@@ -720,6 +967,49 @@
 
 <!-- Toast notifications -->
 <div id="toast-container"></div>
+
+<!-- ================================================================
+     Activate Analyzer modal
+     ================================================================ -->
+<div id="analyzer-modal" class="modal" style="display:none">
+  <div class="modal-content modal-analyzer">
+    <button class="modal-close" id="analyzer-modal-close">&times;</button>
+    <h3 class="modal-heading">Activate Analyz0r</h3>
+    <p class="analyzer-intro">
+      The local LLM judge evaluates attack responses on-device. No data leaves your machine.
+      The model (~1.9 GB) is downloaded once and stored in <code>~/hamm0r/analyzer/models/</code>.
+    </p>
+
+    <!-- Status bar -->
+    <div class="analyzer-status-row" id="analyzer-status-row">
+      <span class="analyzer-hw-badge" id="analyzer-hw-badge">detecting…</span>
+      <span class="analyzer-install-badge" id="analyzer-install-badge">not installed</span>
+    </div>
+
+    <!-- Variant list (populated by JS) -->
+    <div id="analyzer-variants" class="analyzer-variants">
+      <div class="analyzer-loading">loading variants…</div>
+    </div>
+
+    <!-- Download progress -->
+    <div id="analyzer-download-section" style="display:none">
+      <div class="analyzer-progress-label">
+        <span id="analyzer-progress-text">Downloading…</span>
+        <span id="analyzer-progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="analyzer-progress-bar" style="width:0%"></div>
+      </div>
+      <div class="analyzer-progress-bytes" id="analyzer-progress-bytes"></div>
+    </div>
+
+    <div class="editor-actions" style="margin-top:1.2rem">
+      <button id="btn-analyzer-install" class="btn btn-primary" disabled>Download &amp; Install</button>
+      <button id="btn-analyzer-uninstall" class="btn btn-danger" style="display:none">Remove Model</button>
+      <button id="analyzer-modal-cancel" class="btn btn-ghost">Close</button>
+    </div>
+  </div>
+</div>
 
 <script src="js/api.js?v=20260425"></script>
 <script src="js/app.js?v=20260425"></script>

@@ -6,4 +6,7 @@ pub mod session;
 pub mod template;
 
 pub use error::RunnerError;
-pub use run::{execute_run, Payload, RunConfig, RunProgress};
+pub use run::{
+    execute_run, execute_scenario_run, Payload, RunConfig, RunProgress, ScenarioRunConfig,
+    ScenarioStep,
+};

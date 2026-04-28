@@ -1,43 +1,9 @@
-error: rustc 1.85.1 is not supported by the following packages:
-  analyzer@0.1.0 requires rustc 1.88
-  analyzer@0.1.0 requires rustc 1.88
-  cookie_store@0.22.1 requires rustc 1.88.0
-  darling@0.23.0 requires rustc 1.88.0
-  darling_core@0.23.0 requires rustc 1.88.0
-  darling_macro@0.23.0 requires rustc 1.88.0
-  hamm0r@0.1.0 requires rustc 1.88
-  hamm0r@0.1.0 requires rustc 1.88
-  hamm0r@0.1.0 requires rustc 1.88
-  hamm0r@0.1.0 requires rustc 1.88
-  icu_collections@2.2.0 requires rustc 1.86
-  icu_collections@2.2.0 requires rustc 1.86
-  icu_locale_core@2.2.0 requires rustc 1.86
-  icu_locale_core@2.2.0 requires rustc 1.86
-  icu_normalizer@2.2.0 requires rustc 1.86
-  icu_normalizer@2.2.0 requires rustc 1.86
-  icu_normalizer_data@2.2.0 requires rustc 1.86
-  icu_normalizer_data@2.2.0 requires rustc 1.86
-  icu_normalizer_data@2.2.0 requires rustc 1.86
-  icu_normalizer_data@2.2.0 requires rustc 1.86
-  icu_properties@2.2.0 requires rustc 1.86
-  icu_properties@2.2.0 requires rustc 1.86
-  icu_properties_data@2.2.0 requires rustc 1.86
-  icu_properties_data@2.2.0 requires rustc 1.86
-  icu_properties_data@2.2.0 requires rustc 1.86
-  icu_properties_data@2.2.0 requires rustc 1.86
-  icu_provider@2.2.0 requires rustc 1.86
-  icu_provider@2.2.0 requires rustc 1.86
-  runner@0.1.0 requires rustc 1.88
-  runner@0.1.0 requires rustc 1.88
-  runner@0.1.0 requires rustc 1.88
-  serde_with@3.18.0 requires rustc 1.88
-  serde_with@3.18.0 requires rustc 1.88
-  serde_with_macros@3.18.0 requires rustc 1.88
-  storage@0.1.0 requires rustc 1.88
-  storage@0.1.0 requires rustc 1.88
-  time@0.3.47 requires rustc 1.88.0
-  time@0.3.47 requires rustc 1.88.0
-  time-core@0.1.8 requires rustc 1.88.0
-  time-core@0.1.8 requires rustc 1.88.0
-  time-macros@0.2.27 requires rustc 1.88.0
-
+   0.220470167s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="hamm0r"}: cargo::core::compiler::fingerprint: stale: missing "/Users/tonigansel/workspace/hamm0r/crates/hamm0r/capabilities"
+   0.251918584s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="hamm0r"}: cargo::core::compiler::fingerprint: fingerprint dirty for hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r)/Check { test: false }/TargetInner { name: "hamm0r", doc: true, ..: with_path("/Users/tonigansel/workspace/hamm0r/crates/hamm0r/src/main.rs", Edition2021) }
+   0.251954292s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="hamm0r"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(167) })
+   0.253591125s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint dirty for hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r)/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "/Users/tonigansel/workspace/hamm0r/crates/hamm0r/build.rs", Edition2021) }
+   0.253603209s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="build-script-build"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(MissingFile { path: "/Users/tonigansel/workspace/hamm0r/crates/hamm0r/capabilities" }))
+   0.303054834s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="hamm0r"}: cargo::core::compiler::fingerprint: fingerprint dirty for hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r)/Check { test: true }/TargetInner { name: "hamm0r", doc: true, ..: with_path("/Users/tonigansel/workspace/hamm0r/crates/hamm0r/src/main.rs", Edition2021) }
+   0.303069875s  INFO prepare_target{force=false package_id=hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r) target="hamm0r"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(167) })
+   Compiling hamm0r v0.1.0 (/Users/tonigansel/workspace/hamm0r/crates/hamm0r)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.41s

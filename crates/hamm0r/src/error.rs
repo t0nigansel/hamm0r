@@ -12,7 +12,10 @@ pub struct CommandError {
 
 impl CommandError {
     pub fn storage(e: anyhow::Error) -> Self {
-        Self { kind: "storage", message: e.to_string() }
+        Self {
+            kind: "storage",
+            message: e.to_string(),
+        }
     }
 }
 
