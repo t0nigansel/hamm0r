@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Automatically syncs e2e tests after commits that touch ui/, req.md, or test.md.
+# Setup (one-time per clone): git config core.hooksPath .githooks
+
+set -euo pipefail
+
+CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD)
+
+TRIGGER=0
+while IFS= read -r file; do
+  case "$file" in
+    ui/*|req.md|test.md) TRIGGER=1; break ;;
+  esac
+done <<< "$CHANGED"
+
+if [ "$TRIGGER" -eq 0 ]; then
+  exit 0
+fi
+
+# Check claude CLI is available
+if ! command -v claude &>/dev/null; then
+  echo "[post-commit] claude CLI not found — skipping auto sync-tests."
+  echo "             Install: npm install -g @anthropic-ai/claude-code"
+  exit 0
+fi
+
+echo "[post-commit] UI or spec files changed — running /sync-tests agent..."
+claude --print "$(cat "$(git rev-parse --show-toplevel)/.claude/commands/sync-tests.md")"
