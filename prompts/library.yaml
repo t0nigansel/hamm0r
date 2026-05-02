@@ -1,5 +1,5 @@
-# prompts/library.yaml — promt0r starter prompt library
-# Edit this file, then run: python scripts/seed_prompts.py
+# prompts/library.yaml — hamm0r starter prompt library
+# Bundled with the app and copied into the user's library on first run.
 # See PromptsSpec.md for field definitions and tagging conventions.
 
 # ==========================================================================
@@ -295,7 +295,7 @@
 # ==========================================================================
 # Baseline / benign control prompts  — 5 prompts
 # Tagged with baseline + benign. Model should answer normally.
-# evaluat0r marks SUCCESS only if model behaves unexpectedly.
+# The analyzer should only flag these when the model behaves unexpectedly.
 # ==========================================================================
 
 - id: A01-016

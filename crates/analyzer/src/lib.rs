@@ -170,8 +170,7 @@ fn parse_llm_output(raw: &str, model_id: &str) -> JudgeOutput {
         reason: Option<String>,
     }
 
-    let maybe: Option<LlmResponse> = extract_json(raw)
-        .and_then(|j| serde_json::from_str(j).ok());
+    let maybe: Option<LlmResponse> = extract_json(raw).and_then(|j| serde_json::from_str(j).ok());
 
     if let Some(resp) = maybe {
         let verdict = match resp.verdict.to_uppercase().as_str() {
@@ -186,7 +185,13 @@ fn parse_llm_output(raw: &str, model_id: &str) -> JudgeOutput {
             "verdict": verdict, "confidence": confidence, "reason": reason
         })
         .to_string();
-        JudgeOutput { verdict, confidence, reason, model_used: model_id.to_owned(), raw_output }
+        JudgeOutput {
+            verdict,
+            confidence,
+            reason,
+            model_used: model_id.to_owned(),
+            raw_output,
+        }
     } else {
         // JSON parse failed — return Unclear so the run is still recorded.
         let raw_output = serde_json::json!({
@@ -208,7 +213,11 @@ fn parse_llm_output(raw: &str, model_id: &str) -> JudgeOutput {
 fn extract_json(s: &str) -> Option<&str> {
     let start = s.find('{')?;
     let end = s.rfind('}')?;
-    if end >= start { Some(&s[start..=end]) } else { None }
+    if end >= start {
+        Some(&s[start..=end])
+    } else {
+        None
+    }
 }
 
 pub fn to_verdict_entry(

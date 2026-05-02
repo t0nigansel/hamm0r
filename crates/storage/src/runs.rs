@@ -23,9 +23,12 @@ pub struct RunHeader {
 pub struct RequestEnvelope {
     pub method: String,
     pub url: String,
-    /// SHA-256 of the serialised request headers; headers are not stored
-    /// because they contain bearer tokens (CLAUDE.md invariant 10).
-    pub headers_hash: String,
+    /// Request headers captured for debugging (sensitive values should be masked).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub headers: HashMap<String, String>,
+    /// Legacy field kept for backward compatibility with old run logs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headers_hash: Option<String>,
     pub body_size: u64,
 }
 
@@ -218,7 +221,8 @@ mod tests {
             request: RequestEnvelope {
                 method: "POST".into(),
                 url: "https://api.example.com".into(),
-                headers_hash: "sha256:abc".into(),
+                headers: HashMap::from([("content-type".into(), "application/json".into())]),
+                headers_hash: None,
                 body_size: 100,
             },
             response: ResponseEnvelope {

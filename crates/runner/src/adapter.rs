@@ -24,7 +24,7 @@ pub struct AdapterResponse {
 /// Apply auth config to a request builder, reading secrets from env vars.
 ///
 /// Invariant: secrets never appear in logs or in the request body stored on
-/// disk. Auth headers are hashed before storage (see `run::headers_hash`).
+/// disk. Auth headers are masked in run logs.
 fn apply_auth(
     mut builder: reqwest::RequestBuilder,
     auth: &AuthConfig,
@@ -268,7 +268,7 @@ async fn execute_raw_http(
 
     builder = apply_auth(builder, &request.auth)?;
 
-    send_and_extract(builder, &ExtractConfig::Raw).await
+    send_and_extract(builder, &request.response.extract).await
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────

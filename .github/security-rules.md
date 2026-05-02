@@ -12,21 +12,18 @@ The agent reports any violation it finds. It does not block merges.
 
 ---
 
-## hamm0r-001 — No raw SQL outside repository layer
+## hamm0r-001 — No direct artifact I/O outside storage crate
 **Severity:** HIGH
-**Look for:** Any file outside `db/repository.py` that contains SQL strings
-(`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`). Ignore strings in
-tests that mock DB responses, and ignore `db/schema.sql`.
-**Rationale:** The repository layer is the single enforcement point for
-parameterized queries. Raw SQL elsewhere means SQL injection risk and drift
-from the schema contract.
+**Look for:** New reads or writes of prompts, requests, engagements, run logs,
+verdict logs, or response files outside `crates/storage/`.
+**Rationale:** The storage crate is the single enforcement point for path
+resolution, append-only semantics, masking, and atomic writes.
 
 ## hamm0r-002 — Prompts and responses must never be logged in plaintext
 **Severity:** HIGH
-**Look for:** Log calls (`logger.info`, `logger.debug`, `print`, `log.write`)
-whose arguments include a variable named `prompt`, `response`, `payload`,
-`content`, `message`, or string interpolation of likely prompt/response
-fields from the `results` table.
+**Look for:** Log calls (`tracing`, `log`, `println!`, `eprintln!`, JS
+`console.*`) whose arguments include prompt text, payload text, raw response
+bodies, extracted content, or similarly sensitive fields.
 **Rationale:** hamm0r is a security tool. Attack prompts and their responses
 are often sensitive (credentials extracted from target systems, internal
 instructions). Logs leave the trust boundary.
@@ -50,13 +47,13 @@ committed file.
 **Rationale:** Secrets in the repo leak the moment the repo goes public
 (even if only to a contractor). No exceptions.
 
-## hamm0r-005 — New `results` or `verdicts` schema changes require migration
+## hamm0r-005 — Run or verdict schema changes require contract updates
 **Severity:** HIGH
-**Look for:** Changes to `db/schema.sql` that add, remove, or rename columns
-in `results` or `verdicts` without a corresponding migration script in
-`db/migrations/` and without an update to `Datamodel.md`.
-**Rationale:** These tables are the handoff contract between promt0r and
-evaluat0r. Breaking the contract silently breaks evaluat0r for existing DBs.
+**Look for:** Changes to `RunRecord`, run JSONL fields, verdict JSONL fields,
+or report inputs without a corresponding update to `docs/Datamodel.md` and an
+explicit migration/backward-compatibility note.
+**Rationale:** The run and verdict JSONL files are the handoff contract
+between core and analyzer. Silent drift breaks existing engagements.
 
 ## hamm0r-006 — No eval/exec/os.system
 **Severity:** CRITICAL
@@ -74,41 +71,39 @@ single string rather than a list. Also `shell=True` anywhere.
 **Rationale:** Shell strings with interpolation are injection vulnerabilities.
 Lists of arguments cannot be reinterpreted by a shell.
 
-## hamm0r-008 — No new network endpoints without authentication note
+## hamm0r-008 — No new local server surface without an explicit decision
 **Severity:** HIGH
-**Look for:** New routes in `sidecar/` (anything that defines an HTTP
-endpoint) without a comment or docstring stating the auth model. The sidecar
-binds to localhost, but the PR author must show they considered this.
-**Rationale:** Sidecar endpoints have access to the engagement DB. Adding
-them without auth thinking is how local-only tools eventually get accessed
-by the wider machine.
+**Look for:** New HTTP listeners, websocket listeners, or ad-hoc IPC servers
+in the app runtime without a documented architectural decision.
+**Rationale:** hamm0r is deliberately a single-process desktop app. Adding a
+server surface changes the trust boundary and packaging model.
 
-## hamm0r-009 — httpx clients must have timeouts
+## hamm0r-009 — reqwest clients must have explicit timeouts
 **Severity:** MEDIUM
-**Look for:** `httpx.AsyncClient()`, `httpx.Client()`, `httpx.get()`,
-`httpx.post()` without `timeout=` parameter.
+**Look for:** `reqwest::Client::builder()` or request paths in the runner
+without explicit connect/request timeout configuration.
 **Rationale:** A target under test may hang forever. A runner without
 timeouts hangs with it, and blocks the engagement.
 
-## hamm0r-010 — No broad except clauses in the runner
+## hamm0r-010 — Runner errors must not be silently swallowed
 **Severity:** MEDIUM
-**Look for:** `except:` or `except Exception:` in `runner/` without a
-specific exception type, unless followed by `raise` or a logged re-raise.
+**Look for:** Catch-all error handling in `crates/runner/` that drops context,
+returns success on failure, or suppresses write/reporting of failed attempts.
 **Rationale:** The runner must surface failures, not swallow them. A
 swallowed exception means an attack silently "succeeded" with no verdict.
 
 ## hamm0r-011 — Async functions must actually await something
 **Severity:** LOW
-**Look for:** `async def` functions that contain no `await` statement.
+**Look for:** `async fn` functions that contain no `.await` or obviously
+defer all work synchronously without reason.
 **Rationale:** These either should be `def`, or they are missing an `await`
 on an internal call. Either way the author did not mean what they wrote.
 
-## hamm0r-012 — No hardcoded filesystem paths outside `paths.py`
+## hamm0r-012 — No hardcoded filesystem paths outside path helpers
 **Severity:** LOW
 **Look for:** String literals that look like absolute paths (`/tmp/...`,
-`/Users/...`, `C:\...`) or relative paths to runtime artifacts
-(`./artifacts/...`, `./default_engagement.db`) outside a central paths
-module.
+`/Users/...`, `C:\...`) or direct relative paths to runtime artifacts outside
+the storage/path helper layer.
 **Rationale:** Hardcoded paths break on other machines and in CI. Centralize
 them.
 
@@ -133,8 +128,8 @@ unguessable).
 ## py-sec-003 — SQL string formatting
 **Severity:** CRITICAL
 **Look for:** SQL queries built with f-strings, `.format()`, or `%`
-interpolation with non-constant values. Even in `db/repository.py`, queries
-must use parameter binding (`?` placeholders).
+interpolation with non-constant values. Where SQL exists in repo tooling, it
+must use parameter binding instead of string interpolation.
 
 ## py-sec-004 — pickle / marshal on untrusted input
 **Severity:** CRITICAL

@@ -1,20 +1,57 @@
 pub mod analysis;
 pub mod analyzer_setup;
+pub mod app_settings;
 pub mod engagements;
 pub mod library;
+pub mod requests;
 pub mod runs;
 pub mod scenarios;
 pub mod targets;
 
 use std::collections::HashMap;
 
-use storage::types::{PromptEntry, Request};
-use storage::{prompts, requests, HammorPaths};
-use tauri::State;
+use serde::Serialize;
+use storage::types::{AppConfig, PromptEntry, Request};
+use storage::{prompts, requests as request_store, HammorPaths};
+use tauri::{AppHandle, Emitter as _, State};
 
 use crate::error::CommandError;
+use crate::logger::AppLogger;
 
 pub struct AppPaths(pub HammorPaths);
+pub struct AppConfigState(pub AppConfig);
+pub struct LoggerState(pub AppLogger);
+pub struct AnalyzerLoggerState(pub AppLogger);
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserRelevantErrorEvent {
+    pub scope: String,
+    pub run_id: Option<String>,
+    pub message: String,
+}
+
+pub fn emit_user_relevant_error(app: &AppHandle, scope: &str, run_id: Option<&str>, message: &str) {
+    let _ = app.emit(
+        "user-relevant-error",
+        UserRelevantErrorEvent {
+            scope: scope.to_owned(),
+            run_id: run_id.map(str::to_owned),
+            message: message.to_owned(),
+        },
+    );
+}
+
+pub fn report_user_relevant_error(
+    app: &AppHandle,
+    logger: &AppLogger,
+    component: &str,
+    scope: &str,
+    run_id: Option<&str>,
+    message: &str,
+) {
+    logger.error(component, run_id, message);
+    emit_user_relevant_error(app, scope, run_id, message);
+}
 
 #[tauri::command]
 pub fn list_prompts(
@@ -25,5 +62,5 @@ pub fn list_prompts(
 
 #[tauri::command]
 pub fn list_requests(paths: State<'_, AppPaths>) -> Result<HashMap<String, Request>, CommandError> {
-    requests::load_all(&paths.0.requests_dir()).map_err(Into::into)
+    request_store::load_all(&paths.0.requests_dir()).map_err(Into::into)
 }

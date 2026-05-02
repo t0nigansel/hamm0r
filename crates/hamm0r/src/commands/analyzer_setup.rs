@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter as _, State};
 use tokio::io::AsyncWriteExt as _;
 
-use super::AppPaths;
+use super::{report_user_relevant_error, AnalyzerLoggerState, AppPaths};
 use crate::error::CommandError;
 
 // ── Manifest types (mirror of analyzer::manifest) ─────────────────────────────
@@ -53,8 +53,7 @@ pub struct Artifact {
 const MANIFEST_URL: &str = "https://hamm0r.io/analyzer/manifest.json";
 
 fn bundled_manifest() -> AnalyzerManifest {
-    const HF_BASE: &str =
-        "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main";
+    const HF_BASE: &str = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main";
     const MODEL_FILE: &str = "qwen2.5-3b-instruct-q4_k_m.gguf";
     const MODEL_SHA256: &str = "TODO-verify-sha256-from-huggingface";
     const MODEL_SIZE: u64 = 1_930_000_000;
@@ -110,33 +109,65 @@ pub struct AnalyzerStatus {
 }
 
 #[tauri::command]
-pub fn get_analyzer_status(paths: State<'_, AppPaths>) -> AnalyzerStatus {
+pub fn get_analyzer_status(
+    logger: State<'_, AnalyzerLoggerState>,
+    paths: State<'_, AppPaths>,
+) -> AnalyzerStatus {
     let models_dir = paths.0.analyzer_models_dir();
     let model_file = first_gguf(&models_dir);
-    AnalyzerStatus {
+    let status = AnalyzerStatus {
         installed: model_file.is_some(),
         model_file: model_file
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned()),
         hardware: hardware_id(detect_hardware()),
-    }
+    };
+    logger.0.debug(
+        "analyzer-setup",
+        None,
+        &format!(
+            "Analyzer status checked installed={} hardware={}",
+            status.installed, status.hardware
+        ),
+    );
+    status
 }
 
 // ── Manifest ──────────────────────────────────────────────────────────────────
 
 /// Fetch the remote manifest; fall back to bundled default if unreachable.
 #[tauri::command]
-pub async fn fetch_analyzer_manifest() -> Result<AnalyzerManifest, CommandError> {
+pub async fn fetch_analyzer_manifest(
+    logger: State<'_, AnalyzerLoggerState>,
+) -> Result<AnalyzerManifest, CommandError> {
+    logger
+        .0
+        .info("analyzer-setup", None, "Fetching analyzer manifest");
     match reqwest::get(MANIFEST_URL).await {
         Ok(resp) if resp.status().is_success() => {
             let manifest: AnalyzerManifest = resp
                 .json()
                 .await
                 .map_err(|e| anyhow::anyhow!("manifest JSON parse: {e}"))?;
+            logger.0.info(
+                "analyzer-setup",
+                None,
+                &format!(
+                    "Fetched analyzer manifest with {} variants",
+                    manifest.variants.len()
+                ),
+            );
             Ok(manifest)
         }
-        _ => Ok(bundled_manifest()),
+        _ => {
+            logger.0.info(
+                "analyzer-setup",
+                None,
+                "Using bundled analyzer manifest fallback",
+            );
+            Ok(bundled_manifest())
+        }
     }
 }
 
@@ -158,6 +189,7 @@ pub struct DownloadProgress {
 #[tauri::command]
 pub async fn download_and_install_analyzer(
     app: AppHandle,
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     variant_id: String,
 ) -> Result<String, CommandError> {
@@ -175,9 +207,24 @@ pub async fn download_and_install_analyzer(
 
     let models_dir = paths.0.analyzer_models_dir();
     let variant_id_ret = variant_id.clone();
+    let logger = logger.0.clone();
 
     tokio::spawn(async move {
+        logger.info(
+            "analyzer-setup",
+            None,
+            &format!("Analyzer download task spawned for variant_id={variant_id}"),
+        );
         if let Err(e) = do_download(app.clone(), models_dir, variant).await {
+            let message = format!("analyzer download failed for variant {variant_id}: {e}");
+            report_user_relevant_error(
+                &app,
+                &logger,
+                "analyzer-setup",
+                "analyzer-download",
+                None,
+                &message,
+            );
             let _ = app.emit(
                 "analyzer-download-progress",
                 DownloadProgress {
@@ -186,8 +233,14 @@ pub async fn download_and_install_analyzer(
                     bytes_total: 0,
                     percent: 0.0,
                     finished: true,
-                    error: Some(e.to_string()),
+                    error: Some(message),
                 },
+            );
+        } else {
+            logger.info(
+                "analyzer-setup",
+                None,
+                &format!("Analyzer download completed for variant_id={variant_id}"),
             );
         }
     });
@@ -197,11 +250,28 @@ pub async fn download_and_install_analyzer(
 
 /// Remove the currently installed model file (if any).
 #[tauri::command]
-pub fn uninstall_analyzer(paths: State<'_, AppPaths>) -> Result<(), CommandError> {
+pub fn uninstall_analyzer(
+    logger: State<'_, AnalyzerLoggerState>,
+    paths: State<'_, AppPaths>,
+) -> Result<(), CommandError> {
     let models_dir = paths.0.analyzer_models_dir();
     if let Some(path) = first_gguf(&models_dir) {
+        logger.0.info(
+            "analyzer-setup",
+            None,
+            &format!("Removing analyzer model {}", path.display()),
+        );
         std::fs::remove_file(&path)
             .map_err(|e| anyhow::anyhow!("remove {}: {e}", path.display()))?;
+        logger
+            .0
+            .info("analyzer-setup", None, "Analyzer model removed");
+    } else {
+        logger.0.info(
+            "analyzer-setup",
+            None,
+            "Uninstall requested with no analyzer model present",
+        );
     }
     Ok(())
 }

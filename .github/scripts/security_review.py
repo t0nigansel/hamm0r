@@ -38,10 +38,10 @@ CLAUDE_MD_PATH = Path("CLAUDE.md")
 DEFAULT_MODEL = "claude-opus-4-7"
 
 FULL_FILE_PATHS = (
-    "db/repository.py",
-    "db/schema.sql",
-    "runner/",
-    "sidecar/",
+    "crates/storage/",
+    "crates/runner/",
+    "crates/hamm0r/",
+    "docs/Datamodel.md",
 )
 
 NULL_SHA = "0000000000000000000000000000000000000000"
@@ -129,10 +129,10 @@ after:
     {{
       "rule_id": "hamm0r-001",
       "severity": "HIGH",
-      "file": "runner/scenario.py",
+      "file": "crates/runner/src/run.rs",
       "line_hint": 42,
-      "message": "Raw SQL query outside repository layer.",
-      "suggestion": "Move this query to db/repository.py as a named method."
+      "message": "Run artifact written outside the storage crate.",
+      "suggestion": "Route this read/write through crates/storage so path and append semantics stay centralized."
     }}
   ],
   "summary": "One sentence describing overall risk posture of this change."

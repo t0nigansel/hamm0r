@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use storage::types::Scenario;
 use storage::scenarios;
+use storage::types::Scenario;
 use tauri::State;
 
 use super::AppPaths;

@@ -14,9 +14,11 @@ const API = (() => {
 
   // Unlisten function for the run-progress event (one run at a time).
   let _progressUnlisten = null;
+  let _userErrorUnlisten = null;
 
   // External progress callback registered by app.js for live run updates.
   let _onProgress = null;
+  let _onUserRelevantError = null;
 
   // ── Low-level invoke ────────────────────────────────────────────────
 
@@ -40,6 +42,16 @@ const API = (() => {
     }
     _progressUnlisten = await window.__TAURI__.event.listen('run-progress', ev => {
       if (_onProgress) _onProgress(ev.payload);
+    });
+  }
+
+  async function listenUserRelevantErrors() {
+    if (_userErrorUnlisten) {
+      _userErrorUnlisten();
+      _userErrorUnlisten = null;
+    }
+    _userErrorUnlisten = await window.__TAURI__.event.listen('user-relevant-error', ev => {
+      if (_onUserRelevantError) _onUserRelevantError(ev.payload);
     });
   }
 
@@ -73,6 +85,7 @@ const API = (() => {
       sessions: [...new Set((s.steps || []).map(step => step.session || 'A'))],
       steps: (s.steps || []).map(step => ({
         id: step.id,
+        request_id: step.request_id || null,
         session: step.session || 'A',
         prompt_id: step.prompt_id || null,
         prompt_category: step.prompt_category || null,
@@ -116,17 +129,58 @@ const API = (() => {
       return invoke('list_targets');
     },
 
+    async get_app_settings() {
+      return invoke('get_app_settings');
+    },
+
+    async save_app_settings({ settings }) {
+      return invoke('save_app_settings', { settings });
+    },
+
     async get_target({ id }) {
       const targets = await invoke('list_targets');
       return targets.find(t => t.id === id) || null;
+    },
+
+    async get_target_meta({ id }) {
+      return invoke('get_target_meta', { id });
     },
 
     async save_target(dto) {
       return invoke('save_target', { dto });
     },
 
+    async save_target_meta(dto) {
+      return invoke('save_target_meta', { dto });
+    },
+
     async delete_target({ id }) {
       return invoke('delete_target', { id });
+    },
+
+    async get_request({ id }) {
+      return invoke('get_request', { id });
+    },
+
+    async list_target_requests({ target_id }) {
+      return invoke('list_target_requests', { targetId: target_id });
+    },
+
+    async save_request({ target_id, request }) {
+      return invoke('save_request', { targetId: target_id, request });
+    },
+
+    async delete_request({ target_id, id }) {
+      return invoke('delete_request', { targetId: target_id, id });
+    },
+
+    async test_request({ request, session_strategy, session_field, prompt_text }) {
+      return invoke('test_request', {
+        request,
+        sessionStrategy: session_strategy,
+        sessionField: session_field,
+        promptText: prompt_text || null,
+      });
     },
 
     // ── Prompts ─────────────────────────────────────────────────────
@@ -185,6 +239,7 @@ const API = (() => {
 
       const normalizedSteps = (steps || []).map((step, idx) => ({
         id: step.id || `step-${String(idx + 1).padStart(3, '0')}`,
+        request_id: step.request_id || null,
         prompt_category:
           step.prompt_category || (step.prompt_id ? (promptIndex.get(step.prompt_id) || null) : null),
         prompt_id: step.prompt_id || null,
@@ -260,8 +315,8 @@ const API = (() => {
         engagementSlug: engagement_slug || _activeSlug,
         requestId: request_id,
         payloads: payloads.map(p => ({
-          promptId: p.prompt_id,
-          payloadId: p.payload_id,
+          prompt_id: p.prompt_id,
+          payload_id: p.payload_id,
           text: p.text,
         })),
         parallelism,
@@ -300,6 +355,13 @@ const API = (() => {
         engagementSlug: engagement_slug || _activeSlug,
         runId: run_id,
         seq,
+      });
+    },
+
+    async get_run_diagnostics({ engagement_slug, run_id }) {
+      return invoke('get_run_diagnostics', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
       });
     },
 
@@ -450,11 +512,13 @@ const API = (() => {
   }
 
   function onProgress(fn) { _onProgress = fn; }
+  function onUserRelevantError(fn) { _onUserRelevantError = fn; }
 
   // Start listening for run-progress events immediately so they aren't lost.
   if (window.__TAURI__) {
     listenRunProgress().catch(console.error);
+    listenUserRelevantErrors().catch(console.error);
   }
 
-  return { call, onProgress, get activeSlug() { return _activeSlug; } };
+  return { call, onProgress, onUserRelevantError, get activeSlug() { return _activeSlug; } };
 })();

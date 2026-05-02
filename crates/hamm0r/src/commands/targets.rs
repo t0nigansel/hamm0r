@@ -21,6 +21,8 @@ use crate::error::CommandError;
 pub struct TargetDto {
     pub id: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub request_ids: Vec<String>,
     pub url: String,
     /// "openai_compat" | "custom_rest" | "raw_http"
     pub endpoint_type: String,
@@ -43,6 +45,24 @@ pub struct TargetDto {
     /// JSONPath into the response body (custom_rest only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_field: Option<String>,
+    /// HTTP request timeout in seconds. Defaults to 30 if not provided.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TargetMetaDto {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub request_ids: Vec<String>,
+    /// "none" | "cookie" | "header" | "body_field"
+    pub session_strategy: String,
+    /// Header name or body field path for stateful sessions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
 }
@@ -139,7 +159,7 @@ fn dto_to_pair(dto: &TargetDto) -> (Target, Request) {
         headers,
         body,
         response: ResponseConfig { extract },
-        timeout_seconds: 30,
+        timeout_seconds: dto.timeout_seconds.unwrap_or(30),
         adapter,
     };
 
@@ -147,6 +167,7 @@ fn dto_to_pair(dto: &TargetDto) -> (Target, Request) {
         version: 1,
         id: dto.id.clone(),
         name: dto.name.clone(),
+        request_ids: vec![dto.id.clone()],
         request_id: dto.id.clone(),
         session_config,
         notes: dto.notes.clone(),
@@ -199,6 +220,14 @@ fn pair_to_dto(target: &Target, request: &Request) -> TargetDto {
     TargetDto {
         id: target.id.clone(),
         name: target.name.clone(),
+        request_ids: if target.request_ids.is_empty() {
+            target
+                .primary_request_id()
+                .map(|id| vec![id.to_owned()])
+                .unwrap_or_default()
+        } else {
+            target.request_ids.clone()
+        },
         url: request.url.clone(),
         endpoint_type,
         auth_type,
@@ -208,6 +237,81 @@ fn pair_to_dto(target: &Target, request: &Request) -> TargetDto {
         session_field,
         request_field,
         response_field,
+        timeout_seconds: Some(request.timeout_seconds),
+        notes: target.notes.clone(),
+    }
+}
+
+fn meta_to_target(dto: &TargetMetaDto, existing: Option<&Target>) -> Target {
+    let session_config = match dto.session_strategy.as_str() {
+        "cookie" => SessionConfig::Cookie,
+        "header" => SessionConfig::Header {
+            header_name: dto
+                .session_field
+                .clone()
+                .unwrap_or_else(|| "X-Session-Id".into()),
+        },
+        "body_field" => SessionConfig::BodyField {
+            field_name: dto
+                .session_field
+                .clone()
+                .unwrap_or_else(|| "session_id".into()),
+        },
+        _ => SessionConfig::None,
+    };
+
+    let mut request_ids = dto.request_ids.clone();
+    if request_ids.is_empty() {
+        if let Some(existing) = existing {
+            request_ids = if existing.request_ids.is_empty() {
+                existing
+                    .primary_request_id()
+                    .map(|id| vec![id.to_owned()])
+                    .unwrap_or_default()
+            } else {
+                existing.request_ids.clone()
+            };
+        }
+    }
+
+    let primary_request_id = existing
+        .and_then(Target::primary_request_id)
+        .map(str::to_owned)
+        .or_else(|| request_ids.first().cloned())
+        .unwrap_or_default();
+
+    Target {
+        version: 1,
+        id: dto.id.clone(),
+        name: dto.name.clone(),
+        request_ids,
+        request_id: primary_request_id,
+        session_config,
+        notes: dto.notes.clone(),
+    }
+}
+
+fn target_to_meta(target: &Target) -> TargetMetaDto {
+    let (session_strategy, session_field) = match &target.session_config {
+        SessionConfig::None => ("none".into(), None),
+        SessionConfig::Cookie => ("cookie".into(), None),
+        SessionConfig::Header { header_name } => ("header".into(), Some(header_name.clone())),
+        SessionConfig::BodyField { field_name } => ("body_field".into(), Some(field_name.clone())),
+    };
+
+    TargetMetaDto {
+        id: target.id.clone(),
+        name: target.name.clone(),
+        request_ids: if target.request_ids.is_empty() {
+            target
+                .primary_request_id()
+                .map(|id| vec![id.to_owned()])
+                .unwrap_or_default()
+        } else {
+            target.request_ids.clone()
+        },
+        session_strategy,
+        session_field,
         notes: target.notes.clone(),
     }
 }
@@ -220,8 +324,9 @@ pub fn list_targets(paths: State<'_, AppPaths>) -> Result<Vec<TargetDto>, Comman
     let dtos = all_targets
         .values()
         .filter_map(|t| {
+            let request_id = t.primary_request_id().unwrap_or(t.id.as_str());
             let req = all_requests
-                .get(&t.request_id)
+                .get(request_id)
                 .or_else(|| all_requests.get(&t.id))?;
             Some(pair_to_dto(t, req))
         })
@@ -232,10 +337,54 @@ pub fn list_targets(paths: State<'_, AppPaths>) -> Result<Vec<TargetDto>, Comman
 /// Create or update a target (and its backing request file).
 #[tauri::command]
 pub fn save_target(paths: State<'_, AppPaths>, dto: TargetDto) -> Result<TargetDto, CommandError> {
-    let (target, request) = dto_to_pair(&dto);
+    let (mut target, request) = dto_to_pair(&dto);
+    if dto.request_ids.is_empty() {
+        let mut existing_targets = targets::load_all(&paths.0.targets_dir())?;
+        if let Some(existing) = existing_targets.remove(&dto.id) {
+            if existing.request_ids.is_empty() {
+                target.request_ids = existing
+                    .primary_request_id()
+                    .map(|id| vec![id.to_owned()])
+                    .unwrap_or_else(|| vec![request.id.clone()]);
+            } else {
+                target.request_ids = existing.request_ids;
+            }
+        } else {
+            target.request_ids = vec![request.id.clone()];
+        }
+    } else {
+        target.request_ids = dto.request_ids.clone();
+    }
+    if target.request_id.trim().is_empty() {
+        target.request_id = target
+            .request_ids
+            .first()
+            .cloned()
+            .unwrap_or_else(|| request.id.clone());
+    }
     targets::save(&paths.0.targets_dir(), &target)?;
     requests::save(&paths.0.requests_dir(), &request)?;
     Ok(dto)
+}
+
+#[tauri::command]
+pub fn get_target_meta(
+    paths: State<'_, AppPaths>,
+    id: String,
+) -> Result<Option<TargetMetaDto>, CommandError> {
+    let all_targets = targets::load_all(&paths.0.targets_dir())?;
+    Ok(all_targets.get(&id).map(target_to_meta))
+}
+
+#[tauri::command]
+pub fn save_target_meta(
+    paths: State<'_, AppPaths>,
+    dto: TargetMetaDto,
+) -> Result<TargetMetaDto, CommandError> {
+    let all_targets = targets::load_all(&paths.0.targets_dir())?;
+    let target = meta_to_target(&dto, all_targets.get(&dto.id));
+    targets::save(&paths.0.targets_dir(), &target)?;
+    Ok(target_to_meta(&target))
 }
 
 /// Delete a target and its backing request file.

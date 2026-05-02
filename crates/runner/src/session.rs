@@ -41,21 +41,31 @@ impl SessionManager {
 
     /// Get or create the `reqwest::Client` for the given session label.
     pub fn client_for(&mut self, session: &str) -> Result<&reqwest::Client, RunnerError> {
-        if !self.clients.contains_key(session) {
+        self.client_for_with_timeout(session, self.timeout_seconds)
+    }
+
+    /// Get or create the `reqwest::Client` for the given session label and
+    /// timeout. Scenario steps may use different request objects with their own
+    /// timeouts while still sharing cookies or session state by label.
+    pub fn client_for_with_timeout(
+        &mut self,
+        session: &str,
+        timeout_seconds: u32,
+    ) -> Result<&reqwest::Client, RunnerError> {
+        let key = format!("{session}::{timeout_seconds}");
+        if !self.clients.contains_key(&key) {
             let client = match &self.strategy {
                 SessionStrategy::Cookie => reqwest::Client::builder()
                     .connect_timeout(std::time::Duration::from_secs(10))
-                    .timeout(std::time::Duration::from_secs(u64::from(
-                        self.timeout_seconds,
-                    )))
+                    .timeout(std::time::Duration::from_secs(u64::from(timeout_seconds)))
                     .cookie_store(true)
                     .use_rustls_tls()
                     .build()
                     .map_err(RunnerError::Http)?,
-                _ => build_http_client(self.timeout_seconds)?,
+                _ => build_http_client(timeout_seconds)?,
             };
-            self.clients.insert(session.to_owned(), client);
+            self.clients.insert(key.clone(), client);
         }
-        Ok(self.clients.get(session).unwrap())
+        Ok(self.clients.get(&key).unwrap())
     }
 }

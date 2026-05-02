@@ -6,7 +6,6 @@ members = [
     "crates/storage",
     "crates/analyzer",
 ]
-exclude = ["src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

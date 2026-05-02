@@ -12,9 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingPromptId = null;
   let currentScenarioId = null;
   let currentScenarioSteps = []; // local step buffer
+  let currentScenarioRequestOptions = [];
   let editingStepIndex = -1; // -1 = add, >= 0 = edit
   let currentRunId = null;
   let progressPollTimer = null;
+  let engagementProgressPollTimer = null;
+  let engagementResultsPollTimer = null;
+  const engagementRunActivity = new Map();
+  let lastEngagementEventRefreshAt = 0;
   const ARCHIVED_ENGAGEMENTS_KEY = 'hamm0r.archivedEngagements.v1';
 
   const engagementDetail = {
@@ -505,6 +510,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (viewId === 'view-targets') loadTargetList();
     if (viewId === 'view-workbench') { loadWorkbenchTargets(); loadPickerPrompts(); if (dbOpen) loadFindings(); }
     if (viewId === 'view-runs') loadEngagementList();
+    if (viewId !== 'view-runs') {
+      stopEngagementProgressPoll();
+      stopEngagementResultsPoll();
+    }
     if (viewId !== 'view-runs') clearEngagementRoute({ replace: true });
     if (dbOpen) {
       if (viewId === 'view-scenarios') loadScenarioList();
@@ -516,11 +525,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Settings nav item (no view yet)
-  const settingsNavBtn = $('.nav-item[data-nav="settings"]');
-  if (settingsNavBtn) {
-    settingsNavBtn.addEventListener('click', () => toast('Settings coming soon', 'info'));
-  }
-
   // ── Engagement management ──────────────────────────────────────────
   const WIZARD_STORAGE_KEY = 'hamm0r.engagementWizard.v1';
   const WIZARD_SCENARIOS = [
@@ -590,6 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
         authHeader: '',
         sessionHandling: 'none',
         sessionField: '',
+        timeoutSeconds: 30,
       },
       tested: {
         ok: false,
@@ -631,6 +636,13 @@ document.addEventListener('DOMContentLoaded', () => {
     prompts: [],
     customLibraries: [],
   };
+  let wizardOpenInFlight = false;
+
+  function reportWizardStageError(stage, err) {
+    const message = err?.message || String(err);
+    console.error(`[wizard:${stage}]`, err);
+    toast(`Wizard ${stage} failed: ${message}`, 'error');
+  }
 
   function persistWizardState() {
     try {
@@ -720,14 +732,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function loadWizardCatalog() {
-    const [targets, prompts] = await Promise.all([
+    const [targetsRes, promptsRes] = await Promise.allSettled([
       API.call('list_targets', {}),
       API.call('list_prompts', {}),
     ]);
 
-    wizardCatalog.targets = targets || [];
-    wizardCatalog.prompts = prompts || [];
-    wizardCatalog.customLibraries = [...new Set((prompts || []).map(p => p.category).filter(Boolean))].sort();
+    const targets = targetsRes.status === 'fulfilled' ? (targetsRes.value || []) : [];
+    const prompts = promptsRes.status === 'fulfilled' ? (promptsRes.value || []) : [];
+    if (targetsRes.status === 'rejected') {
+      console.error('[wizard:catalog:list_targets]', targetsRes.reason);
+    }
+    if (promptsRes.status === 'rejected') {
+      console.error('[wizard:catalog:list_prompts]', promptsRes.reason);
+    }
+
+    wizardCatalog.targets = targets;
+    wizardCatalog.prompts = prompts;
+    wizardCatalog.customLibraries = [...new Set((prompts || []).map(p => String(p.category || '')).filter(Boolean))].sort();
 
     if (wizardState.targetMode === 'existing' && !wizardState.existingTargetId && wizardCatalog.targets.length > 0) {
       wizardState.existingTargetId = wizardCatalog.targets[0].id;
@@ -740,6 +761,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderWizardStep1() {
+    function safeSetInputValue(selector, value, fallback = '') {
+      const el = $(selector);
+      if (!el) return;
+      try {
+        el.value = value ?? fallback;
+      } catch (_err) {
+        el.value = fallback;
+      }
+    }
+
     const existingBtn = $('#wizard-target-mode-existing');
     const newBtn = $('#wizard-target-mode-new');
     const existingRow = $('#wizard-existing-row');
@@ -764,14 +795,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     existingSelect.value = wizardState.existingTargetId || existingSelect.value || '';
 
-    $('#wizard-new-target-name').value = wizardState.newTarget.name;
-    $('#wizard-new-base-url').value = wizardState.newTarget.baseUrl;
-    $('#wizard-new-protocol').value = wizardState.newTarget.protocol;
-    $('#wizard-new-auth').value = wizardState.newTarget.auth;
-    $('#wizard-new-auth-env').value = wizardState.newTarget.authEnv;
-    $('#wizard-new-auth-header').value = wizardState.newTarget.authHeader;
-    $('#wizard-new-session').value = wizardState.newTarget.sessionHandling;
-    $('#wizard-new-session-field').value = wizardState.newTarget.sessionField;
+    safeSetInputValue('#wizard-new-target-name', wizardState.newTarget.name, '');
+    // URL inputs can throw in some WebKit stacks when the value is malformed.
+    safeSetInputValue('#wizard-new-base-url', wizardState.newTarget.baseUrl, '');
+    safeSetInputValue('#wizard-new-protocol', wizardState.newTarget.protocol, 'custom_rest');
+    safeSetInputValue('#wizard-new-auth', wizardState.newTarget.auth, 'none');
+    safeSetInputValue('#wizard-new-auth-env', wizardState.newTarget.authEnv, '');
+    safeSetInputValue('#wizard-new-auth-header', wizardState.newTarget.authHeader, 'Authorization');
+    safeSetInputValue('#wizard-new-session', wizardState.newTarget.sessionHandling, 'none');
+    safeSetInputValue('#wizard-new-session-field', wizardState.newTarget.sessionField, '');
+    safeSetInputValue('#wizard-new-timeout', wizardState.newTarget.timeoutSeconds, 30);
 
     const auth = wizardState.newTarget.auth;
     $('#wizard-new-auth-env-row').style.display = auth === 'none' ? 'none' : '';
@@ -864,6 +897,53 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateWizardLibraryCounter() {
     const selected = wizardSelectedPrompts();
     $('#wizard-lib-counter').textContent = `${selected.length} prompts selected, ${selected.length} judged`;
+    renderWizardLibraryPreview();
+  }
+
+  function renderWizardLibraryPreview() {
+    const preview = $('#wizard-lib-preview');
+    const selectedRefs = wizardState.selectedOwaspRefs || [];
+    const selectedCustom = wizardState.selectedCustomLibraries || [];
+    const groups = [];
+
+    selectedRefs.forEach((ref) => {
+      const prompts = wizardCatalog.prompts.filter((p) => p.owasp_ref === ref);
+      groups.push({ label: `OWASP ${ref}`, prompts });
+    });
+
+    selectedCustom.forEach((lib) => {
+      const prompts = wizardCatalog.prompts.filter((p) => (p.category || '') === lib);
+      groups.push({ label: lib, prompts });
+    });
+
+    if (groups.length === 0) {
+      preview.innerHTML = '<div class="wizard-lib-preview-empty">Select one or more libraries to preview their prompts here.</div>';
+      return;
+    }
+
+    preview.innerHTML = groups.map((group) => {
+      const promptRows = group.prompts.length > 0
+        ? group.prompts.map((prompt) => `
+            <div class="wizard-lib-prompt">
+              <div class="wizard-lib-prompt-meta">
+                <span class="wizard-lib-prompt-id">${esc(prompt.id || 'custom')}</span>
+                <span class="wizard-lib-prompt-ref">${esc(prompt.owasp_ref || prompt.category || '')}</span>
+              </div>
+              <div class="wizard-lib-prompt-text">${esc(prompt.text || '')}</div>
+            </div>
+          `).join('')
+        : '<div class="wizard-lib-prompt"><div class="wizard-lib-prompt-text">No prompts found in this library.</div></div>';
+
+      return `
+        <div class="wizard-lib-group">
+          <div class="wizard-lib-group-header">
+            <span class="wizard-lib-group-name">${esc(group.label)}</span>
+            <span class="wizard-lib-group-count">${group.prompts.length} prompts</span>
+          </div>
+          <div class="wizard-lib-prompt-list">${promptRows}</div>
+        </div>
+      `;
+    }).join('');
   }
 
   function renderWizardStep4() {
@@ -896,20 +976,42 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#wizard-next').style.display = step === 4 ? 'none' : '';
     $('#wizard-fire').style.display = step === 4 ? '' : 'none';
 
-    if (step === 1) renderWizardStep1();
-    if (step === 2) renderWizardStep2();
-    if (step === 3) renderWizardStep3();
-    if (step === 4) renderWizardStep4();
+    if (step === 1) {
+      try { renderWizardStep1(); } catch (err) { reportWizardStageError('step-1-render', err); }
+    }
+    if (step === 2) {
+      try { renderWizardStep2(); } catch (err) { reportWizardStageError('step-2-render', err); }
+    }
+    if (step === 3) {
+      try { renderWizardStep3(); } catch (err) { reportWizardStageError('step-3-render', err); }
+    }
+    if (step === 4) {
+      try { renderWizardStep4(); } catch (err) { reportWizardStageError('step-4-render', err); }
+    }
   }
 
   async function openEngagementWizard() {
+    if (wizardOpenInFlight) return;
+    wizardOpenInFlight = true;
     $('#wizard-modal').style.display = 'flex';
     try {
       await loadWizardCatalog();
       applyWizardScenarioDefaults(wizardState.scenarioId, false);
       renderWizard();
     } catch (err) {
-      toast(`Wizard load failed: ${err.message}`, 'error');
+      // Safety net: reset potentially corrupted wizard state and render a clean wizard.
+      console.error('[wizard:open:first-attempt]', err);
+      resetWizardState();
+      try {
+        await loadWizardCatalog();
+        applyWizardScenarioDefaults(wizardState.scenarioId, false);
+        renderWizard();
+      } catch (innerErr) {
+        console.error('[wizard:open:recovery-failed]', innerErr);
+        toast(`Wizard load failed: ${innerErr.message || err.message}`, 'error');
+      }
+    } finally {
+      wizardOpenInFlight = false;
     }
   }
 
@@ -1013,6 +1115,7 @@ document.addEventListener('DOMContentLoaded', () => {
           session_field: nt.sessionField.trim() || null,
           request_field: nt.protocol === 'openai_compat' ? null : 'prompt',
           response_field: nt.protocol === 'openai_compat' ? null : 'response',
+          timeout_seconds: nt.timeoutSeconds || 30,
           notes: nt.protocol === 'anthropic'
             ? 'Wizard protocol anthropic mapped to custom_rest adapter.'
             : null,
@@ -1023,6 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const scenario = wizardScenarioById(wizardState.scenarioId);
       const engagementName = (wizardState.engagementName || '').trim() || `${target.name} · ${scenario.name}`;
       const created = await API.call('create_engagement', { name: engagementName });
+      unarchiveEngagementSlug(created.slug);
       await API.call('open_db', { path: created.slug });
       dbOpen = true;
       onDbOpen(created.name || engagementName, created.slug);
@@ -1100,6 +1204,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="eng-meta">${esc(eng.slug)}${date ? ' · ' + esc(date) : ''}</span>`;
           card.addEventListener('click', async () => {
             try {
+              unarchiveEngagementSlug(eng.slug);
               const result = await API.call('open_db', { path: eng.slug });
               dbOpen = true;
               $('#engagement-dialog').style.display = 'none';
@@ -1144,6 +1249,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function archiveEngagementSlug(slug) {
     if (!slug) return;
     archivedEngagementSlugs.add(slug);
+    saveArchivedEngagementSlugs();
+  }
+
+  function unarchiveEngagementSlug(slug) {
+    if (!slug) return;
+    if (!archivedEngagementSlugs.has(slug)) return;
+    archivedEngagementSlugs.delete(slug);
     saveArchivedEngagementSlugs();
   }
 
@@ -1275,6 +1387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!name) return;
     try {
       const result = await API.call('create_engagement', { name });
+      unarchiveEngagementSlug(result.slug);
       await API.call('open_db', { path: result.slug });
       dbOpen = true;
       $('#engagement-dialog').style.display = 'none';
@@ -1326,21 +1439,23 @@ document.addEventListener('DOMContentLoaded', () => {
     ['wizard-new-auth-header', 'authHeader'],
     ['wizard-new-session', 'sessionHandling'],
     ['wizard-new-session-field', 'sessionField'],
+    ['wizard-new-timeout', 'timeoutSeconds'],
   ];
   wizardInputBindings.forEach(([id, key]) => {
     const el = $(`#${id}`);
-    el.addEventListener('input', () => {
-      wizardState.newTarget[key] = el.value;
+    const update = () => {
+      let value = el.value;
+      if (key === 'timeoutSeconds') {
+        const n = parseInt(value, 10);
+        value = Number.isFinite(n) && n > 0 ? n : 30;
+      }
+      wizardState.newTarget[key] = value;
       clearWizardTestStatus();
       persistWizardState();
       if (id === 'wizard-new-auth' || id === 'wizard-new-session') renderWizardStep1();
-    });
-    el.addEventListener('change', () => {
-      wizardState.newTarget[key] = el.value;
-      clearWizardTestStatus();
-      persistWizardState();
-      if (id === 'wizard-new-auth' || id === 'wizard-new-session') renderWizardStep1();
-    });
+    };
+    el.addEventListener('input', update);
+    el.addEventListener('change', update);
   });
 
   $('#wizard-engagement-name').addEventListener('input', (e) => {
@@ -2118,19 +2233,696 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { toast(err.message, 'error'); }
   });
 
-  // ── Target config: show/hide fields ────────────────────────────────
-  $('#target-auth-type').addEventListener('change', () => {
+  // ── Target config: multi-request editor ────────────────────────────
+  const targetEditorState = {
+    targetId: '',
+    requests: [],
+    selectedRequestId: '',
+  };
+
+  function slugifyEntityName(name, fallback = 'item') {
+    const base = (name || fallback)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    return `${base || fallback}-${Date.now().toString(36)}`;
+  }
+
+  function blankRequestDraft(targetId = '', targetName = '') {
+    const requestId = slugifyEntityName(targetName || 'request', 'request');
+    return {
+      id: requestId,
+      name: targetName ? `${targetName} request` : 'New request',
+      method: 'POST',
+      url: '',
+      endpoint_type: 'custom_rest',
+      auth_type: 'none',
+      auth_env: '',
+      auth_header: '',
+      headers_mode: 'structured',
+      headers: [{ key: 'Content-Type', value: 'application/json' }],
+      raw_headers: 'Content-Type: application/json',
+      content_type_hint: 'application/json',
+      body_format: 'json',
+      body_text: '{\n  "message": "{{prompt}}"\n}',
+      response_extract_type: 'jsonpath',
+      response_extract_value: '$.response',
+      timeout_seconds: 30,
+      target_id: targetId || '',
+    };
+  }
+
+  function normalizeRequestAdapter(adapter) {
+    if (adapter === 'open-ai-compat') return 'openai_compat';
+    if (adapter === 'raw-http') return 'raw_http';
+    if (adapter === 'custom-rest') return 'custom_rest';
+    return adapter || 'custom_rest';
+  }
+
+  function headersObjectToRows(headers) {
+    const entries = Object.entries(headers || {});
+    if (entries.length === 0) return [{ key: '', value: '' }];
+    return entries.map(([key, value]) => ({ key, value: String(value ?? '') }));
+  }
+
+  function headersRowsToObject(rows) {
+    const out = {};
+    (rows || []).forEach(({ key, value }) => {
+      const cleanKey = (key || '').trim();
+      if (!cleanKey) return;
+      out[cleanKey] = value ?? '';
+    });
+    return out;
+  }
+
+  function headersObjectToRaw(headers) {
+    return Object.entries(headers || {})
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+  }
+
+  function rawHeadersToRows(text) {
+    const rows = (text || '')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const idx = line.indexOf(':');
+        if (idx < 0) return { key: line, value: '' };
+        return {
+          key: line.slice(0, idx).trim(),
+          value: line.slice(idx + 1).trim(),
+        };
+      });
+    return rows.length ? rows : [{ key: '', value: '' }];
+  }
+
+  function bodyContentToDraftText(format, content) {
+    if (format === 'text') {
+      return typeof content === 'string' ? content : String(content ?? '');
+    }
+    if (format === 'form') {
+      if (content && typeof content === 'object' && !Array.isArray(content)) {
+        return Object.entries(content)
+          .map(([key, value]) => `${key}=${value == null ? '' : value}`)
+          .join('\n');
+      }
+      return '';
+    }
+    try {
+      return JSON.stringify(content ?? {}, null, 2);
+    } catch (_err) {
+      return '{}';
+    }
+  }
+
+  function parseBodyDraft(format, text) {
+    const raw = text || '';
+    if (format === 'text') return raw;
+    if (format === 'form') {
+      const out = {};
+      raw.split(/\r?\n/).forEach(line => {
+        if (!line.trim()) return;
+        const idx = line.indexOf('=');
+        if (idx < 0) {
+          out[line.trim()] = '';
+          return;
+        }
+        out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      });
+      return out;
+    }
+    if (!raw.trim()) return {};
+    return JSON.parse(raw);
+  }
+
+  function unescapeAnsiCString(text) {
+    return text
+      .replace(/\\\\/g, '\\')
+      .replace(/\\r/g, '\r')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\'/g, "'")
+      .replace(/\\"/g, '"');
+  }
+
+  function preprocessCurlInput(input) {
+    let text = String(input || '');
+    text = text.replace(/\\\r?\n/g, ' ');
+    text = text.replace(/`\r?\n/g, ' ');
+    text = text.replace(/\$'((?:\\.|[^'])*)'/g, (_match, inner) => `'${unescapeAnsiCString(inner).replace(/'/g, "\\'")}'`);
+    return text.trim();
+  }
+
+  function tokenizeCommand(input) {
+    const text = preprocessCurlInput(input);
+    const tokens = [];
+    let current = '';
+    let state = 'normal';
+
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+
+      if (state === 'single') {
+        if (ch === "'") {
+          state = 'normal';
+        } else {
+          current += ch;
+        }
+        continue;
+      }
+
+      if (state === 'double') {
+        if (ch === '"') {
+          state = 'normal';
+        } else if (ch === '\\' && i + 1 < text.length) {
+          i += 1;
+          current += text[i];
+        } else {
+          current += ch;
+        }
+        continue;
+      }
+
+      if (/\s/.test(ch)) {
+        if (current) {
+          tokens.push(current);
+          current = '';
+        }
+        continue;
+      }
+      if (ch === "'") {
+        state = 'single';
+        continue;
+      }
+      if (ch === '"') {
+        state = 'double';
+        continue;
+      }
+      if (ch === '\\' && i + 1 < text.length) {
+        i += 1;
+        current += text[i];
+        continue;
+      }
+      current += ch;
+    }
+
+    if (current) tokens.push(current);
+    return tokens;
+  }
+
+  function parseCurlIntoDraft(curlText, draft) {
+    const tokens = tokenizeCommand(curlText);
+    if (!tokens.length) throw new Error('curl command is empty');
+
+    let idx = 0;
+    if (/^curl(?:\.exe)?$/i.test(tokens[0])) idx = 1;
+    if (idx >= tokens.length) throw new Error('curl command has no URL or options');
+
+    let method = '';
+    let url = '';
+    const headers = [];
+    const dataParts = [];
+
+    const takeValue = (label) => {
+      idx += 1;
+      if (idx >= tokens.length) throw new Error(`Missing value for ${label}`);
+      return tokens[idx];
+    };
+
+    for (; idx < tokens.length; idx += 1) {
+      const token = tokens[idx];
+      if (token === '-X' || token === '--request') {
+        method = takeValue(token).toUpperCase();
+        continue;
+      }
+      if (token === '-H' || token === '--header') {
+        headers.push(takeValue(token));
+        continue;
+      }
+      if (token === '--url') {
+        url = takeValue(token);
+        continue;
+      }
+      if (token === '--data' || token === '--data-raw' || token === '--data-binary' || token === '-d') {
+        dataParts.push(takeValue(token));
+        continue;
+      }
+      if (token.startsWith('http://') || token.startsWith('https://')) {
+        if (!url) url = token;
+        continue;
+      }
+    }
+
+    if (!url) throw new Error('Could not find a URL in the curl command');
+
+    const next = { ...draft };
+    next.method = method || (dataParts.length > 0 ? 'POST' : 'GET');
+    next.url = url;
+    next.headers_mode = 'structured';
+
+    let authType = 'none';
+    let authEnv = draft.auth_env || '';
+    let authHeader = draft.auth_header || '';
+    const regularHeaders = {};
+
+    headers.forEach((line) => {
+      const sep = line.indexOf(':');
+      if (sep < 0) return;
+      const key = line.slice(0, sep).trim();
+      const value = line.slice(sep + 1).trim();
+      if (!key) return;
+
+      if (/^authorization$/i.test(key) && /^bearer\s+/i.test(value)) {
+        authType = 'bearer';
+        authEnv = authEnv || 'HAMM0R_BEARER_TOKEN';
+        return;
+      }
+      if (/^authorization$/i.test(key) && /^basic\s+/i.test(value)) {
+        authType = 'basic';
+        authEnv = authEnv || 'HAMM0R_USER';
+        return;
+      }
+      if (/^(x-api-key|api-key)$/i.test(key)) {
+        authType = 'api_key';
+        authEnv = authEnv || 'HAMM0R_API_KEY';
+        authHeader = key;
+        return;
+      }
+
+      regularHeaders[key] = value;
+    });
+
+    next.auth_type = authType;
+    next.auth_env = authEnv;
+    next.auth_header = authHeader;
+    next.headers = headersObjectToRows(regularHeaders);
+    next.raw_headers = headersObjectToRaw(regularHeaders);
+
+    const contentType =
+      regularHeaders['Content-Type'] ||
+      regularHeaders['content-type'] ||
+      '';
+    next.content_type_hint = contentType;
+
+    const bodyText = dataParts.join(contentType.includes('x-www-form-urlencoded') ? '&' : '\n');
+    let bodyFormat = 'text';
+    let bodyEditorText = bodyText;
+    let endpointType = 'custom_rest';
+    let extractType = 'raw';
+    let extractValue = '';
+
+    const looksLikeJson = contentType.includes('json') || /^[\[{]/.test(bodyText.trim());
+    if (looksLikeJson && bodyText.trim()) {
+      try {
+        const parsed = JSON.parse(bodyText);
+        bodyFormat = 'json';
+        bodyEditorText = JSON.stringify(parsed, null, 2);
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.messages)) {
+          endpointType = 'openai_compat';
+          extractType = 'jsonpath';
+          extractValue = '$.choices[0].message.content';
+        } else {
+          endpointType = 'custom_rest';
+        }
+      } catch (_err) {
+        bodyFormat = 'text';
+      }
+    } else if (contentType.includes('x-www-form-urlencoded')) {
+      bodyFormat = 'form';
+      bodyEditorText = bodyText.split('&').join('\n');
+    } else if (!bodyText.trim()) {
+      bodyFormat = 'text';
+      bodyEditorText = '';
+    } else {
+      bodyFormat = 'text';
+      endpointType = 'raw_http';
+    }
+
+    next.endpoint_type = endpointType;
+    next.body_format = bodyFormat;
+    next.body_text = bodyEditorText;
+    next.response_extract_type = extractType;
+    next.response_extract_value = extractValue;
+    next.timeout_seconds = draft.timeout_seconds || 30;
+
+    return next;
+  }
+
+  function extractConfigToRequest(draft) {
+    if (draft.response_extract_type === 'jsonpath') {
+      return { type: 'jsonpath', path: draft.response_extract_value || '$.response' };
+    }
+    if (draft.response_extract_type === 'regex') {
+      return { type: 'regex', pattern: draft.response_extract_value || '(.*)' };
+    }
+    return { type: 'raw' };
+  }
+
+  function buildRequestFromDraft(draft) {
+    const headers = draft.headers_mode === 'raw'
+      ? headersRowsToObject(rawHeadersToRows(draft.raw_headers))
+      : headersRowsToObject(draft.headers);
+    if (draft.content_type_hint) {
+      headers['Content-Type'] = draft.content_type_hint;
+    }
+
+    return {
+      version: 1,
+      id: draft.id,
+      name: draft.name || draft.id,
+      method: draft.method || 'POST',
+      url: draft.url,
+      auth: (() => {
+        if (draft.auth_type === 'bearer') {
+          return { type: 'bearer', token_env: draft.auth_env || 'HAMM0R_TOKEN' };
+        }
+        if (draft.auth_type === 'basic') {
+          return { type: 'basic', user_env: draft.auth_env || 'HAMM0R_USER', password_env: 'HAMM0R_PASS' };
+        }
+        if (draft.auth_type === 'api_key') {
+          return {
+            type: 'custom-header',
+            header_name: draft.auth_header || 'Authorization',
+            value_env: draft.auth_env || 'HAMM0R_KEY',
+          };
+        }
+        return { type: 'none' };
+      })(),
+      headers,
+      body: {
+        format: draft.body_format || 'json',
+        content: parseBodyDraft(draft.body_format || 'json', draft.body_text || ''),
+      },
+      response: { extract: extractConfigToRequest(draft) },
+      timeout_seconds: Number(draft.timeout_seconds || 30),
+      adapter: draft.endpoint_type,
+    };
+  }
+
+  function extractConfigToDraft(extract) {
+    if (!extract || !extract.type || extract.type === 'raw') {
+      return { type: 'raw', value: '' };
+    }
+    if (extract.type === 'jsonpath') {
+      return { type: 'jsonpath', value: extract.path || '' };
+    }
+    if (extract.type === 'regex') {
+      return { type: 'regex', value: extract.pattern || '' };
+    }
+    return { type: 'raw', value: '' };
+  }
+
+  function requestRecordToDraft(record) {
+    const request = record.request || {};
+    let authType = 'none';
+    let authEnv = '';
+    let authHeader = '';
+    const auth = request.auth || {};
+    if (auth.type === 'bearer') {
+      authType = 'bearer';
+      authEnv = auth.token_env || '';
+    } else if (auth.type === 'basic') {
+      authType = 'basic';
+      authEnv = auth.user_env || '';
+    } else if (auth.type === 'custom-header') {
+      authType = 'api_key';
+      authEnv = auth.value_env || '';
+      authHeader = auth.header_name || '';
+    }
+
+    const headers = request.headers || {};
+    const extract = extractConfigToDraft(request.response && request.response.extract);
+
+    return {
+      id: request.id,
+      name: request.name || request.id,
+      method: request.method || 'POST',
+      url: request.url || '',
+      endpoint_type: normalizeRequestAdapter(request.adapter),
+      auth_type: authType,
+      auth_env: authEnv,
+      auth_header: authHeader,
+      headers_mode: 'structured',
+      headers: headersObjectToRows(headers),
+      raw_headers: headersObjectToRaw(headers),
+      content_type_hint: headers['Content-Type'] || headers['content-type'] || '',
+      body_format: (request.body && request.body.format) || 'json',
+      body_text: bodyContentToDraftText((request.body && request.body.format) || 'json', request.body && request.body.content),
+      response_extract_type: extract.type,
+      response_extract_value: extract.value,
+      timeout_seconds: request.timeout_seconds || 30,
+      target_id: record.target_id || '',
+      primary: !!record.primary,
+    };
+  }
+
+  function updateTargetAuthUI() {
     const v = $('#target-auth-type').value;
     $('#auth-value-row').style.display = v === 'none' ? 'none' : '';
-    $('#auth-header-row').style.display = v === 'none' ? 'none' : '';
-  });
-  $('#target-endpoint').addEventListener('change', () => {
-    $('#field-mapping-group').style.display =
-      $('#target-endpoint').value === 'custom_rest' ? '' : 'none';
-  });
-  $('#target-session-strategy').addEventListener('change', () => {
+    $('#auth-header-row').style.display = v === 'api_key' ? '' : 'none';
+  }
+
+  function updateTargetEndpointUI() {
+    const adapter = $('#target-endpoint').value;
+    const defaultContentType =
+      adapter === 'raw_http' ? 'text/plain' :
+      adapter === 'openai_compat' ? 'application/json' :
+      ($('#target-body-format').value === 'form' ? 'application/x-www-form-urlencoded' :
+        $('#target-body-format').value === 'text' ? 'text/plain' : 'application/json');
+    if (!$('#target-content-type').value.trim()) {
+      $('#target-content-type').value = defaultContentType;
+    }
+  }
+
+  function updateTargetSessionUI() {
     $('#session-field-row').style.display =
       $('#target-session-strategy').value === 'none' ? 'none' : '';
+  }
+
+  function updateTargetHeadersUI() {
+    const mode = $('#target-headers-mode').value;
+    $('#target-headers-structured').style.display = mode === 'structured' ? '' : 'none';
+    $('#target-headers-raw').style.display = mode === 'raw' ? '' : 'none';
+  }
+
+  function updateTargetResponseExtractUI() {
+    const mode = $('#target-response-extract-type').value;
+    $('#target-response-extract-value-row').style.display = mode === 'raw' ? 'none' : '';
+    const input = $('#target-response-extract-value');
+    if (mode === 'jsonpath') input.placeholder = '$.response';
+    if (mode === 'regex') input.placeholder = '(?s)answer:(.*)';
+  }
+
+  function renderHeaderRows(rows) {
+    const container = $('#target-header-rows');
+    container.innerHTML = '';
+    (rows || [{ key: '', value: '' }]).forEach((row, index) => {
+      const item = document.createElement('div');
+      item.className = 'header-row-item';
+      item.innerHTML = `
+        <div class="form-row">
+          <label>${index === 0 ? 'Header name' : '&nbsp;'}</label>
+          <input type="text" class="target-header-key" value="${esc(row.key || '')}" placeholder="Accept">
+        </div>
+        <div class="form-row">
+          <label>${index === 0 ? 'Header value' : '&nbsp;'}</label>
+          <input type="text" class="target-header-value" value="${esc(row.value || '')}" placeholder="application/json">
+        </div>
+        <button type="button" class="btn btn-ghost header-row-remove" title="Remove header">x</button>`;
+      item.querySelector('.header-row-remove').addEventListener('click', () => {
+        const nextRows = collectHeaderRowsFromDom().filter((_, idx) => idx !== index);
+        renderHeaderRows(nextRows.length ? nextRows : [{ key: '', value: '' }]);
+      });
+      container.appendChild(item);
+    });
+  }
+
+  function collectHeaderRowsFromDom() {
+    return $$('#target-header-rows .header-row-item').map((row) => ({
+      key: row.querySelector('.target-header-key')?.value || '',
+      value: row.querySelector('.target-header-value')?.value || '',
+    }));
+  }
+
+  function syncCurrentRequestDraftFromForm() {
+    const currentId = $('#target-request-id').value.trim();
+    if (!currentId) return;
+    const draft = targetEditorState.requests.find(r => r.id === currentId);
+    if (!draft) return;
+    draft.name = $('#target-request-name').value.trim() || draft.name;
+    draft.method = $('#target-method').value;
+    draft.url = $('#target-url').value.trim();
+    draft.endpoint_type = $('#target-endpoint').value;
+    draft.auth_type = $('#target-auth-type').value;
+    draft.auth_env = $('#target-auth-value').value.trim();
+    draft.auth_header = $('#target-auth-header').value.trim();
+    draft.headers_mode = $('#target-headers-mode').value;
+    draft.content_type_hint = $('#target-content-type').value.trim();
+    draft.headers = collectHeaderRowsFromDom();
+    draft.raw_headers = $('#target-headers-raw-text').value;
+    draft.body_format = $('#target-body-format').value;
+    draft.body_text = $('#target-body-text').value;
+    draft.response_extract_type = $('#target-response-extract-type').value;
+    draft.response_extract_value = $('#target-response-extract-value').value.trim();
+    draft.timeout_seconds = Number($('#target-timeout-seconds').value || 30);
+  }
+
+  function populateRequestEditor(draft) {
+    if (!draft) return;
+    $('#target-request-id').value = draft.id;
+    $('#target-request-name').value = draft.name || '';
+    $('#target-method').value = draft.method || 'POST';
+    $('#target-url').value = draft.url || '';
+    $('#target-endpoint').value = draft.endpoint_type || 'custom_rest';
+    $('#target-auth-type').value = draft.auth_type || 'none';
+    $('#target-auth-value').value = draft.auth_env || '';
+    $('#target-auth-header').value = draft.auth_header || '';
+    $('#target-headers-mode').value = draft.headers_mode || 'structured';
+    $('#target-content-type').value = draft.content_type_hint || '';
+    renderHeaderRows(draft.headers || [{ key: '', value: '' }]);
+    $('#target-headers-raw-text').value = draft.raw_headers || '';
+    $('#target-body-format').value = draft.body_format || 'json';
+    $('#target-body-text').value = draft.body_text || '';
+    $('#target-response-extract-type').value = draft.response_extract_type || 'raw';
+    $('#target-response-extract-value').value = draft.response_extract_value || '';
+    $('#target-timeout-seconds').value = draft.timeout_seconds || 30;
+    updateTargetAuthUI();
+    updateTargetEndpointUI();
+    updateTargetHeadersUI();
+    updateTargetResponseExtractUI();
+    $('#btn-delete-request').style.display = targetEditorState.requests.length > 1 ? '' : 'none';
+  }
+
+  function renderTargetRequestList() {
+    const list = $('#target-request-list');
+    list.innerHTML = '';
+    if (targetEditorState.requests.length === 0) {
+      list.innerHTML = '<div class="target-request-row"><div class="target-request-main"><div class="target-request-name">No requests yet</div><div class="target-request-meta">Create the first request for this target.</div></div></div>';
+      $('#btn-delete-request').style.display = 'none';
+      return;
+    }
+
+    targetEditorState.requests.forEach((draft) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'target-request-row' + (draft.id === targetEditorState.selectedRequestId ? ' active' : '');
+      row.innerHTML = `
+        <div class="target-request-main">
+          <div class="target-request-name">${esc(draft.name || draft.id)}</div>
+          <div class="target-request-meta">${esc((draft.method || 'POST') + ' · ' + (draft.url || 'no url').replace(/^https?:\/\//, ''))}</div>
+        </div>
+        ${draft.primary ? '<span class="target-request-badge">primary</span>' : ''}`;
+      row.addEventListener('click', () => {
+        syncCurrentRequestDraftFromForm();
+        targetEditorState.selectedRequestId = draft.id;
+        clearTestRequestResult();
+        populateRequestEditor(draft);
+        renderTargetRequestList();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function ensureSelectedRequest() {
+    if (!targetEditorState.selectedRequestId && targetEditorState.requests.length > 0) {
+      targetEditorState.selectedRequestId = targetEditorState.requests[0].id;
+    }
+    const draft = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId);
+    if (draft) populateRequestEditor(draft);
+    renderTargetRequestList();
+  }
+
+  function renderTestRequestResult(result) {
+    $('#target-test-result').style.display = '';
+    $('#target-test-status').textContent = String(result.status ?? '—');
+    $('#target-test-duration').textContent = `${result.duration_ms ?? 0} ms`;
+    const headers = Object.entries(result.response_headers || {})
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+    $('#target-test-response-headers').value = headers;
+    $('#target-test-response-extracted').value = result.extracted_response_body || '';
+    $('#target-test-response-raw').value = result.raw_response_body || '';
+  }
+
+  function clearTestRequestResult() {
+    $('#target-test-result').style.display = 'none';
+    $('#target-test-status').textContent = '—';
+    $('#target-test-duration').textContent = '—';
+    $('#target-test-response-headers').value = '';
+    $('#target-test-response-extracted').value = '';
+    $('#target-test-response-raw').value = '';
+  }
+
+  $('#target-auth-type').addEventListener('change', updateTargetAuthUI);
+  $('#target-endpoint').addEventListener('change', updateTargetEndpointUI);
+  $('#target-session-strategy').addEventListener('change', updateTargetSessionUI);
+  $('#target-headers-mode').addEventListener('change', () => {
+    const mode = $('#target-headers-mode').value;
+    if (mode === 'raw') {
+      $('#target-headers-raw-text').value = headersObjectToRaw(headersRowsToObject(collectHeaderRowsFromDom()));
+    } else {
+      renderHeaderRows(rawHeadersToRows($('#target-headers-raw-text').value));
+    }
+    updateTargetHeadersUI();
+  });
+  $('#target-body-format').addEventListener('change', updateTargetEndpointUI);
+  $('#target-response-extract-type').addEventListener('change', updateTargetResponseExtractUI);
+  $('#btn-add-header-row').addEventListener('click', () => {
+    const nextRows = collectHeaderRowsFromDom();
+    nextRows.push({ key: '', value: '' });
+    renderHeaderRows(nextRows);
+  });
+  $('#btn-import-curl').addEventListener('click', () => {
+    $('#curl-import-text').value = '';
+    $('#curl-import-modal').style.display = 'flex';
+  });
+  $('#curl-import-close').addEventListener('click', () => {
+    $('#curl-import-modal').style.display = 'none';
+  });
+  $('#curl-import-cancel').addEventListener('click', () => {
+    $('#curl-import-modal').style.display = 'none';
+  });
+  $('#curl-import-apply').addEventListener('click', () => {
+    try {
+      syncCurrentRequestDraftFromForm();
+      const draft = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId);
+      if (!draft) {
+        toast('No request selected', 'error');
+        return;
+      }
+      const imported = parseCurlIntoDraft($('#curl-import-text').value, draft);
+      Object.assign(draft, imported);
+      clearTestRequestResult();
+      populateRequestEditor(draft);
+      renderTargetRequestList();
+      $('#curl-import-modal').style.display = 'none';
+      toast('curl imported', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  $('#btn-test-request').addEventListener('click', async () => {
+    syncCurrentRequestDraftFromForm();
+    const draft = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId);
+    if (!draft) {
+      toast('No request selected', 'error');
+      return;
+    }
+
+    try {
+      const result = await API.call('test_request', {
+        request: buildRequestFromDraft(draft),
+        session_strategy: $('#target-session-strategy').value,
+        session_field: $('#target-session-field').value.trim() || null,
+        prompt_text: $('#target-test-prompt').value,
+      });
+      renderTestRequestResult(result);
+      toast(`Test request completed: ${result.status}`, result.status >= 200 && result.status < 400 ? 'success' : 'info');
+    } catch (err) {
+      clearTestRequestResult();
+      toast(err.message, 'error');
+    }
   });
 
   // ── Targets: list + CRUD ───────────────────────────────────────────
@@ -2164,12 +2956,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startNewTarget() {
-    $('#target-id').value = '';
     $('#target-form').reset();
+    const targetId = '';
+    const requestDraft = blankRequestDraft('', '');
+    targetEditorState.targetId = targetId;
+    targetEditorState.requests = [requestDraft];
+    targetEditorState.selectedRequestId = requestDraft.id;
+    $('#target-id').value = '';
+    $('#target-request-id').value = requestDraft.id;
     $('#target-form').style.display = '';
     $('#btn-delete-target').style.display = 'none';
     $('#target-welcome').style.display = 'none';
     $('#target-content').style.display = '';
+    $('#target-session-strategy').value = 'none';
+    $('#target-test-prompt').value = '';
+    clearTestRequestResult();
+    updateTargetSessionUI();
+    updateTargetHeadersUI();
+    updateTargetResponseExtractUI();
+    populateRequestEditor(requestDraft);
+    renderTargetRequestList();
   }
 
   $('#btn-new-target').addEventListener('click', startNewTarget);
@@ -2177,32 +2983,68 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function openTargetEditor(targetId) {
     try {
-      const t = await API.call('get_target', { id: targetId });
-      if (!t) return;
-      $('#target-id').value = t.id;
-      $('#target-name').value = t.name;
-      $('#target-url').value = t.url;
-      $('#target-endpoint').value = t.endpoint_type;
-      $('#target-auth-type').value = t.auth_type;
-      $('#target-auth-type').dispatchEvent(new Event('change'));
-      $('#target-endpoint').dispatchEvent(new Event('change'));
-      $('#target-auth-value').value = t.auth_env || '';
-      $('#target-auth-header').value = t.auth_header || '';
-      $('#map-request').value = t.request_field || 'message';
-      $('#map-response').value = t.response_field || 'response';
-      $('#target-session-strategy').value = t.session_strategy || 'none';
-      $('#target-session-strategy').dispatchEvent(new Event('change'));
-      $('#target-session-field').value = t.session_field || '';
-      $('#target-system-prompt').value = t.notes || '';
+      const [meta, requestRecords] = await Promise.all([
+        API.call('get_target_meta', { id: targetId }),
+        API.call('list_target_requests', { target_id: targetId }),
+      ]);
+      if (!meta) return;
+
+      targetEditorState.targetId = meta.id;
+      targetEditorState.requests = (requestRecords || []).map(requestRecordToDraft);
+      targetEditorState.selectedRequestId =
+        (targetEditorState.requests.find(r => r.primary) || targetEditorState.requests[0] || {}).id || '';
+
+      $('#target-id').value = meta.id;
+      $('#target-name').value = meta.name || '';
+      $('#target-session-strategy').value = meta.session_strategy || 'none';
+      $('#target-session-field').value = meta.session_field || '';
+      $('#target-system-prompt').value = meta.notes || '';
+      $('#target-test-prompt').value = '';
+      clearTestRequestResult();
+      updateTargetSessionUI();
+
       $('#target-form').style.display = '';
       $('#btn-delete-target').style.display = '';
       $('#target-welcome').style.display = 'none';
       $('#target-content').style.display = '';
 
-      // Highlight in sidebar
+      ensureSelectedRequest();
       $$('#target-list .target-card-row').forEach(li => li.classList.toggle('active', li.dataset.id === targetId));
     } catch (err) { toast(err.message, 'error'); }
   }
+
+  $('#btn-new-request').addEventListener('click', () => {
+    syncCurrentRequestDraftFromForm();
+    const targetName = $('#target-name').value.trim();
+    const draft = blankRequestDraft(targetEditorState.targetId, targetName);
+    targetEditorState.requests.push(draft);
+    targetEditorState.selectedRequestId = draft.id;
+    clearTestRequestResult();
+    populateRequestEditor(draft);
+    renderTargetRequestList();
+  });
+
+  $('#btn-delete-request').addEventListener('click', async () => {
+    const requestId = $('#target-request-id').value.trim();
+    if (!requestId) return;
+    if (targetEditorState.requests.length <= 1) {
+      toast('A target needs at least one request. Delete the whole target instead.', 'error');
+      return;
+    }
+    if (!confirm('Delete this request?')) return;
+
+    const persistedTargetId = $('#target-id').value.trim();
+    try {
+      if (persistedTargetId) {
+        await API.call('delete_request', { target_id: persistedTargetId, id: requestId });
+      }
+      targetEditorState.requests = targetEditorState.requests.filter(r => r.id !== requestId);
+      targetEditorState.selectedRequestId = targetEditorState.requests[0]?.id || '';
+      clearTestRequestResult();
+      ensureSelectedRequest();
+      toast('Request deleted', 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  });
 
   $('#btn-delete-target').addEventListener('click', async () => {
     const id = $('#target-id').value;
@@ -2214,6 +3056,9 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#target-form').style.display = 'none';
       $('#btn-delete-target').style.display = 'none';
       $('#target-id').value = '';
+      targetEditorState.targetId = '';
+      targetEditorState.requests = [];
+      targetEditorState.selectedRequestId = '';
       loadTargetList();
       if (wb.activeTargetId === id) {
         wb.activeTargetId = null;
@@ -2224,32 +3069,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#target-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = {
-      name: $('#target-name').value.trim(),
-      url: $('#target-url').value.trim(),
-      endpoint_type: $('#target-endpoint').value,
-      auth_type: $('#target-auth-type').value,
+    syncCurrentRequestDraftFromForm();
+
+    const targetName = $('#target-name').value.trim();
+    const existingId = $('#target-id').value.trim();
+    const targetId = existingId || slugifyEntityName(targetName || 'target', 'target');
+    $('#target-id').value = targetId;
+    targetEditorState.targetId = targetId;
+
+    const metaDto = {
+      id: targetId,
+      name: targetName,
+      request_ids: targetEditorState.requests.map(r => r.id),
       session_strategy: $('#target-session-strategy').value,
       session_field: $('#target-session-field').value.trim() || null,
+      notes: $('#target-system-prompt').value.trim() || null,
     };
-    const existingId = $('#target-id').value.trim();
-    data.id = existingId || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36);
-    if (data.auth_type !== 'none') {
-      data.auth_header = $('#target-auth-header').value.trim() || null;
-      data.auth_env = $('#target-auth-value').value.trim() || null;
-    }
-    if (data.endpoint_type === 'custom_rest') {
-      data.request_field = $('#map-request').value.trim() || 'message';
-      data.response_field = $('#map-response').value.trim() || 'response';
-    }
-    const sp = $('#target-system-prompt').value.trim();
-    if (sp) data.notes = sp;
 
     try {
-      const saved = await API.call('save_target', data);
-      $('#target-id').value = saved.id;
+      await API.call('save_target_meta', metaDto);
+
+      for (const draft of targetEditorState.requests) {
+        await API.call('save_request', { target_id: targetId, request: buildRequestFromDraft(draft) });
+      }
+
       toast('Target saved', 'success');
-      loadTargetList();
+      await loadTargetList();
+      await openTargetEditor(targetId);
     } catch (err) { toast(err.message, 'error'); }
   });
 
@@ -2486,7 +3332,11 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadTargetDropdown(s.target_id);
 
       // Load steps
-      currentScenarioSteps = s.steps || [];
+      currentScenarioSteps = (s.steps || []).map(step => ({
+        ...step,
+        request_id: step.request_id || null,
+      }));
+      normalizeScenarioStepRequestsForTarget();
       renderStepTimeline();
 
       // Highlight in sidebar
@@ -2507,7 +3357,47 @@ document.addEventListener('DOMContentLoaded', () => {
         sel.appendChild(opt);
       });
       if (selectedId) sel.value = selectedId;
+      await loadScenarioRequestOptions(sel.value || '');
     } catch (err) { toast(`Failed to load targets: ${err.message}`, 'error'); }
+  }
+
+  async function loadScenarioRequestOptions(targetId) {
+    currentScenarioRequestOptions = [];
+    if (!targetId) return;
+
+    const requests = await API.call('list_target_requests', { target_id: targetId });
+    currentScenarioRequestOptions = requests.map((record) => ({
+      id: record.request?.id || '',
+      name: record.request?.name || record.request?.id || 'Unnamed request',
+      method: record.request?.method || 'POST',
+      url: record.request?.url || '',
+      primary: !!record.primary,
+    }));
+  }
+
+  function scenarioRequestLabel(requestId) {
+    if (!requestId) return 'Target default';
+    const request = currentScenarioRequestOptions.find((entry) => entry.id === requestId);
+    if (!request) return `Request ${requestId}`;
+    const meta = [request.method, (request.url || '').replace(/^https?:\/\//, '')]
+      .filter(Boolean)
+      .join(' ');
+    return meta ? `${request.name} · ${meta}` : request.name;
+  }
+
+  function normalizeScenarioStepRequestsForTarget() {
+    const validIds = new Set(currentScenarioRequestOptions.map((entry) => entry.id));
+    let cleared = 0;
+    currentScenarioSteps = currentScenarioSteps.map((step) => {
+      if (!step.request_id || validIds.has(step.request_id)) {
+        return step;
+      }
+      cleared += 1;
+      return { ...step, request_id: null };
+    });
+    if (cleared > 0) {
+      toast(`Cleared ${cleared} step request selection${cleared === 1 ? '' : 's'} that do not belong to the selected target.`, 'info');
+    }
   }
 
   // ── Save scenario header ───────────────────────────────────────────
@@ -2532,6 +3422,8 @@ document.addEventListener('DOMContentLoaded', () => {
       await API.call('save_steps', {
         scenario_id: currentScenarioId,
         steps: currentScenarioSteps.map(s => ({
+          id: s.id || null,
+          request_id: s.request_id || null,
           session: s.session,
           prompt_id: s.prompt_id || null,
           prompt_text: s.prompt_text,
@@ -2563,13 +3455,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const container = $('#step-timeline');
     container.innerHTML = '';
     currentScenarioSteps.forEach((step, i) => {
+      const requestLabel = scenarioRequestLabel(step.request_id || null);
       const row = document.createElement('div');
       row.className = 'step-row';
       row.innerHTML = `
         <span class="step-num">${i + 1}</span>
         <span class="step-session" data-session="${esc(step.session)}"></span>
         <span class="step-session-label" data-session="${esc(step.session)}">${esc(step.session)}</span>
-        <span class="step-text">${esc(step.prompt_text)}</span>
+        <span class="step-main">
+          <span class="step-request">${esc(requestLabel)}</span>
+          <span class="step-text">${esc(step.prompt_text)}</span>
+        </span>
         <span class="step-actions">
           <button class="step-edit" title="Edit">Ed</button>
           <button class="step-up" title="Move up"${i === 0 ? ' disabled' : ''}>&#9650;</button>
@@ -2579,7 +3475,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Wire up buttons
       row.querySelector('.step-edit').addEventListener('click', (e) => {
         e.stopPropagation();
-        openStepDialog(i);
+        openStepDialog(i).catch(err => toast(err.message, 'error'));
       });
       row.querySelector('.step-up').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2607,9 +3503,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Step dialog ────────────────────────────────────────────────────
-  $('#btn-add-step').addEventListener('click', () => openStepDialog(-1));
+  $('#btn-add-step').addEventListener('click', () => {
+    openStepDialog(-1).catch(err => toast(err.message, 'error'));
+  });
 
-  function openStepDialog(index) {
+  async function openStepDialog(index) {
     editingStepIndex = index;
     $('#step-dialog-title').textContent = index >= 0 ? 'Edit Step' : 'Add Step';
 
@@ -2630,6 +3528,24 @@ document.addEventListener('DOMContentLoaded', () => {
       sel.appendChild(opt);
     });
 
+    const targetId = $('#sc-target').value || '';
+    await loadScenarioRequestOptions(targetId);
+    normalizeScenarioStepRequestsForTarget();
+
+    const requestSelect = $('#step-request');
+    requestSelect.innerHTML = '';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = targetId ? 'Target default request' : 'Select a target first';
+    requestSelect.appendChild(defaultOpt);
+    currentScenarioRequestOptions.forEach((request) => {
+      const opt = document.createElement('option');
+      opt.value = request.id;
+      opt.textContent = scenarioRequestLabel(request.id);
+      requestSelect.appendChild(opt);
+    });
+    requestSelect.disabled = !targetId;
+
     // Load library prompts
     const preselected = index >= 0 && currentScenarioSteps[index]?.prompt_id
       ? [currentScenarioSteps[index].prompt_id]
@@ -2648,6 +3564,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('#step-library-row').style.display = 'none';
         $('#step-custom-row').style.display = '';
       }
+      $('#step-request').value = step.request_id || '';
       $('#step-prompt-text').value = step.prompt_text;
       $('#step-delay').value = step.delay_ms || 0;
     } else {
@@ -2655,6 +3572,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#step-source-type').value = 'custom';
       $('#step-library-row').style.display = 'none';
       $('#step-custom-row').style.display = '';
+      $('#step-request').value = '';
     }
     $('#step-dialog').style.display = 'flex';
   }
@@ -2686,6 +3604,16 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#step-custom-row').style.display = isLibrary ? 'none' : '';
   });
 
+  $('#sc-target').addEventListener('change', async () => {
+    try {
+      await loadScenarioRequestOptions($('#sc-target').value || '');
+      normalizeScenarioStepRequestsForTarget();
+      renderStepTimeline();
+    } catch (err) {
+      toast(`Failed to load target requests: ${err.message}`, 'error');
+    }
+  });
+
   $('#step-library-select-all').addEventListener('click', () => {
     $$('#step-library-list .step-library-checkbox').forEach(cb => { cb.checked = true; });
   });
@@ -2715,6 +3643,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const selectedSteps = selected.map(cb => ({
+        id: editingStepIndex >= 0 ? (currentScenarioSteps[editingStepIndex]?.id || null) : null,
+        request_id: $('#step-request').value || null,
         session: session,
         prompt_id: cb.value,
         prompt_text: cb.dataset.text || '',
@@ -2728,6 +3658,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else {
       const step = {
+        id: editingStepIndex >= 0 ? (currentScenarioSteps[editingStepIndex]?.id || null) : null,
+        request_id: $('#step-request').value || null,
         session: $('#step-session').value,
         prompt_id: null,
         prompt_text: $('#step-prompt-text').value,
@@ -2885,11 +3817,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function normalizeUrlForMatch(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return null;
+    try {
+      const u = new URL(value);
+      const path = (u.pathname || '/').replace(/\/+$/, '') || '/';
+      return {
+        full: `${u.origin}${path}`,
+        origin: u.origin,
+      };
+    } catch (_err) {
+      const fallback = value.replace(/\/+$/, '');
+      return { full: fallback, origin: fallback };
+    }
+  }
+
+  function urlsLikelySameTarget(a, b) {
+    const ua = normalizeUrlForMatch(a);
+    const ub = normalizeUrlForMatch(b);
+    if (!ua || !ub) return false;
+    if (ua.full === ub.full) return true;
+    if (ua.origin === ub.origin) return true;
+    if (ua.full.startsWith(ub.full)) return true;
+    if (ub.full.startsWith(ua.full)) return true;
+    return false;
+  }
+
   function resolveTargetFromResults(results) {
     const requestUrl = String(results.find(r => r.request_url)?.request_url || '').trim();
     if (!requestUrl) return { id: null, name: '—', url: '' };
 
-    const match = engagementDetail.targets.find(t => String(t.url || '').trim() === requestUrl);
+    const match = engagementDetail.targets.find(t => urlsLikelySameTarget(t.url, requestUrl));
     if (match) {
       return { id: match.id, name: match.name, url: match.url };
     }
@@ -3012,10 +3971,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function openEngagementDetail(eng, { syncRoute = true, selectRunId = null } = {}) {
+    unarchiveEngagementSlug(eng.slug);
     const result = await API.call('open_db', { path: eng.slug });
     dbOpen = true;
     onDbOpen(result.name || eng.name, result.slug);
 
+    engagementRunActivity.clear();
     engagementDetail.slug = eng.slug;
     engagementDetail.name = result.name || eng.name;
     engagementDetail.activeRunId = null;
@@ -3091,11 +4052,230 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#btn-runs-new-engagement').addEventListener('click', openEngagementWizard);
 
+  API.onProgress((ev) => {
+    if (!ev || !ev.run_id) return;
+    const runId = ev.run_id;
+    const statusText = ev.error ? 'error' : (ev.finished ? 'completed' : 'running');
+
+    setLiveActivityState(runId, {
+      seq: Number.isFinite(Number(ev.seq)) ? Number(ev.seq) : null,
+      total: Number.isFinite(Number(ev.total)) ? Number(ev.total) : null,
+      status: statusText,
+      response: ev.status != null ? String(ev.status) : null,
+      error: ev.error || null,
+    });
+
+    const row = [...$$('#runs-tbody tr')].find((tr) => tr.dataset.runId === runId);
+    if (row) {
+      const statusEl = row.querySelector('.run-status-badge');
+      const progressEl = row.querySelector('.run-progress-value');
+      const errorsEl = row.querySelector('.run-errors-value');
+      if (statusEl) {
+        const cssState = ev.error ? 'error' : (ev.finished ? 'completed' : 'running');
+        statusEl.className = `run-status-badge ${cssState}`;
+        statusEl.textContent = cssState;
+      }
+      if (progressEl) {
+        progressEl.textContent = `${ev.seq || 0}/${ev.total || '?'}`;
+      }
+      if (errorsEl && ev.error) {
+        const nextErr = Number(errorsEl.textContent || '0') + 1;
+        errorsEl.textContent = String(nextErr);
+        errorsEl.style.color = 'var(--critical)';
+      }
+    }
+
+    const isRunsViewActive = $('#view-runs').classList.contains('active');
+    if (!isRunsViewActive) return;
+    if (!engagementDetail.activeRunId || engagementDetail.activeRunId !== runId) return;
+    if (!engagementDetail.slug) return;
+
+    const now = Date.now();
+    if (now - lastEngagementEventRefreshAt < 700 && !ev.finished && !ev.error) return;
+    lastEngagementEventRefreshAt = now;
+    loadRunResults(runId, {
+      engagementSlug: engagementDetail.slug,
+      switchToResultsTab: false,
+      suppressErrors: true,
+    }).catch(() => {});
+  });
+
+  API.onUserRelevantError((ev) => {
+    if (!ev || !ev.message) return;
+    toast(ev.message, 'error');
+  });
+
   // ── Runs view ──────────────────────────────────────────────────────
   function markActiveRunRow(runId) {
     $$('#runs-tbody tr').forEach((tr) => {
       tr.classList.toggle('active', tr.dataset.runId === runId);
     });
+  }
+
+  function setLiveActivityState(runId, patch = {}) {
+    if (!runId) return;
+    const prev = engagementRunActivity.get(runId) || {};
+    engagementRunActivity.set(runId, {
+      ...prev,
+      ...patch,
+      updatedAt: Date.now(),
+    });
+    renderLiveActivity();
+  }
+
+  function renderLiveActivity() {
+    const box = $('#eng-live-activity');
+    if (!box) return;
+
+    const runId = engagementDetail.activeRunId || (engagementDetail.runs[0]?.id || null);
+    if (!runId) {
+      box.className = 'eng-live-activity';
+      box.textContent = 'No live run activity yet.';
+      return;
+    }
+
+    const state = engagementRunActivity.get(runId);
+    if (!state) {
+      box.className = 'eng-live-activity';
+      box.textContent = `Run ${runId}: waiting for activity…`;
+      return;
+    }
+
+    const status = String(state.status || '').toLowerCase();
+    const mode = state.error ? 'error' : (status === 'running' ? 'running' : 'done');
+    box.className = `eng-live-activity ${mode}`;
+
+    const parts = [
+      `run ${runId}`,
+      state.seq != null ? `attempt ${state.seq}/${state.total || '?'}` : null,
+      state.request ? `request ${state.request}` : null,
+      state.response ? `response ${state.response}` : null,
+      state.error ? `error ${state.error}` : null,
+      state.status ? `status ${state.status}` : null,
+      state.latency ? `latency ${state.latency}` : null,
+      state.updatedAt ? `updated ${new Date(state.updatedAt).toLocaleTimeString()}` : null,
+    ].filter(Boolean);
+    box.textContent = parts.join('  |  ');
+  }
+
+  function stopEngagementProgressPoll() {
+    if (engagementProgressPollTimer) {
+      clearInterval(engagementProgressPollTimer);
+      engagementProgressPollTimer = null;
+    }
+  }
+
+  function stopEngagementResultsPoll() {
+    if (engagementResultsPollTimer) {
+      clearInterval(engagementResultsPollTimer);
+      engagementResultsPollTimer = null;
+    }
+  }
+
+  function startEngagementResultsPoll(engagementSlug, runId) {
+    stopEngagementResultsPoll();
+    if (!engagementSlug || !runId) return;
+
+    const run = (engagementDetail.runs || []).find((r) => r.id === runId);
+    if (!run || String(run.status || '').toLowerCase() !== 'running') return;
+
+    engagementResultsPollTimer = setInterval(async () => {
+      if (!$('#view-runs').classList.contains('active')) return;
+      if (!engagementDetail.slug || engagementDetail.slug !== engagementSlug) {
+        stopEngagementResultsPoll();
+        return;
+      }
+      if (engagementDetail.activeRunId !== runId) {
+        stopEngagementResultsPoll();
+        return;
+      }
+
+      try {
+        await loadRunResults(runId, {
+          engagementSlug,
+          switchToResultsTab: false,
+          suppressErrors: true,
+        });
+
+        const updated = (engagementDetail.runs || []).find((r) => r.id === runId);
+        if (!updated || String(updated.status || '').toLowerCase() !== 'running') {
+          stopEngagementResultsPoll();
+        }
+      } catch (_err) {
+        // Ignore transient refresh failures.
+      }
+    }, 1000);
+  }
+
+  function hasRunningRuns() {
+    return (engagementDetail.runs || []).some((r) => String(r.status || '').toLowerCase() === 'running');
+  }
+
+  function startEngagementProgressPoll(engagementSlug) {
+    stopEngagementProgressPoll();
+    if (!engagementSlug) return;
+    if (!hasRunningRuns()) return;
+
+    engagementProgressPollTimer = setInterval(async () => {
+      if (!engagementDetail.slug || engagementDetail.slug !== engagementSlug) {
+        stopEngagementProgressPoll();
+        return;
+      }
+      if (!$('#view-runs').classList.contains('active')) return;
+
+      try {
+        const runningRuns = (engagementDetail.runs || []).filter((r) => String(r.status || '').toLowerCase() === 'running');
+        if (runningRuns.length === 0) {
+          stopEngagementProgressPoll();
+          return;
+        }
+
+        let terminalReached = false;
+        for (const run of runningRuns) {
+          const p = await API.call('get_run_progress', { engagement_slug: engagementSlug, run_id: run.id });
+
+          const idx = engagementDetail.runs.findIndex((r) => r.id === run.id);
+          if (idx >= 0 && p) {
+            engagementDetail.runs[idx] = { ...engagementDetail.runs[idx], ...p };
+          }
+
+          const row = [...$$('#runs-tbody tr')].find((tr) => tr.dataset.runId === run.id);
+          if (row && p) {
+            const statusEl = row.querySelector('.run-status-badge');
+            const progressEl = row.querySelector('.run-progress-value');
+            const errorsEl = row.querySelector('.run-errors-value');
+
+            if (statusEl) {
+              const nextStatus = String(p.status || run.status || 'running').toLowerCase();
+              statusEl.className = `run-status-badge ${nextStatus}`;
+              statusEl.textContent = nextStatus;
+              setLiveActivityState(run.id, { status: nextStatus });
+            }
+            if (progressEl) {
+              progressEl.textContent = `${p.completed}/${p.total_prompts || '?'}`;
+            }
+            if (errorsEl) {
+              errorsEl.textContent = String(p.errors ?? 0);
+              errorsEl.style.color = Number(p.errors || 0) > 0 ? 'var(--critical)' : 'var(--text-2)';
+            }
+          }
+
+          if (p && String(p.status || '').toLowerCase() !== 'running') {
+            terminalReached = true;
+          }
+        }
+
+        if (terminalReached) {
+          await loadRuns({
+            engagementSlug,
+            autoSelectFirst: false,
+            preferredRunId: engagementDetail.activeRunId || null,
+          });
+        }
+      } catch (_err) {
+        // transient polling errors are expected
+      }
+    }, 1000);
   }
 
   async function loadRuns({ engagementSlug = activeEngagementSlug, autoSelectFirst = false, preferredRunId = null } = {}) {
@@ -3107,6 +4287,10 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.innerHTML = '';
 
       if (runs.length === 0) {
+        stopEngagementProgressPoll();
+        stopEngagementResultsPoll();
+        engagementRunActivity.clear();
+        renderLiveActivity();
         tbody.innerHTML = '<tr><td colspan="6" style="font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;padding:20px;">no runs yet — fire a prompt from the workbench</td></tr>';
         $('#run-results-section').style.display = 'none';
         renderEngagementTimeline([]);
@@ -3116,14 +4300,19 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       runs.forEach((r) => {
+        setLiveActivityState(r.id, {
+          status: String(r.status || '').toLowerCase(),
+          seq: Number.isFinite(Number(r.completed)) ? Number(r.completed) : null,
+          total: Number.isFinite(Number(r.total_prompts)) ? Number(r.total_prompts) : null,
+        });
         const tr = document.createElement('tr');
         tr.className = 'clickable';
         tr.dataset.runId = r.id;
         tr.innerHTML = `
           <td style="font-family:var(--mono);font-size:11px;">${esc(r.id.substring(0, 8))}</td>
           <td><span class="run-status-badge ${esc(r.status)}">${esc(r.status)}</span></td>
-          <td style="font-family:var(--mono);font-size:11px;">${r.completed}/${r.total_prompts || '?'}</td>
-          <td style="font-family:var(--mono);font-size:11px;color:${r.errors > 0 ? 'var(--critical)' : 'var(--text-2)'};">${r.errors}</td>
+          <td class="run-progress-value" style="font-family:var(--mono);font-size:11px;">${r.completed}/${r.total_prompts || '?'}</td>
+          <td class="run-errors-value" style="font-family:var(--mono);font-size:11px;color:${r.errors > 0 ? 'var(--critical)' : 'var(--text-2)'};">${r.errors}</td>
           <td style="font-family:var(--mono);font-size:11px;">${esc(formatRunStarted(r.started_at))}</td>
           <td>
             <button class="btn-small btn-view-results">Results</button>
@@ -3144,14 +4333,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (chosen) {
         await loadRunResults(chosen.id, { engagementSlug, switchToResultsTab: false });
       }
+      renderLiveActivity();
+      startEngagementProgressPoll(engagementSlug);
     } catch (err) {
       toast(err.message, 'error');
     }
   }
 
-  async function loadRunResults(runId, { engagementSlug = activeEngagementSlug, switchToResultsTab = false } = {}) {
+  async function loadRunResults(runId, { engagementSlug = activeEngagementSlug, switchToResultsTab = false, suppressErrors = false } = {}) {
     try {
       const results = await API.call('get_results', { engagement_slug: engagementSlug, run_id: runId });
+      const diagnostics = await API.call('get_run_diagnostics', { engagement_slug: engagementSlug, run_id: runId });
       engagementDetail.activeRunId = runId;
       engagementDetail.resultsByRunId.set(runId, results);
       markActiveRunRow(runId);
@@ -3161,7 +4353,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.innerHTML = '';
       results.forEach((r) => {
         const statusClass = r.error_message ? 'status-error' : 'status-ok';
-        const statusText = r.error_message ? 'ERROR' : `${r.status_code || '?'}`;
+        const pending = !r.error_message && (r.status_code == null || Number(r.status_code) === 0);
+        const statusText = r.error_message ? 'ERROR' : (pending ? 'PENDING' : `${r.status_code || '?'}`);
+        const reqMethod = String(r.request_method || '').toUpperCase();
+        const reqUrl = String(r.request_url || '').trim();
+        const requestText = [reqMethod, reqUrl].filter(Boolean).join(' ');
         const tr = document.createElement('tr');
         tr.className = 'clickable';
         tr.innerHTML = `
@@ -3169,21 +4365,61 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>${esc(r.session_label || '-')}</td>
           <td><code>${esc(r.prompt_id)}</code></td>
           <td><span class="${statusClass}">${statusText}</span></td>
+          <td><div class="cell-text">${esc(requestText || '-')}</div></td>
           <td><div class="cell-text">${esc(r.prompt_text)}</div></td>
-          <td><div class="cell-text">${esc(r.response_text || '')}</div></td>
+          <td><div class="cell-text">${esc(r.response_text || (pending ? '(pending)' : ''))}</div></td>
           <td>${r.latency_ms != null ? r.latency_ms + 'ms' : '-'}</td>`;
         tr.addEventListener('click', () => showResultDetail(r));
         tbody.appendChild(tr);
       });
 
+      const latest = [...results].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0)).at(-1);
+      if (latest) {
+        const reqMethod = String(latest.request_method || '').toUpperCase();
+        const reqUrl = String(latest.request_url || '').trim();
+        const requestText = [reqMethod, reqUrl].filter(Boolean).join(' ') || null;
+        setLiveActivityState(runId, {
+          seq: Number.isFinite(Number(latest.seq)) ? Number(latest.seq) : null,
+          request: requestText,
+          response: latest.error_message ? null : (latest.status_code ? String(latest.status_code) : null),
+          error: latest.error_message || null,
+          latency: latest.latency_ms != null ? `${latest.latency_ms}ms` : null,
+        });
+      } else if (diagnostics && diagnostics.request_url) {
+        setLiveActivityState(runId, {
+          request: diagnostics.request_url,
+          status: diagnostics.status || null,
+          error: (diagnostics.notes || []).length ? diagnostics.notes[0] : null,
+        });
+      }
+
       const runSummary = engagementDetail.runs.find(r => r.id === runId) || null;
+      const live = engagementRunActivity.get(runId) || null;
+      const runIsRunning = String(runSummary?.status || '').toLowerCase() === 'running';
+
+      if (runIsRunning && results.length === 0) {
+        const diagMessage = diagnostics?.notes?.length ? diagnostics.notes.join(' | ') : null;
+        const pendingRow = document.createElement('tr');
+        pendingRow.innerHTML = `
+          <td>${live?.seq != null ? live.seq : '-'}</td>
+          <td>-</td>
+          <td><code>-</code></td>
+          <td><span class="${live?.error ? 'status-error' : 'status-ok'}">${live?.error ? 'ERROR' : 'PENDING'}</span></td>
+          <td><div class="cell-text">${esc(live?.request || diagnostics?.request_url || '-')}</div></td>
+          <td><div class="cell-text">(attempt in progress)</div></td>
+          <td><div class="cell-text">${esc(live?.error || diagMessage || '(waiting for response)')}</div></td>
+          <td>${esc(live?.latency || '-')}</td>`;
+        tbody.appendChild(pendingRow);
+      }
+
       updateEngagementHeader(runSummary, results);
       renderEngagementTimeline(results);
       renderEngagementReport(results, runSummary);
+      startEngagementResultsPoll(engagementSlug, runId);
 
       if (switchToResultsTab) setEngagementDetailTab('results');
     } catch (err) {
-      toast(err.message, 'error');
+      if (!suppressErrors) toast(err.message, 'error');
     }
   }
 
@@ -3334,15 +4570,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Result detail modal ────────────────────────────────────────────
   function showResultDetail(r) {
+    const statusText = r.error_message ? 'ERROR' : (r.status_code || 'N/A');
+    const summaryBits = [
+      `step ${r.step_order || '-'}`,
+      `session ${r.session_label || '-'}`,
+      `status ${statusText}`,
+      r.latency_ms != null ? `${r.latency_ms}ms` : 'latency n/a',
+    ];
+
+    const metaItems = [
+      ['Run ID', r.run_id || '—'],
+      ['Result ID', r.result_id || '—'],
+      ['Prompt ID', r.prompt_id || '—'],
+      ['HTTP Method', r.request_method || '—'],
+      ['Request URL', r.request_url || '—'],
+      ['Status', String(statusText)],
+      ['Latency', r.latency_ms != null ? `${r.latency_ms}ms` : '—'],
+      ['Sent At', formatEngagementDateTime(r.sent_at || '')],
+      ['Received At', formatEngagementDateTime(r.received_at || '')],
+      ['Session', r.session_label || '—'],
+      ['Step', r.step_order || '—'],
+      ['Error', r.error_message || '—'],
+    ];
+
+    $('#detail-summary').textContent = summaryBits.join(' · ');
     $('#detail-prompt').textContent = r.prompt_text;
     $('#detail-response').textContent = r.response_text || '(no response)';
-    $('#detail-meta').innerHTML = `
-      <strong>Prompt ID:</strong> ${esc(r.prompt_id)} &nbsp;|&nbsp;
-      <strong>Status:</strong> ${r.status_code || 'N/A'} &nbsp;|&nbsp;
-      <strong>Latency:</strong> ${r.latency_ms != null ? r.latency_ms + 'ms' : 'N/A'} &nbsp;|&nbsp;
-      <strong>Session:</strong> ${esc(r.session_label || '-')} &nbsp;|&nbsp;
-      <strong>Step:</strong> ${r.step_order || '-'}
-      ${r.error_message ? '<br><strong>Error:</strong> ' + esc(r.error_message) : ''}`;
+    $('#detail-meta').innerHTML = metaItems.map(([label, value]) => `
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">${esc(label)}</span>
+        <div class="detail-meta-value">${esc(value)}</div>
+      </div>
+    `).join('');
     $('#result-detail').style.display = 'flex';
   }
 
@@ -3456,7 +4715,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function openAnalyzerModal() {
     $('#analyzer-modal').style.display = 'flex';
+    loadLoggingSettings().catch(err => {
+      $('#settings-logging-status').textContent = `Failed to load settings: ${err.message}`;
+    });
     refreshAnalyzerModal();
+  }
+
+  async function loadLoggingSettings() {
+    const settings = await API.call('get_app_settings');
+    $('#settings-logging-enabled').checked = !!settings.logging?.enabled;
+    $('#settings-log-level').value = settings.logging?.level || 'info';
+    $('#settings-body-logging-enabled').checked = !!settings.logging?.body_logging_enabled;
+    $('#settings-logging-status').innerHTML =
+      'Logging changes are saved to <code>~/hamm0r/config.yaml</code>.';
   }
 
   async function refreshAnalyzerModal() {
@@ -3566,7 +4837,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await API.call('download_and_install_analyzer', { variant_id: selectedVariantId });
     } catch (err) {
-      showToast(`Download failed: ${err.message}`, 'error');
+      toast(`Download failed: ${err.message}`, 'error');
       $('#analyzer-download-section').style.display = 'none';
       $('#btn-analyzer-install').disabled = false;
     }
@@ -3598,7 +4869,7 @@ document.addEventListener('DOMContentLoaded', () => {
       refreshAnalyzerModal();
       // Refresh home CTA
       checkAnalyzerCta();
-      showToast('Analyz0r activated. Judgments will use the local LLM on next analysis run.', 'ok');
+      toast('Analyz0r activated. Judgments will use the local LLM on next analysis run.', 'success');
     } else {
       $('#analyzer-progress-text').textContent = 'Downloading…';
     }
@@ -3608,11 +4879,35 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-analyzer-uninstall').addEventListener('click', async () => {
     try {
       await API.call('uninstall_analyzer');
-      showToast('Analyzer model removed.', 'ok');
+      toast('Analyzer model removed.', 'success');
       refreshAnalyzerModal();
       checkAnalyzerCta();
     } catch (err) {
-      showToast(`Uninstall failed: ${err.message}`, 'error');
+      toast(`Uninstall failed: ${err.message}`, 'error');
+    }
+  });
+
+  $('#btn-settings-save').addEventListener('click', async () => {
+    const btn = $('#btn-settings-save');
+    btn.disabled = true;
+    try {
+      await API.call('save_app_settings', {
+        settings: {
+          logging: {
+            enabled: $('#settings-logging-enabled').checked,
+            level: $('#settings-log-level').value,
+            body_logging_enabled: $('#settings-body-logging-enabled').checked,
+          },
+        },
+      });
+      $('#settings-logging-status').innerHTML =
+        'Saved to <code>~/hamm0r/config.yaml</code>. Restart the app to apply the new logging behavior.';
+      toast('Logging settings saved. Restart the app to apply them.', 'success');
+    } catch (err) {
+      $('#settings-logging-status').textContent = `Save failed: ${err.message}`;
+      toast(`Saving settings failed: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
     }
   });
 
@@ -3645,5 +4940,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Check on first load
-  if (window.__TAURI__) checkAnalyzerCta();
+  if (window.__TAURI__) {
+    checkAnalyzerCta();
+    loadLoggingSettings().catch(() => {});
+  }
 });

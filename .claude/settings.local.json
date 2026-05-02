@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v cargo)",
+      "Bash(command -v rustc)",
+      "Read(//c/Users/Gansel/.cargo/bin/**)",
+      "Bash(cargo --version)",
+      "Bash(rustc --version)",
+      "Bash(git --version)",
+      "PowerShell(Write-Output \"--- cargo via Get-Command ---\"; Get-Command cargo -ErrorAction SilentlyContinue | Select-Object Source; Write-Output \"--- rustup via Get-Command ---\"; Get-Command rustup -ErrorAction SilentlyContinue | Select-Object Source; Write-Output \"--- check %USERPROFILE%\\\\.cargo\\\\bin ---\"; if \\(Test-Path \"$env:USERPROFILE\\\\.cargo\\\\bin\"\\) { Get-ChildItem \"$env:USERPROFILE\\\\.cargo\\\\bin\" | Select-Object Name } else { Write-Output \"not present\" }; Write-Output \"--- winget rust check ---\"; winget list --id Rustlang.Rustup -e 2>&1 | Out-String)",
+      "PowerShell($dest = \"$env:TEMP\\\\rustup-init.exe\"; Invoke-WebRequest -Uri \"https://win.rustup.rs/x86_64\" -OutFile $dest -UseBasicParsing; if \\(Test-Path $dest\\) { Get-Item $dest | Select-Object FullName, Length })",
+      "PowerShell($dest = \"$env:TEMP\\\\rustup-init.exe\"; Invoke-WebRequest -Uri \"https://win.rustup.rs/x86_64\" -OutFile $dest -UseBasicParsing; Get-Item $dest | Select-Object FullName, Length)",
+      "PowerShell($dest = \"$env:TEMP\\\\rustup-init.exe\"; if \\(Test-Path $dest\\) { $f = Get-Item $dest; Write-Output \\(\"FullName: \" + $f.FullName\\); Write-Output \\(\"Length:   \" + $f.Length\\) } else { Write-Output \"MISSING\" })",
+      "PowerShell($base = \"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\2022\\\\BuildTools\"; Write-Output \"--- BuildTools root ---\"; if \\(Test-Path $base\\) { Get-ChildItem $base | Select-Object Name } else { Write-Output \"absent\" }; Write-Output \"--- VC dir ---\"; if \\(Test-Path \"$base\\\\VC\"\\) { Get-ChildItem \"$base\\\\VC\" | Select-Object Name } else { Write-Output \"no VC dir\" }; Write-Output \"--- Win Kits root ---\"; Get-ChildItem \"C:\\\\Program Files \\(x86\\)\" -Filter \"Windows Kits\" -ErrorAction SilentlyContinue | Select-Object FullName)",
+      "PowerShell($env:Path = \"$env:USERPROFILE\\\\.cargo\\\\bin;\" + $env:Path; Write-Output \"--- rustc ---\"; rustc --version; Write-Output \"--- cargo ---\"; cargo --version; Write-Output \"--- rustup ---\"; rustup show)",
+      "PowerShell($env:Path = \"$env:USERPROFILE\\\\.cargo\\\\bin;\" + $env:Path; cargo install tauri-cli --version \"^2\" --locked 2>&1 | Out-String)",
+      "Bash(mkdir -p /c/workspace/.cargo-tmp)",
+      "Read(//c/workspace/**)",
+      "PowerShell($env:Path = \"$env:USERPROFILE\\\\.cargo\\\\bin;\" + $env:Path; $env:TMP = \"C:\\\\workspace\\\\.cargo-tmp\"; $env:TEMP = \"C:\\\\workspace\\\\.cargo-tmp\"; $env:CARGO_TARGET_DIR = \"C:\\\\workspace\\\\.cargo-tmp\\\\target\"; cargo install tauri-cli --version \"^2\" --locked 2>&1 | Tee-Object -FilePath \"C:\\\\workspace\\\\.cargo-tmp\\\\install.log\")",
+      "PowerShell($env:Path = \"$env:USERPROFILE\\\\.cargo\\\\bin;\" + $env:Path; $env:TMP = \"C:\\\\workspace\\\\.cargo-tmp\"; $env:TEMP = \"C:\\\\workspace\\\\.cargo-tmp\"; $env:CARGO_TARGET_DIR = \"C:\\\\workspace\\\\.cargo-tmp\\\\hamm0r-target\"; Set-Location \"C:\\\\workspace\\\\hamm0r\\\\crates\\\\hamm0r\"; cargo tauri dev 2>&1 | Tee-Object -FilePath \"C:\\\\workspace\\\\.cargo-tmp\\\\dev.log\")",
+      "Bash(grep -E --line-buffered \"error\\\\[|error:|warning: build failed|Finished |Running `|app started|listening on|panicked|os error|Tauri|Compiling hamm0r |cannot find\")",
+      "PowerShell(Get-AppLockerPolicy -Effective -ErrorAction SilentlyContinue -Xml 2>&1)",
+      "PowerShell($env:LOCALAPPDATA)",
+      "PowerShell($user = \"$env:USERDOMAIN\\\\$env:USERNAME\"; Write-Output \"Granting full control to: $user\"; $cmd = \"New-Item -ItemType Directory -Path 'C:\\\\Program Files\\\\hamm0r-build' -Force | Out-Null; icacls 'C:\\\\Program Files\\\\hamm0r-build' /grant '${user}:\\(OI\\)\\(CI\\)F' /T; Write-Host '[done]'; Start-Sleep 3\"; Start-Process powershell -Verb RunAs -ArgumentList \"-NoProfile\",\"-Command\",$cmd -Wait; Write-Output \"--- post-elevation check ---\"; Test-Path \"C:\\\\Program Files\\\\hamm0r-build\"; \"trytest\" | Out-File \"C:\\\\Program Files\\\\hamm0r-build\\\\test.txt\" -ErrorAction SilentlyContinue; if \\(Test-Path \"C:\\\\Program Files\\\\hamm0r-build\\\\test.txt\"\\) { Write-Output \"WRITE OK\"; Remove-Item \"C:\\\\Program Files\\\\hamm0r-build\\\\test.txt\" } else { Write-Output \"WRITE FAILED\" })",
+      "PowerShell($env:Path = \"$env:USERPROFILE\\\\.cargo\\\\bin;\" + $env:Path; $env:TMP = \"C:\\\\Program Files\\\\hamm0r-build\\\\tmp\"; $env:TEMP = \"C:\\\\Program Files\\\\hamm0r-build\\\\tmp\"; $env:CARGO_TARGET_DIR = \"C:\\\\Program Files\\\\hamm0r-build\\\\target\"; New-Item -ItemType Directory -Path $env:TMP -Force | Out-Null; Set-Location \"C:\\\\workspace\\\\hamm0r\\\\crates\\\\hamm0r\"; cargo tauri dev 2>&1 | Tee-Object -FilePath \"C:\\\\Program Files\\\\hamm0r-build\\\\dev.log\")",
+      "Bash(wsl -d kali-linux -- bash -c 'whoami; cat /etc/os-release | head -5; uname -a; echo \"--- cargo? ---\"; command -v cargo || echo \"no cargo\"; echo \"--- WSLg? ---\"; ls /mnt/wslg 2>&1 | head -3')",
+      "Bash(wsl -d kali-linux -- bash -c 'sudo -n true 2>&1 && echo \"PASSWORDLESS-SUDO\" || echo \"NEEDS-PASSWORD\"; cat /etc/sudoers.d/* 2>/dev/null | head -3')",
+      "Bash(wsl -d kali-linux -u root -- bash -c 'whoami; id')",
+      "Bash(wsl -d kali-linux -u root -- bash -c 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y --no-install-recommends curl wget git file build-essential pkg-config libssl-dev libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev patchelf 2>&1 | tail -30')",
+      "Bash(wsl -d kali-linux -- bash -c 'curl --proto \"=https\" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile default 2>&1 | tail -20; source ~/.cargo/env; rustc --version; cargo --version')",
+      "Bash(wsl -d kali-linux -- bash -c 'set -e; cd ~; if [ -d hamm0r ]; then echo \"EXISTS\"; else git clone https://github.com/t0nigansel/hamm0r.git; fi; cd hamm0r; pwd; ls -d .git crates 2>&1; echo \"--- WSLg env ---\"; echo DISPLAY=$DISPLAY WAYLAND_DISPLAY=$WAYLAND_DISPLAY')",
+      "Bash(wsl -d kali-linux -- bash -c 'source ~/.cargo/env; cd ~/hamm0r; cargo run -p hamm0r --no-default-features 2>&1 | tee ~/hamm0r-dev.log')",
+      "Bash(wsl -d kali-linux -- bash -c 'tail -20 ~/hamm0r-dev.log 2>&1 | head -25')",
+      "Bash(wsl -d kali-linux -- bash -lc 'cp -v /mnt/c/workspace/hamm0r/ui/js/api.js /home/toni/hamm0r/ui/js/api.js && cp -v /mnt/c/workspace/hamm0r/ui/js/app.js /home/toni/hamm0r/ui/js/app.js && cp -v /mnt/c/workspace/hamm0r/ui/index.html /home/toni/hamm0r/ui/index.html && cp -v /mnt/c/workspace/hamm0r/crates/hamm0r/src/commands/targets.rs /home/toni/hamm0r/crates/hamm0r/src/commands/targets.rs && pkill -f target/debug/hamm0r || true; echo done')",
+      "Bash(wsl -d kali-linux -- bash -c 'ls ~/hamm0r-data/requests/ 2>/dev/null; ls ~/hamm0r/requests/ 2>/dev/null; find ~ -maxdepth 4 -path \"*hamm0r*\" -name \"*.yaml\" 2>/dev/null | head -20')",
+      "Bash(wsl -d kali-linux -- bash -c 'cat /home/toni/hamm0r/requests/target-moidbwff.yaml')",
+      "Bash(wsl -d kali-linux -- bash -c \"source ~/.cargo/env; export authorization='eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI2OWRkZjgyZjQyNmVjMGM2OGQ3YWVkYWMiLCJhdWQiOiJwcm9maWxlcl9iYWNrZW5kX2FwaSIsImNvbnN1bHRhbnRJZCI6IjY5ZGRmODJlNDI2ZWMwYzY4ZDdhZWRhYiIsInJvbGVzIjpbIlNhbGUiLCJBZG1pbiIsIk9mZmljZSIsIlVzZXIiXSwibmFtZSI6InRvbmlzZWN0ZXN0dXNlciIsImlzcyI6InByb2ZpbGVyX2JhY2tlbmQiLCJleHAiOjE3NzczOTM3NDUsImlhdCI6MTc3NzM2NDk0NX0.HDGSr5Tk54w4TjbEUgXyflgqwLs18t4o7q9LBKRjZwE'; cd ~/hamm0r; cargo run -p hamm0r --no-default-features 2>&1 | tee ~/hamm0r-dev.log\")",
+      "Bash(wsl -d kali-linux -- bash -c 'tail -10 ~/hamm0r-dev.log')",
+      "Bash(wsl -d kali-linux -- bash -c 'cp -v /mnt/c/workspace/.cargo-tmp/target-moidbwff.yaml /home/toni/hamm0r-data/requests/target-moidbwff.yaml 2>&1; cp -v /mnt/c/workspace/.cargo-tmp/target-moidbwff.yaml /home/toni/hamm0r/requests/target-moidbwff.yaml 2>&1; echo \"--- effective file head ---\"; head -15 /home/toni/hamm0r-data/requests/target-moidbwff.yaml 2>/dev/null || head -15 /home/toni/hamm0r/requests/target-moidbwff.yaml')"
+    ]
+  }
+}

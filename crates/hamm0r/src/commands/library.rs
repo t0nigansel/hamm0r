@@ -7,13 +7,19 @@ use super::AppPaths;
 use crate::error::CommandError;
 
 const BUNDLED: &[(&str, &str)] = &[
-    ("library.yaml", include_str!("../../../../prompts/library.yaml")),
+    (
+        "library.yaml",
+        include_str!("../../../../prompts/library.yaml"),
+    ),
     (
         "injection-classics.yaml",
         include_str!("../../../../prompts/injection-classics.yaml"),
     ),
     ("exfil.yaml", include_str!("../../../../prompts/exfil.yaml")),
-    ("baselines.yaml", include_str!("../../../../prompts/baselines.yaml")),
+    (
+        "baselines.yaml",
+        include_str!("../../../../prompts/baselines.yaml"),
+    ),
 ];
 
 #[derive(Debug, Serialize)]
@@ -51,10 +57,7 @@ pub fn seed_on_first_launch(dir: &Path) -> anyhow::Result<SeedResult> {
 
 /// Tauri command called by the Library → Seed button.
 #[tauri::command]
-pub fn seed_library(
-    paths: State<'_, AppPaths>,
-    update: bool,
-) -> Result<SeedResult, CommandError> {
+pub fn seed_library(paths: State<'_, AppPaths>, update: bool) -> Result<SeedResult, CommandError> {
     let dir = paths.0.prompts_dir();
     std::fs::create_dir_all(&dir).map_err(anyhow::Error::from)?;
     write_bundled(&dir, update).map_err(Into::into)

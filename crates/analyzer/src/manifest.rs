@@ -48,8 +48,7 @@ pub const MANIFEST_URL: &str = "https://hamm0r.io/analyzer/manifest.json";
 /// on Hugging Face. SHA256 values must be verified against the actual files
 /// before a production release.
 pub fn default_manifest() -> AnalyzerManifest {
-    const HF_BASE: &str =
-        "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main";
+    const HF_BASE: &str = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main";
     const MODEL_FILE: &str = "qwen2.5-3b-instruct-q4_k_m.gguf";
     // ~1.93 GB — verified from the HF repo page at time of writing.
     const MODEL_SIZE: u64 = 1_930_000_000;

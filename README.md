@@ -26,6 +26,8 @@ crates/
 prompts/     Bundled starter attack library (YAML)
 ```
 
+The active desktop app lives in `crates/hamm0r/`.
+
 User data layout (`~/hamm0r/`):
 
 ```text
@@ -70,18 +72,69 @@ sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchel
 ```bash
 git clone https://github.com/t0nigansel/hamm0r.git
 cd hamm0r
+cd crates/hamm0r
 PATH=~/.cargo/bin:$PATH cargo tauri dev
 ```
 
-The app window opens automatically. The starter prompt library is seeded into `~/hamm0r/` on first launch.
+The app window opens as a native Tauri desktop app. The starter prompt library
+is seeded into `~/hamm0r/` on first launch.
+
+If `cargo` is already on your `PATH`, you can simply run:
+
+```bash
+cd /path/to/hamm0r/crates/hamm0r
+cargo tauri dev
+```
+
+On Windows PowerShell:
+
+```powershell
+Set-Location crates/hamm0r
+cargo tauri dev
+```
+
+This app is not meant to be opened directly in a browser. The frontend expects
+to run inside Tauri and uses the Rust command layer exposed there.
+
+### WSL troubleshooting (Linux graphics / EGL)
+
+If you run `cargo tauri dev` inside WSL and see warnings like:
+
+```text
+libEGL warning: ...
+MESA: error: ZINK: failed to choose pdev
+egl: failed to create dri2 screen
+```
+
+this is a WSL graphics stack issue (EGL/Mesa), not a hamm0r run-logic error.
+
+Recommended workaround: run from Windows PowerShell instead of WSL:
+
+```powershell
+cd C:\workspace\hamm0r\crates\hamm0r
+cargo tauri dev
+```
+
+If you must stay in WSL, try software rendering:
+
+```bash
+LIBGL_ALWAYS_SOFTWARE=1 MESA_LOADER_DRIVER_OVERRIDE=llvmpipe cargo tauri dev
+```
+
+Alternative fallback:
+
+```bash
+WEBKIT_DISABLE_COMPOSITING_MODE=1 cargo tauri dev
+```
 
 ### Build a release binary
 
 ```bash
+cd crates/hamm0r
 PATH=~/.cargo/bin:$PATH cargo tauri build
 ```
 
-The installer is placed in `target/release/bundle/`.
+The installer is placed in `crates/hamm0r/target/release/bundle/`.
 
 ## Workflow
 

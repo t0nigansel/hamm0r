@@ -5,8 +5,9 @@
 - [~] in progress
 - [x] done
 
-This is the hamm0r build plan. hamm0r is the Rust rewrite of promt0r;
-the promt0r milestones live at the bottom of this file under
+This is the hamm0r build plan.
+
+The predecessor app's milestones live at the bottom of this file under
 **Pre-history** for reference. They are not "done" in the hamm0r sense
 — most of that code does not survive the rewrite. The lessons do.
 
@@ -178,19 +179,19 @@ right before there is anything to break.
 
 ---
 
-## Pre-history — promt0r milestones (2026-03)
+## Pre-history — predecessor milestones (2026-03)
 
-These were completed in the predecessor project, **promt0r**, before
-the rewrite. Listed here so we know what existed and why hamm0r
-re-implements rather than ports.
+These were completed in the predecessor project before the rewrite.
+Listed here so we know what existed and why hamm0r re-implements
+rather than ports.
 
 - [x] Schema + repository in SQLite, Pydantic-validated YAML loader
 - [x] Async runner with httpx, OpenAICompat + CustomREST adapters,
   graceful stop, progress callback
 - [x] Tauri shell with Python sidecar over JSON-on-stdio, prompt
   browser, target config, run UI
-- [x] evaluat0r v0.1: Ollama + Qwen judge, heuristic pre-filter,
-  WeasyPrint PDF reports
+- [x] Early local analyzer: Ollama + Qwen judge, heuristic pre-filter,
+  PDF reports
 - [x] Scenario-based testing v1: scenarios + steps in SQLite,
   multi-session sequential runner, sidebar UI, 29 tests
 

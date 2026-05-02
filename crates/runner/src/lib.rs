@@ -7,6 +7,6 @@ pub mod template;
 
 pub use error::RunnerError;
 pub use run::{
-    execute_run, execute_scenario_run, Payload, RunConfig, RunProgress, ScenarioRunConfig,
-    ScenarioStep,
+    execute_run, execute_scenario_run, AttemptLog, Payload, RunConfig, RunProgress,
+    ScenarioRunConfig, ScenarioStep,
 };

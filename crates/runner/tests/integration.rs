@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use runner::run::{execute_run, execute_scenario_run};
+use runner::run::{execute_run, execute_scenario_run, AttemptLog};
 use runner::session::SessionStrategy;
 use runner::{Payload, RunConfig, ScenarioRunConfig, ScenarioStep};
 use storage::runs::{read_all, RunRecord};
@@ -45,6 +46,8 @@ fn make_config(tmp: &TempDir, request: Request, payloads: Vec<Payload>) -> RunCo
         payloads,
         parallelism: 4,
         runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
     }
 }
 
@@ -72,10 +75,13 @@ fn make_scenario_config(
         engagement_dir: tmp.path().to_owned(),
         run_id: "run-001".into(),
         request,
+        requests_by_id: HashMap::new(),
         session_strategy,
         steps,
         repeat,
         runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
     }
 }
 
@@ -251,6 +257,8 @@ async fn bounded_parallelism_fires_all_payloads() {
         payloads,
         parallelism: 2, // only 2 in flight at a time
         runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
     };
 
     execute_run(config, |_| {}).await.unwrap();
@@ -299,6 +307,8 @@ async fn session_cookie_strategy_reuses_client() {
         payloads,
         parallelism: 1,
         runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
     };
 
     execute_run(config, |_| {}).await.unwrap();
@@ -319,12 +329,14 @@ async fn scenario_repeat_records_iteration_and_step_id() {
     let steps = vec![
         ScenarioStep {
             id: "step-1".into(),
+            request_id: None,
             prompt_id: Some("inj-001".into()),
             prompt_text: "first".into(),
             session: "A".into(),
         },
         ScenarioStep {
             id: "step-2".into(),
+            request_id: None,
             prompt_id: Some("inj-002".into()),
             prompt_text: "second".into(),
             session: "B".into(),
@@ -387,12 +399,14 @@ async fn scenario_header_strategy_injects_per_session_value() {
     let steps = vec![
         ScenarioStep {
             id: "step-1".into(),
+            request_id: None,
             prompt_id: Some("inj-001".into()),
             prompt_text: "first".into(),
             session: "A".into(),
         },
         ScenarioStep {
             id: "step-2".into(),
+            request_id: None,
             prompt_id: Some("inj-002".into()),
             prompt_text: "second".into(),
             session: "B".into(),
@@ -411,4 +425,150 @@ async fn scenario_header_strategy_injects_per_session_value() {
     );
 
     execute_scenario_run(config, |_| {}).await.unwrap();
+}
+
+#[tokio::test]
+async fn scenario_step_request_id_uses_matching_request() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/first"))
+        .and(body_string_contains("first"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok-first"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/second"))
+        .and(body_string_contains("second"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok-second"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let default_request = make_request(
+        &format!("{}/first", server.uri()),
+        AdapterType::CustomRest,
+        ExtractConfig::Raw,
+    );
+    let mut alternate_request = make_request(
+        &format!("{}/second", server.uri()),
+        AdapterType::CustomRest,
+        ExtractConfig::Raw,
+    );
+    alternate_request.id = "alt-request".into();
+    alternate_request.name = "Alternate request".into();
+
+    let steps = vec![
+        ScenarioStep {
+            id: "step-1".into(),
+            request_id: None,
+            prompt_id: Some("inj-001".into()),
+            prompt_text: "first".into(),
+            session: "A".into(),
+        },
+        ScenarioStep {
+            id: "step-2".into(),
+            request_id: Some("alt-request".into()),
+            prompt_id: Some("inj-002".into()),
+            prompt_text: "second".into(),
+            session: "A".into(),
+        },
+    ];
+
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("runs")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("responses")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("reports")).unwrap();
+
+    let config = ScenarioRunConfig {
+        engagement_dir: tmp.path().to_owned(),
+        run_id: "run-001".into(),
+        request: default_request,
+        requests_by_id: HashMap::from([(alternate_request.id.clone(), alternate_request)]),
+        session_strategy: SessionStrategy::None,
+        steps,
+        repeat: 1,
+        runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
+    };
+
+    execute_scenario_run(config, |_| {}).await.unwrap();
+
+    let records = read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
+    let attempts: Vec<_> = records
+        .into_iter()
+        .filter_map(|r| match r {
+            RunRecord::Attempt(a) => Some(*a),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(attempts.len(), 2);
+    assert!(attempts[0].request.url.ends_with("/first"));
+    assert!(attempts[1].request.url.ends_with("/second"));
+    assert_eq!(attempts[1].step_id.as_deref(), Some("step-2"));
+}
+
+#[tokio::test]
+async fn attempt_log_omits_bodies_when_body_logging_is_disabled() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok-body"))
+        .mount(&server)
+        .await;
+
+    let tmp = TempDir::new().unwrap();
+    let captured: Arc<Mutex<Vec<AttemptLog>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&captured);
+    let mut config = make_config(
+        &tmp,
+        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
+        single_payload("hello body"),
+    );
+    config.body_logging_enabled = false;
+    config.on_attempt_log = Some(Arc::new(move |attempt| {
+        sink.lock().unwrap().push(attempt);
+    }));
+
+    execute_run(config, |_| {}).await.unwrap();
+
+    let items = captured.lock().unwrap();
+    assert_eq!(items.len(), 1);
+    assert!(items[0].request_body.is_none());
+    assert!(items[0].response_body.is_none());
+}
+
+#[tokio::test]
+async fn attempt_log_includes_bodies_when_body_logging_is_enabled() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok-body"))
+        .mount(&server)
+        .await;
+
+    let tmp = TempDir::new().unwrap();
+    let captured: Arc<Mutex<Vec<AttemptLog>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&captured);
+    let mut config = make_config(
+        &tmp,
+        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
+        single_payload("hello body"),
+    );
+    config.body_logging_enabled = true;
+    config.on_attempt_log = Some(Arc::new(move |attempt| {
+        sink.lock().unwrap().push(attempt);
+    }));
+
+    execute_run(config, |_| {}).await.unwrap();
+
+    let items = captured.lock().unwrap();
+    assert_eq!(items.len(), 1);
+    assert!(items[0]
+        .request_body
+        .as_deref()
+        .is_some_and(|body| body.contains("hello body")));
+    assert_eq!(items[0].response_body.as_deref(), Some("ok-body"));
 }

@@ -34,7 +34,11 @@ impl LlmJudge {
             .unwrap_or("unknown-llm")
             .to_owned();
 
-        Ok(Self { backend, model, model_id })
+        Ok(Self {
+            backend,
+            model,
+            model_id,
+        })
     }
 
     /// Run the judge prompt through the model and return the raw text output.
@@ -43,8 +47,7 @@ impl LlmJudge {
     pub fn infer(&self, judge_prompt: &str) -> anyhow::Result<String> {
         let prompt = format_qwen25_prompt(judge_prompt);
 
-        let ctx_params =
-            LlamaContextParams::default().with_n_ctx(NonZeroU32::new(CTX_SIZE));
+        let ctx_params = LlamaContextParams::default().with_n_ctx(NonZeroU32::new(CTX_SIZE));
         let mut ctx = self
             .model
             .new_context(&self.backend, ctx_params)
@@ -108,10 +111,13 @@ impl LlmJudge {
 
 /// Scan `models_dir` for the first `.gguf` file and return its path.
 pub fn find_model_file(models_dir: &Path) -> Option<PathBuf> {
-    std::fs::read_dir(models_dir).ok()?.flatten().find_map(|entry| {
-        let path = entry.path();
-        (path.extension().and_then(|x| x.to_str()) == Some("gguf")).then_some(path)
-    })
+    std::fs::read_dir(models_dir)
+        .ok()?
+        .flatten()
+        .find_map(|entry| {
+            let path = entry.path();
+            (path.extension().and_then(|x| x.to_str()) == Some("gguf")).then_some(path)
+        })
 }
 
 /// Format a judge prompt using the Qwen2.5 ChatML template.

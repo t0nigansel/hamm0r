@@ -66,4 +66,20 @@ impl HammorPaths {
     pub fn analyzer_models_dir(&self) -> PathBuf {
         self.analyzer_dir().join("models")
     }
+
+    pub fn logs_dir(&self) -> PathBuf {
+        self.root.join("logs")
+    }
+
+    pub fn hamm0r_logs_dir(&self) -> PathBuf {
+        self.logs_dir().join("hamm0r")
+    }
+
+    pub fn analyz0r_logs_dir(&self) -> PathBuf {
+        self.logs_dir().join("analyz0r")
+    }
+
+    pub fn config_path(&self) -> PathBuf {
+        self.root.join("config.yaml")
+    }
 }

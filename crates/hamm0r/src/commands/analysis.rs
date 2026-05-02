@@ -13,13 +13,15 @@ use analyzer::JudgeInput;
 #[cfg(feature = "analyzer")]
 use storage::runs::{read_all, RunRecord};
 #[cfg(feature = "analyzer")]
-use storage::{atomic_write, verdicts::VerdictRecord};
-#[cfg(feature = "analyzer")]
 use storage::verdicts::{VerdictHeader, VerdictRunStatus};
+#[cfg(feature = "analyzer")]
+use storage::{atomic_write, verdicts::VerdictRecord};
 #[cfg(feature = "analyzer")]
 use tauri::Emitter as _;
 
-use super::AppPaths;
+#[cfg(feature = "analyzer")]
+use super::report_user_relevant_error;
+use super::{AnalyzerLoggerState, AppPaths};
 use crate::error::CommandError;
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
@@ -71,10 +73,16 @@ pub struct AnalysisProgressEvent {
 
 #[tauri::command]
 pub fn read_run_verdicts(
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     run_id: String,
 ) -> Result<Vec<RunVerdictDto>, CommandError> {
+    logger.0.debug(
+        "analysis",
+        Some(&run_id),
+        &format!("read_run_verdicts invoked for engagement={engagement_slug}"),
+    );
     let verdict_path = verdict_path_for_run(&paths.0, &engagement_slug, &run_id);
     if !verdict_path.exists() {
         return Ok(vec![]);
@@ -86,18 +94,24 @@ pub fn read_run_verdicts(
         .map(|v| to_run_verdict_dto(&run_id, v))
         .collect::<Vec<_>>();
     dtos.sort_by_key(|v| v.seq);
+    logger.0.debug(
+        "analysis",
+        Some(&run_id),
+        &format!("read_run_verdicts completed count={}", dtos.len()),
+    );
     Ok(dtos)
 }
 
 #[tauri::command]
 pub fn generate_report(
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     run_id: String,
 ) -> Result<String, CommandError> {
     #[cfg(not(feature = "analyzer"))]
     {
-        let _ = (&paths, &engagement_slug, &run_id);
+        let _ = (&logger, &paths, &engagement_slug, &run_id);
         return Err(anyhow::anyhow!(
             "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
         )
@@ -106,17 +120,33 @@ pub fn generate_report(
 
     #[cfg(feature = "analyzer")]
     {
+        logger.0.info(
+            "analysis",
+            Some(&run_id),
+            &format!("Generating report for engagement={engagement_slug}"),
+        );
         let report_path = generate_report_inner(&paths.0, &engagement_slug, &run_id)?;
+        logger.0.info(
+            "analysis",
+            Some(&run_id),
+            &format!("Report generated at {}", report_path.display()),
+        );
         Ok(report_path.to_string_lossy().into_owned())
     }
 }
 
 #[tauri::command]
 pub fn read_report_html(
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     run_id: String,
 ) -> Result<Option<String>, CommandError> {
+    logger.0.debug(
+        "analysis",
+        Some(&run_id),
+        &format!("read_report_html invoked for engagement={engagement_slug}"),
+    );
     let report_path = report_path_for(&paths.0, &engagement_slug, &run_id);
     if !report_path.exists() {
         return Ok(None);
@@ -124,12 +154,24 @@ pub fn read_report_html(
     let html = storage::runs::read_body_by_relative_path(
         &paths.0.engagement_dir(&engagement_slug),
         &format!("reports/report-{run_id}.html"),
-    )?;
+    )
+    .map_err(|err| {
+        logger.0.error(
+            "analysis",
+            Some(&run_id),
+            &format!("read_report_html failed: {err}"),
+        );
+        CommandError::from(err)
+    })?;
+    logger
+        .0
+        .debug("analysis", Some(&run_id), "read_report_html completed");
     Ok(html)
 }
 
 #[tauri::command]
 pub async fn judge_result(
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     result_id: String,
@@ -137,7 +179,7 @@ pub async fn judge_result(
 ) -> Result<JudgeResultDto, CommandError> {
     #[cfg(not(feature = "analyzer"))]
     {
-        let _ = (&paths, &engagement_slug, &result_id, force);
+        let _ = (&logger, &paths, &engagement_slug, &result_id, force);
         return Err(anyhow::anyhow!(
             "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
         )
@@ -148,6 +190,11 @@ pub async fn judge_result(
     {
         let (run_id, seq) = parse_result_id(&result_id)?;
         let force = force.unwrap_or(false);
+        logger.0.info(
+            "analysis",
+            Some(&run_id),
+            &format!("judge_result requested for seq={seq} force={force}"),
+        );
         let verdict_path = verdict_path_for_run(&paths.0, &engagement_slug, &run_id);
         let latest = read_latest_verdicts(&verdict_path)?;
 
@@ -169,6 +216,11 @@ pub async fn judge_result(
             &verdict_path,
             &VerdictRecord::Verdict(Box::new(verdict.clone())),
         )?;
+        logger.0.info(
+            "analysis",
+            Some(&run_id),
+            &format!("judge_result completed for seq={seq}"),
+        );
 
         Ok(to_judge_result_dto("judged", &run_id, &verdict))
     }
@@ -176,6 +228,7 @@ pub async fn judge_result(
 
 #[tauri::command]
 pub async fn judge_all(
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     result_ids: Vec<String>,
@@ -184,7 +237,14 @@ pub async fn judge_all(
 ) -> Result<JudgeAllDto, CommandError> {
     #[cfg(not(feature = "analyzer"))]
     {
-        let _ = (&paths, &engagement_slug, &result_ids, &run_id, force);
+        let _ = (
+            &logger,
+            &paths,
+            &engagement_slug,
+            &result_ids,
+            &run_id,
+            force,
+        );
         return Err(anyhow::anyhow!(
             "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
         )
@@ -194,6 +254,15 @@ pub async fn judge_all(
     #[cfg(feature = "analyzer")]
     {
         let force = force.unwrap_or(false);
+        logger.0.info(
+            "analysis",
+            run_id.as_deref(),
+            &format!(
+                "judge_all requested for engagement={} explicit_results={} force={force}",
+                engagement_slug,
+                result_ids.len()
+            ),
+        );
         let prompt_index = build_prompt_index(&paths.0)?;
 
         let mut targets: Vec<(String, u32)> = if result_ids.is_empty() {
@@ -271,6 +340,12 @@ pub async fn judge_all(
             results.push(to_judge_result_dto("judged", &rid, &verdict));
         }
 
+        logger.0.info(
+            "analysis",
+            run_id.as_deref(),
+            &format!("judge_all completed judged={judged} skipped_existing={skipped_existing}"),
+        );
+
         Ok(JudgeAllDto {
             judged,
             skipped_existing,
@@ -282,6 +357,7 @@ pub async fn judge_all(
 #[tauri::command]
 pub async fn start_analysis(
     app: AppHandle,
+    logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     run_id: String,
@@ -289,7 +365,7 @@ pub async fn start_analysis(
 ) -> Result<String, CommandError> {
     #[cfg(not(feature = "analyzer"))]
     {
-        let _ = (&app, &paths, &engagement_slug, &run_id, force);
+        let _ = (&app, &logger, &paths, &engagement_slug, &run_id, force);
         return Err(anyhow::anyhow!(
             "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
         )
@@ -301,8 +377,14 @@ pub async fn start_analysis(
         let paths = paths.0.clone();
         let run_id_ret = run_id.clone();
         let force = force.unwrap_or(false);
+        let logger = logger.0.clone();
 
         tokio::spawn(async move {
+            logger.info(
+                "analysis",
+                Some(&run_id),
+                &format!("Analysis task spawned for engagement={engagement_slug} force={force}"),
+            );
             if let Err(err) = analyze_run_and_emit(
                 app.clone(),
                 paths.clone(),
@@ -312,6 +394,15 @@ pub async fn start_analysis(
             )
             .await
             {
+                let message = format!("analysis execution failed: {err}");
+                report_user_relevant_error(
+                    &app,
+                    &logger,
+                    "analysis",
+                    "analysis-execution",
+                    Some(&run_id),
+                    &message,
+                );
                 let _ = app.emit(
                     "analysis-progress",
                     AnalysisProgressEvent {
@@ -321,9 +412,11 @@ pub async fn start_analysis(
                         judged: 0,
                         skipped_existing: 0,
                         finished: true,
-                        error: Some(err.to_string()),
+                        error: Some(message),
                     },
                 );
+            } else {
+                logger.info("analysis", Some(&run_id), "Analysis completed");
             }
         });
 
@@ -518,7 +611,12 @@ fn evaluate_with_llm_sync(
     };
 
     let output = analyzer::judge_with_llm(&input, judge)?;
-    Ok(analyzer::to_verdict_entry(attempt.seq, &evaluated_at, &input, output))
+    Ok(analyzer::to_verdict_entry(
+        attempt.seq,
+        &evaluated_at,
+        &input,
+        output,
+    ))
 }
 
 /// Run analysis using the built-in heuristic judge (no model required).
@@ -561,7 +659,10 @@ async fn run_heuristic_analysis(
         let prompt_meta = prompt_index.get(&attempt.prompt_id);
         let verdict = evaluate_attempt(engagement_dir, &attempt, prompt_meta).await?;
         ensure_verdict_header(verdict_path, run_id, &verdict.model_used)?;
-        verdicts::append(verdict_path, &VerdictRecord::Verdict(Box::new(verdict.clone())))?;
+        verdicts::append(
+            verdict_path,
+            &VerdictRecord::Verdict(Box::new(verdict.clone())),
+        )?;
         latest.insert(attempt.seq, verdict);
         judged += 1;
 
@@ -871,8 +972,7 @@ fn load_attempt_response_text(
     attempt: &storage::runs::RunAttempt,
 ) -> String {
     if let Some(ref body_file) = attempt.response.body_file {
-        if let Ok(Some(text)) =
-            storage::runs::read_body_by_relative_path(engagement_dir, body_file)
+        if let Ok(Some(text)) = storage::runs::read_body_by_relative_path(engagement_dir, body_file)
         {
             return text;
         }

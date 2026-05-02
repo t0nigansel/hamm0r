@@ -349,22 +349,85 @@
 
           <form id="target-form" autocomplete="off" style="display:none">
             <input type="hidden" id="target-id">
+            <input type="hidden" id="target-request-id">
             <div class="form-grid-2">
               <div class="form-row">
                 <label for="target-name">Name</label>
                 <input id="target-name" type="text" placeholder="e.g. Acme HR Chatbot" required>
               </div>
               <div class="form-row">
-                <label for="target-url">URL</label>
-                <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
+                <label for="target-session-strategy">Session strategy</label>
+                <select id="target-session-strategy">
+                  <option value="none">None (stateless)</option>
+                  <option value="cookie">Cookie-based</option>
+                  <option value="header">Custom header</option>
+                  <option value="body_field">Body field</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-row" id="session-field-row" style="display:none">
+                <label for="target-session-field">Session field / header name</label>
+                <input id="target-session-field" type="text" placeholder="X-Conversation-Id">
+              </div>
+              <div class="form-row">
+                <label for="target-system-prompt">Target notes (optional)</label>
+                <textarea id="target-system-prompt" rows="3" placeholder="Notes about this system, auth, rate limits, test setup…"></textarea>
+              </div>
+            </div>
+
+            <div class="target-requests-panel">
+              <div class="target-requests-header">
+                <div>
+                  <div class="target-requests-title">Requests</div>
+                  <div class="target-requests-subtitle">Multiple reusable requests per target.</div>
+                </div>
+                <button type="button" id="btn-new-request" class="btn btn-ghost">+ Request</button>
+              </div>
+              <div id="target-request-list" class="target-request-list"></div>
+            </div>
+
+            <div class="request-editor-header">
+              <div>
+                <div class="target-requests-title">Request Editor</div>
+                <div class="target-requests-subtitle">Edit the selected request.</div>
+              </div>
+              <button type="button" id="btn-import-curl" class="btn btn-ghost">Import curl</button>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="target-request-name">Request name</label>
+                <input id="target-request-name" type="text" placeholder="e.g. Analyze profile request" required>
+              </div>
+              <div class="form-row">
+                <label for="target-method">Method</label>
+                <select id="target-method">
+                  <option value="GET">GET</option>
+                  <option value="POST" selected>POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
               </div>
             </div>
             <div class="form-grid-2">
               <div class="form-row">
-                <label for="target-endpoint">Endpoint type</label>
+                <label for="target-url">URL</label>
+                <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
+              </div>
+              <div class="form-row">
+                <label for="target-timeout-seconds">Timeout (seconds)</label>
+                <input id="target-timeout-seconds" type="number" min="1" step="1" value="30">
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-row">
+                <label for="target-endpoint">Adapter</label>
                 <select id="target-endpoint">
                   <option value="openai_compat">OpenAI Compatible</option>
                   <option value="custom_rest">Custom REST</option>
+                  <option value="raw_http">Raw HTTP</option>
                 </select>
               </div>
               <div class="form-row">
@@ -385,40 +448,104 @@
               <label for="target-auth-header">Auth header</label>
               <input id="target-auth-header" type="text" placeholder="Authorization (default)">
             </div>
-            <fieldset id="field-mapping-group" style="display:none">
-              <legend>Field Mapping (Custom REST)</legend>
+
+            <fieldset class="request-editor-group">
+              <legend>Headers</legend>
               <div class="form-grid-2">
                 <div class="form-row">
-                  <label for="map-request">Request field</label>
-                  <input id="map-request" type="text" placeholder="message" value="message">
+                  <label for="target-headers-mode">Header editor</label>
+                  <select id="target-headers-mode">
+                    <option value="structured">Structured</option>
+                    <option value="raw">Raw</option>
+                  </select>
                 </div>
                 <div class="form-row">
-                  <label for="map-response">Response field</label>
-                  <input id="map-response" type="text" placeholder="response" value="response">
+                  <label for="target-content-type">Content-Type hint</label>
+                  <input id="target-content-type" type="text" placeholder="application/json">
+                </div>
+              </div>
+              <div id="target-headers-structured">
+                <div id="target-header-rows" class="header-row-list"></div>
+                <button type="button" id="btn-add-header-row" class="btn btn-ghost">+ Header</button>
+              </div>
+              <div id="target-headers-raw" style="display:none">
+                <div class="form-row">
+                  <label for="target-headers-raw-text">Raw headers</label>
+                  <textarea id="target-headers-raw-text" rows="6" placeholder="Accept: application/json&#10;X-Custom: demo"></textarea>
                 </div>
               </div>
             </fieldset>
-            <div class="form-grid-2">
+
+            <fieldset class="request-editor-group">
+              <legend>Body</legend>
+              <div class="form-grid-2">
+                <div class="form-row">
+                  <label for="target-body-format">Body format</label>
+                  <select id="target-body-format">
+                    <option value="json">JSON</option>
+                    <option value="text">Text</option>
+                    <option value="form">Form</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="target-body-template-note">Prompt placeholder</label>
+                  <input id="target-body-template-note" type="text" value="{{prompt}}" readonly>
+                </div>
+              </div>
               <div class="form-row">
-                <label for="target-session-strategy">Session strategy</label>
-                <select id="target-session-strategy">
-                  <option value="none">None (stateless)</option>
-                  <option value="cookie">Cookie-based</option>
-                  <option value="header">Custom header</option>
-                  <option value="body_field">Body field</option>
-                </select>
+                <label for="target-body-text">Body content</label>
+                <textarea id="target-body-text" rows="10" placeholder='{"message":"{{prompt}}"}'></textarea>
               </div>
-              <div class="form-row" id="session-field-row" style="display:none">
-                <label for="target-session-field">Session field / header name</label>
-                <input id="target-session-field" type="text" placeholder="X-Conversation-Id">
+            </fieldset>
+
+            <fieldset class="request-editor-group">
+              <legend>Response Parsing</legend>
+              <div class="form-grid-2">
+                <div class="form-row">
+                  <label for="target-response-extract-type">Extract mode</label>
+                  <select id="target-response-extract-type">
+                    <option value="raw">Raw body</option>
+                    <option value="jsonpath">JSONPath</option>
+                    <option value="regex">Regex</option>
+                  </select>
+                </div>
+                <div class="form-row" id="target-response-extract-value-row">
+                  <label for="target-response-extract-value">Extract value</label>
+                  <input id="target-response-extract-value" type="text" placeholder="$.response">
+                </div>
               </div>
-            </div>
-            <div class="form-row">
-              <label for="target-system-prompt">System prompt (optional)</label>
-              <textarea id="target-system-prompt" rows="3" placeholder="Override the target's system prompt for testing…"></textarea>
-            </div>
+            </fieldset>
+            <fieldset class="request-editor-group">
+              <legend>Test Request</legend>
+              <div class="form-row">
+                <label for="target-test-prompt">Prompt test value (optional)</label>
+                <textarea id="target-test-prompt" rows="4" placeholder="Used for {{prompt}} during a test request."></textarea>
+              </div>
+              <div class="editor-actions">
+                <button type="button" id="btn-test-request" class="btn btn-ghost">Test Request</button>
+              </div>
+              <div id="target-test-result" class="target-test-result" style="display:none">
+                <div class="target-test-meta">
+                  <span>Status: <strong id="target-test-status">—</strong></span>
+                  <span>Duration: <strong id="target-test-duration">—</strong></span>
+                </div>
+                <div class="form-row">
+                  <label for="target-test-response-headers">Response headers</label>
+                  <textarea id="target-test-response-headers" rows="6" readonly></textarea>
+                </div>
+                <div class="form-row">
+                  <label for="target-test-response-extracted">Extracted response</label>
+                  <textarea id="target-test-response-extracted" rows="6" readonly></textarea>
+                </div>
+                <div class="form-row">
+                  <label for="target-test-response-raw">Raw response</label>
+                  <textarea id="target-test-response-raw" rows="10" readonly></textarea>
+                </div>
+              </div>
+            </fieldset>
             <div class="editor-actions">
-              <button type="submit" class="btn btn-primary">Save Target</button>
+              <button type="submit" class="btn btn-primary">Save Target + Request</button>
+              <button type="button" id="btn-delete-request" class="btn btn-ghost" style="display:none">Delete Request</button>
               <button type="button" id="btn-delete-target" class="btn btn-danger" style="display:none">Delete</button>
             </div>
           </form>
@@ -675,6 +802,9 @@
                   </thead>
                   <tbody id="runs-tbody"></tbody>
                 </table>
+                <div id="eng-live-activity" class="eng-live-activity">
+                  No live run activity yet.
+                </div>
 
                 <div id="run-results-section" style="display:none">
                   <h3 style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin:1.5rem 0 0.75rem;color:var(--text-2);">Results</h3>
@@ -683,6 +813,7 @@
                       <thead>
                         <tr>
                           <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
+                          <th class="col-wide">Request</th>
                           <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
                           <th>Latency</th>
                         </tr>
@@ -729,6 +860,10 @@
         <select id="step-session"></select>
       </div>
       <div class="form-row">
+        <label for="step-request">Request</label>
+        <select id="step-request"></select>
+      </div>
+      <div class="form-row">
         <label for="step-source-type">Prompt source</label>
         <select id="step-source-type">
           <option value="custom">Custom text</option>
@@ -766,15 +901,37 @@
   <div class="modal-content">
     <button class="modal-close" id="result-detail-close">&times;</button>
     <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Result Detail</h3>
+    <div id="detail-summary" class="detail-summary"></div>
     <div class="detail-section">
-      <strong>Prompt:</strong>
+      <strong>Request / Prompt</strong>
       <pre id="detail-prompt"></pre>
     </div>
     <div class="detail-section">
-      <strong>Response:</strong>
+      <strong>Response</strong>
       <pre id="detail-response"></pre>
     </div>
-    <div class="detail-meta" id="detail-meta"></div>
+    <div class="detail-section">
+      <strong>Run Metadata</strong>
+      <div class="detail-meta-grid" id="detail-meta"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     curl import modal
+     ================================================================ -->
+<div id="curl-import-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <button class="modal-close" id="curl-import-close">&times;</button>
+    <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Import curl</h3>
+    <div class="form-row">
+      <label for="curl-import-text">Paste curl command</label>
+      <textarea id="curl-import-text" rows="14" placeholder="curl 'https://api.example.com' -H 'Authorization: Bearer ...' --data-raw '{&quot;message&quot;:&quot;{{prompt}}&quot;}'"></textarea>
+    </div>
+    <div class="editor-actions">
+      <button type="button" id="curl-import-apply" class="btn btn-primary">Import</button>
+      <button type="button" id="curl-import-cancel" class="btn btn-ghost">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -835,7 +992,7 @@
             </div>
             <div class="wizard-row">
               <label for="wizard-new-base-url">Base URL</label>
-              <input id="wizard-new-base-url" type="url" placeholder="https://api.example.com/v1/chat/completions">
+              <input id="wizard-new-base-url" type="text" inputmode="url" placeholder="https://api.example.com/v1/chat/completions">
             </div>
           </div>
           <div class="form-grid-2">
@@ -882,6 +1039,12 @@
               <input id="wizard-new-session-field" type="text" placeholder="X-Session-Id">
             </div>
           </div>
+          <div class="form-grid-2">
+            <div class="wizard-row">
+              <label for="wizard-new-timeout">HTTP timeout (seconds)</label>
+              <input id="wizard-new-timeout" type="number" min="1" max="600" step="1" placeholder="30">
+            </div>
+          </div>
         </div>
 
         <div class="wizard-actions-inline">
@@ -904,6 +1067,7 @@
           <div id="wizard-lib-custom" class="wizard-chip-grid"></div>
         </div>
         <div class="wizard-summary-line" id="wizard-lib-counter">0 prompts selected, 0 judged</div>
+        <div id="wizard-lib-preview" class="wizard-lib-preview"></div>
       </section>
 
       <section class="wizard-step" id="wizard-step-4">
@@ -969,13 +1133,55 @@
 <div id="toast-container"></div>
 
 <!-- ================================================================
-     Activate Analyzer modal
+     Settings modal
      ================================================================ -->
 <div id="analyzer-modal" class="modal" style="display:none">
   <div class="modal-content modal-analyzer">
     <button class="modal-close" id="analyzer-modal-close">&times;</button>
-    <h3 class="modal-heading">Activate Analyz0r</h3>
-    <p class="analyzer-intro">
+    <h3 class="modal-heading">Settings</h3>
+
+    <section class="settings-section">
+      <div class="settings-section-head">
+        <h4 class="settings-section-title">Logging</h4>
+        <span class="settings-section-note">Applied after app restart</span>
+      </div>
+      <div class="settings-grid">
+        <label class="settings-toggle-row">
+          <input id="settings-logging-enabled" type="checkbox">
+          <span>
+            <strong>Write application logs</strong>
+            <small>Stores logs under <code>~/hamm0r/logs/</code>.</small>
+          </span>
+        </label>
+        <div class="settings-field">
+          <label for="settings-log-level">Log level</label>
+          <select id="settings-log-level">
+            <option value="error">error</option>
+            <option value="info">info</option>
+            <option value="debug">debug</option>
+          </select>
+        </div>
+        <label class="settings-toggle-row">
+          <input id="settings-body-logging-enabled" type="checkbox">
+          <span>
+            <strong>Log request/response bodies</strong>
+            <small>Large bodies above 500 KB are replaced by a size notice.</small>
+          </span>
+        </label>
+      </div>
+      <div class="settings-inline-note" id="settings-logging-status">
+        Logging changes are saved to <code>~/hamm0r/config.yaml</code>.
+      </div>
+      <div class="editor-actions settings-actions">
+        <button id="btn-settings-save" class="btn btn-primary">Save Logging Settings</button>
+      </div>
+    </section>
+
+    <section class="settings-section settings-section-divider">
+      <div class="settings-section-head">
+        <h4 class="settings-section-title">Analyz0r</h4>
+      </div>
+      <p class="analyzer-intro">
       The local LLM judge evaluates attack responses on-device. No data leaves your machine.
       The model (~1.9 GB) is downloaded once and stored in <code>~/hamm0r/analyzer/models/</code>.
     </p>
@@ -1006,6 +1212,10 @@
     <div class="editor-actions" style="margin-top:1.2rem">
       <button id="btn-analyzer-install" class="btn btn-primary" disabled>Download &amp; Install</button>
       <button id="btn-analyzer-uninstall" class="btn btn-danger" style="display:none">Remove Model</button>
+    </div>
+    </section>
+
+    <div class="editor-actions" style="margin-top:1.2rem">
       <button id="analyzer-modal-cancel" class="btn btn-ghost">Close</button>
     </div>
   </div>
