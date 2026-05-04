@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use storage::analyzer_install::{self, AnalyzerInstall, CURRENT_VERSION};
+use storage::HammorPaths;
 use tauri::{AppHandle, Emitter as _, State};
 use tokio::io::AsyncWriteExt as _;
 
@@ -128,12 +130,19 @@ fn bundled_manifest() -> AnalyzerManifest {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AnalyzerStatus {
-    /// `true` if at least one `.gguf` model file is present.
+    /// `true` when a valid `install.json` is present. Phase 3 will turn
+    /// this into a richer state machine; for now it's a single bool.
     pub installed: bool,
-    /// File name of the installed model (if any).
+    /// File name of the installed model (if any) — kept for the existing
+    /// UI label. Read from disk separately from install.json so the user
+    /// sees the actual file present in `models/`.
     pub model_file: Option<String>,
     /// Detected hardware class ("apple_silicon", "x86_64_avx2", "generic").
     pub hardware: String,
+    /// Variant id from install.json, when installed.
+    pub variant_id: Option<String>,
+    /// Bundle version from install.json, when installed.
+    pub bundle_version: Option<String>,
 }
 
 #[tauri::command]
@@ -141,22 +150,24 @@ pub fn get_analyzer_status(
     logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
 ) -> AnalyzerStatus {
-    let models_dir = paths.0.analyzer_models_dir();
-    let model_file = first_gguf(&models_dir);
+    let install = analyzer_install::read(&paths.0).ok().flatten();
+    let model_file = first_gguf(&paths.0.analyzer_models_dir())
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().into_owned());
     let status = AnalyzerStatus {
-        installed: model_file.is_some(),
-        model_file: model_file
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().into_owned()),
+        installed: install.is_some(),
+        model_file,
         hardware: hardware_id(detect_hardware()),
+        variant_id: install.as_ref().map(|i| i.variant_id.clone()),
+        bundle_version: install.as_ref().map(|i| i.bundle_version.clone()),
     };
     logger.0.debug(
         "analyzer-setup",
         None,
         &format!(
-            "Analyzer status checked installed={} hardware={}",
-            status.installed, status.hardware
+            "Analyzer status checked installed={} variant={:?} hardware={}",
+            status.installed, status.variant_id, status.hardware
         ),
     );
     status
@@ -233,7 +244,7 @@ pub async fn download_and_install_analyzer(
         .find(|v| v.id == variant_id)
         .ok_or_else(|| anyhow::anyhow!("unknown variant id: {variant_id}"))?;
 
-    let models_dir = paths.0.analyzer_models_dir();
+    let paths_for_task = paths.0.clone();
     let variant_id_ret = variant_id.clone();
     let logger = logger.0.clone();
 
@@ -241,15 +252,15 @@ pub async fn download_and_install_analyzer(
         logger.info(
             "analyzer-setup",
             None,
-            &format!("Analyzer download task spawned for variant_id={variant_id}"),
+            &format!("Analyzer install task spawned for variant_id={variant_id}"),
         );
-        if let Err(e) = do_download(app.clone(), models_dir, variant).await {
-            let message = format!("analyzer download failed for variant {variant_id}: {e}");
+        if let Err(e) = do_install(app.clone(), paths_for_task, variant).await {
+            let message = format!("analyzer install failed for variant {variant_id}: {e}");
             report_user_relevant_error(
                 &app,
                 &logger,
                 "analyzer-setup",
-                "analyzer-download",
+                "analyzer-install",
                 None,
                 &message,
             );
@@ -268,7 +279,7 @@ pub async fn download_and_install_analyzer(
             logger.info(
                 "analyzer-setup",
                 None,
-                &format!("Analyzer download completed for variant_id={variant_id}"),
+                &format!("Analyzer install completed for variant_id={variant_id}"),
             );
         }
     });
@@ -276,65 +287,146 @@ pub async fn download_and_install_analyzer(
     Ok(variant_id_ret)
 }
 
-/// Remove the currently installed model file (if any).
+/// Remove the entire analyzer install layout (bin/, runtime/, models/,
+/// install.json, plus any leftover staging dir). Verdicts and reports in
+/// engagement folders are untouched.
 #[tauri::command]
 pub fn uninstall_analyzer(
     logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
 ) -> Result<(), CommandError> {
-    let models_dir = paths.0.analyzer_models_dir();
-    if let Some(path) = first_gguf(&models_dir) {
-        logger.0.info(
+    uninstall_layout(&paths.0).map_err(|e| {
+        logger.0.error(
             "analyzer-setup",
             None,
-            &format!("Removing analyzer model {}", path.display()),
+            &format!("Analyzer uninstall failed: {e}"),
         );
-        std::fs::remove_file(&path)
-            .map_err(|e| anyhow::anyhow!("remove {}: {e}", path.display()))?;
-        logger
-            .0
-            .info("analyzer-setup", None, "Analyzer model removed");
-    } else {
-        logger.0.info(
-            "analyzer-setup",
-            None,
-            "Uninstall requested with no analyzer model present",
-        );
+        CommandError::from(e)
+    })?;
+    logger
+        .0
+        .info("analyzer-setup", None, "Analyzer uninstall completed");
+    Ok(())
+}
+
+fn uninstall_layout(paths: &HammorPaths) -> anyhow::Result<()> {
+    // Remove install metadata FIRST so a crash mid-cleanup leaves a
+    // "not installed" state — better to lose orphan files than to leave
+    // install.json pointing at a half-removed install.
+    analyzer_install::remove(paths)?;
+    let analyzer_dir = paths.analyzer_dir();
+    for sub in ["bin", "runtime", "models", ".staging"] {
+        let path = analyzer_dir.join(sub);
+        if path.exists() {
+            std::fs::remove_dir_all(&path)
+                .map_err(|e| anyhow::anyhow!("remove {}: {e}", path.display()))?;
+        }
     }
     Ok(())
 }
 
-// ── Download internals ────────────────────────────────────────────────────────
+// ── Install internals ─────────────────────────────────────────────────────────
 
-async fn do_download(
+/// Download the bundle, verify SHA-256, extract atomically, then write
+/// install.json. Order matters — install.json is the "is installed?"
+/// signal, so a crash before the final write leaves a "not installed"
+/// state instead of a broken install pointing at half-extracted files.
+async fn do_install(
     app: AppHandle,
-    models_dir: PathBuf,
+    paths: HammorPaths,
     variant: AnalyzerVariant,
 ) -> anyhow::Result<()> {
-    std::fs::create_dir_all(&models_dir)?;
+    let analyzer_dir = paths.analyzer_dir();
+    std::fs::create_dir_all(&analyzer_dir)?;
+    let staging = analyzer_dir.join(".staging");
 
+    // Wipe any half-baked previous attempt so we start from a clean slate.
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)
+            .map_err(|e| anyhow::anyhow!("clean staging: {e}"))?;
+    }
+    std::fs::create_dir_all(&staging)?;
+
+    // 1. Download to staging area, streaming SHA hash as we go.
+    let bundle_filename = variant
+        .bundle
+        .url
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("bundle.zip");
+    let bundle_path = staging.join(bundle_filename);
+    download_bundle(app.clone(), &variant, &bundle_path).await?;
+
+    // 2. Extract — synchronous and CPU-bound, so push into spawn_blocking.
+    let extract_dir = staging.join("extracted");
+    let bundle_path_clone = bundle_path.clone();
+    let extract_dir_clone = extract_dir.clone();
+    tokio::task::spawn_blocking(move || extract_zip(&bundle_path_clone, &extract_dir_clone))
+        .await
+        .map_err(|e| anyhow::anyhow!("extract task join: {e}"))??;
+
+    // 3. Atomically swap the install layout. Wipe any prior install first
+    //    so leftover files (different model variant, etc.) don't shadow
+    //    the new bundle.
+    uninstall_layout(&paths)?;
+    move_extracted_into_place(&extract_dir, &analyzer_dir)?;
+
+    // 4. Mark the install as complete (last — see top-of-fn comment).
+    let install = AnalyzerInstall {
+        version: CURRENT_VERSION,
+        bundle_version: variant.id.clone(),
+        installed_at: runner::run::iso_now(),
+        variant_id: variant.id.clone(),
+        model_id: variant.model_id.clone(),
+        platform: format!("{}-{}", variant.os, variant.arch),
+        entrypoint: format!(
+            "bin/{}",
+            if variant.os == "windows" {
+                "analyz0r.exe"
+            } else {
+                "analyz0r"
+            }
+        ),
+    };
+    analyzer_install::write(&paths, &install)?;
+
+    // 5. Best-effort cleanup of staging.
+    let _ = std::fs::remove_dir_all(&staging);
+
+    // 6. Emit a final "finished" event so the UI knows to refresh.
+    let _ = app.emit(
+        "analyzer-download-progress",
+        DownloadProgress {
+            variant_id: variant.id,
+            bytes_downloaded: variant.bundle.size_bytes,
+            bytes_total: variant.bundle.size_bytes,
+            percent: 100.0,
+            finished: true,
+            error: None,
+        },
+    );
+    Ok(())
+}
+
+async fn download_bundle(
+    app: AppHandle,
+    variant: &AnalyzerVariant,
+    bundle_path: &Path,
+) -> anyhow::Result<()> {
     let variant_id = variant.id.clone();
     let url = variant.bundle.url.clone();
     let expected_sha256 = variant.bundle.sha256.clone();
     let total_bytes = variant.bundle.size_bytes;
 
-    let filename = url
-        .rsplit('/')
-        .next()
-        .filter(|s| !s.is_empty())
-        .unwrap_or("bundle.zip");
-    let dest = models_dir.join(filename);
-    let tmp = models_dir.join(format!("{filename}.download"));
-
     let mut response = reqwest::get(&url)
         .await
         .map_err(|e| anyhow::anyhow!("GET {url}: {e}"))?;
-
     if !response.status().is_success() {
         return Err(anyhow::anyhow!("HTTP {} for {url}", response.status()));
     }
 
-    let mut file = tokio::fs::File::create(&tmp).await?;
+    let mut file = tokio::fs::File::create(bundle_path).await?;
     let mut hasher = Sha256::new();
     let mut downloaded: u64 = 0;
 
@@ -372,31 +464,84 @@ async fn do_download(
     // so an offline user can never silently install an unverified blob.
     let actual = format!("{:x}", hasher.finalize());
     if actual != expected_sha256 {
-        std::fs::remove_file(&tmp).ok();
+        std::fs::remove_file(bundle_path).ok();
         return Err(anyhow::anyhow!(
             "SHA256 mismatch — expected {expected_sha256}, got {actual}"
         ));
     }
+    Ok(())
+}
 
-    // Atomic replace.
-    if let Some(old) = first_gguf(&models_dir) {
-        if old != dest {
-            std::fs::remove_file(&old).ok();
+/// Extract `zip_path` into `dest`. Uses `enclosed_name` so Zip-Slip-style
+/// path-traversal entries are silently skipped instead of escaping the
+/// destination directory.
+fn extract_zip(zip_path: &Path, dest: &Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| anyhow::anyhow!("open {}: {e}", zip_path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| anyhow::anyhow!("read zip {}: {e}", zip_path.display()))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| anyhow::anyhow!("zip entry {i}: {e}"))?;
+        let Some(rel) = entry.enclosed_name() else {
+            continue;
+        };
+        let outpath = dest.join(rel);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&outpath)?;
+            continue;
+        }
+        if let Some(parent) = outpath.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut out = std::fs::File::create(&outpath)
+            .map_err(|e| anyhow::anyhow!("create {}: {e}", outpath.display()))?;
+        std::io::copy(&mut entry, &mut out)
+            .map_err(|e| anyhow::anyhow!("write {}: {e}", outpath.display()))?;
+
+        // Preserve the executable bit on unix so `bin/analyz0r` stays runnable.
+        #[cfg(unix)]
+        if let Some(mode) = entry.unix_mode() {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&outpath, std::fs::Permissions::from_mode(mode));
         }
     }
-    std::fs::rename(&tmp, &dest)?;
+    Ok(())
+}
 
-    let _ = app.emit(
-        "analyzer-download-progress",
-        DownloadProgress {
-            variant_id,
-            bytes_downloaded: downloaded,
-            bytes_total: total_bytes,
-            percent: 100.0,
-            finished: true,
-            error: None,
-        },
-    );
+/// Move every top-level entry of `extract_dir` into `analyzer_dir`. Uses
+/// `rename`, which is atomic on the same filesystem; if the rename fails
+/// because the destination already exists (race / leftover), it falls
+/// back to remove-then-rename.
+fn move_extracted_into_place(extract_dir: &Path, analyzer_dir: &Path) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(extract_dir)
+        .map_err(|e| anyhow::anyhow!("read {}: {e}", extract_dir.display()))?
+    {
+        let entry = entry?;
+        let target = analyzer_dir.join(entry.file_name());
+        if let Err(e) = std::fs::rename(entry.path(), &target) {
+            // Already exists or cross-fs — wipe target and retry.
+            if target.exists() {
+                if target.is_dir() {
+                    std::fs::remove_dir_all(&target).ok();
+                } else {
+                    std::fs::remove_file(&target).ok();
+                }
+                std::fs::rename(entry.path(), &target).map_err(|e2| {
+                    anyhow::anyhow!("rename {} -> {}: {e2}", entry.path().display(), target.display())
+                })?;
+            } else {
+                return Err(anyhow::anyhow!(
+                    "rename {} -> {}: {e}",
+                    entry.path().display(),
+                    target.display()
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -492,5 +637,114 @@ mod tests {
                 v.id
             );
         }
+    }
+
+    fn write_test_zip(zip_path: &Path) {
+        use std::io::Write as _;
+        let file = std::fs::File::create(zip_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+
+        writer.add_directory("bin/", opts).unwrap();
+        writer.start_file("bin/analyz0r", opts).unwrap();
+        writer.write_all(b"#!/bin/sh\nexit 0\n").unwrap();
+
+        writer.add_directory("models/", opts).unwrap();
+        writer.start_file("models/test.gguf", opts).unwrap();
+        writer.write_all(b"FAKE GGUF").unwrap();
+
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn extract_zip_preserves_layout_and_skips_path_traversal() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let zip_path = tmp.path().join("test.zip");
+
+        // Build a zip with a normal entry plus a Zip-Slip-style entry that
+        // tries to escape the destination — extract_zip must skip it.
+        use std::io::Write as _;
+        let file = std::fs::File::create(&zip_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("bin/inside.txt", opts).unwrap();
+        writer.write_all(b"safe").unwrap();
+        writer.start_file("../escaped.txt", opts).unwrap();
+        writer.write_all(b"BAD").unwrap();
+        writer.finish().unwrap();
+
+        let dest = tmp.path().join("out");
+        extract_zip(&zip_path, &dest).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dest.join("bin/inside.txt")).unwrap(),
+            "safe"
+        );
+        // The traversal entry must NOT have escaped to the parent.
+        assert!(!tmp.path().join("escaped.txt").exists());
+    }
+
+    #[test]
+    fn move_extracted_into_place_replaces_existing_dirs() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let analyzer = tmp.path().join("analyzer");
+        let extract = tmp.path().join("extract");
+        std::fs::create_dir_all(analyzer.join("bin")).unwrap();
+        std::fs::write(analyzer.join("bin/old"), b"old").unwrap();
+        std::fs::create_dir_all(extract.join("bin")).unwrap();
+        std::fs::write(extract.join("bin/new"), b"new").unwrap();
+
+        move_extracted_into_place(&extract, &analyzer).unwrap();
+        assert!(analyzer.join("bin/new").exists());
+        assert!(!analyzer.join("bin/old").exists()); // old wiped out
+    }
+
+    #[test]
+    fn uninstall_layout_clears_everything() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        let analyzer = paths.analyzer_dir();
+
+        // Lay down a fake install so we can prove uninstall_layout cleans it.
+        for sub in ["bin", "runtime", "models", ".staging"] {
+            let p = analyzer.join(sub);
+            std::fs::create_dir_all(&p).unwrap();
+            std::fs::write(p.join("dummy"), b"x").unwrap();
+        }
+        analyzer_install::write(
+            &paths,
+            &AnalyzerInstall {
+                version: CURRENT_VERSION,
+                bundle_version: "v".into(),
+                installed_at: "now".into(),
+                variant_id: "v".into(),
+                model_id: "m".into(),
+                platform: "p".into(),
+                entrypoint: "bin/x".into(),
+            },
+        )
+        .unwrap();
+
+        uninstall_layout(&paths).unwrap();
+
+        assert!(!analyzer.join("bin").exists());
+        assert!(!analyzer.join("runtime").exists());
+        assert!(!analyzer.join("models").exists());
+        assert!(!analyzer.join(".staging").exists());
+        assert!(analyzer_install::read(&paths).unwrap().is_none());
+    }
+
+    #[test]
+    fn write_test_zip_is_used() {
+        // Smoke-check the writer helper itself produces a valid archive.
+        let tmp = tempfile::TempDir::new().unwrap();
+        let zip_path = tmp.path().join("z.zip");
+        write_test_zip(&zip_path);
+        let dest = tmp.path().join("out");
+        extract_zip(&zip_path, &dest).unwrap();
+        assert!(dest.join("bin/analyz0r").exists());
+        assert!(dest.join("models/test.gguf").exists());
     }
 }
