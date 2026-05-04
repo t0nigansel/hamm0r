@@ -5,6 +5,7 @@ pub mod prompts;
 pub mod requests;
 pub mod runs;
 pub mod scenarios;
+pub mod secrets;
 pub mod settings;
 pub mod targets;
 pub mod types;

@@ -351,6 +351,10 @@ input, select, textarea {
 #view-scenarios.view.active,
 #view-runs.view.active {
   overflow: visible;
+  /* Keep the flex height constraint so .view-content's overflow-y:auto
+     can scroll. Without min-height:0, min-height:auto wins and the view
+     grows to fit content, bypassing the inner scroll. */
+  min-height: 0;
 }
 
 .view-layout {
@@ -1891,6 +1895,29 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
 }
 .editor-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 
+.target-editor-debug {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn-light) 70%, var(--bg-2));
+}
+.target-editor-debug-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-1);
+  margin-bottom: 0.35rem;
+}
+.target-editor-debug-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── Modal ─────────────────────────────────────────────────────────── */
 .modal {
   position: fixed;
@@ -2713,6 +2740,7 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
 }
 .run-status-badge.running   { background: var(--warn-light);    color: var(--warn);    }
 .run-status-badge.completed { background: var(--success-light); color: var(--success); }
+.run-status-badge.aborted   { background: var(--bg-3);          color: var(--text-2);  }
 .run-status-badge.stopped   { background: var(--bg-3);          color: var(--text-2);  }
 .run-status-badge.error     { background: var(--danger-bg);     color: var(--danger);  }
 
@@ -3269,4 +3297,133 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
 .analyzer-cta-inner span {
   font-size: 12px;
   color: var(--text-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Auth token (keychain-backed) controls in the Target editor
+   ═══════════════════════════════════════════════════════════════════════ */
+.auth-token-row {
+  display: block;
+}
+.auth-token-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.auth-token-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 3px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+}
+.auth-token-status[data-state="empty"] {
+  color: var(--text-2);
+}
+.auth-token-status[data-state="missing"] {
+  color: var(--danger);
+  border-color: var(--danger-dim);
+  background: var(--danger-bg);
+}
+.auth-token-status[data-state="env"] {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--warn-light);
+}
+.auth-token-status[data-state="stored"] {
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-light);
+}
+.auth-token-help {
+  display: block;
+  margin-top: var(--space-sm);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.auth-token-help code {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--bg-2);
+  border-radius: 3px;
+}
+
+/* ── Paste modal ───────────────────────────────────────────── */
+.auth-token-modal-intro {
+  margin: 0 0 var(--space-md) 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.auth-token-modal-intro code {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 1px 5px;
+  background: var(--bg-2);
+  border-radius: 3px;
+}
+.auth-token-format-examples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+}
+.auth-token-format-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  font-size: 12px;
+}
+.auth-token-format-row.good {
+  border-color: var(--success);
+  background: var(--success-light);
+}
+.auth-token-format-row.bad {
+  border-color: var(--danger-dim);
+  background: var(--danger-bg);
+}
+.auth-token-format-row.bad code {
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+  text-decoration-thickness: 1.5px;
+}
+.auth-token-format-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  min-width: 64px;
+}
+.auth-token-format-row code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.auth-token-reveal-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.auth-token-reveal-row input {
+  margin: 0;
 }

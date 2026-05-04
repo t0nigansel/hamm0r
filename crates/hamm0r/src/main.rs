@@ -4,7 +4,7 @@ mod commands;
 mod error;
 mod logger;
 
-use commands::{AnalyzerLoggerState, AppConfigState, AppPaths, LoggerState};
+use commands::{ActiveRunsState, AnalyzerLoggerState, AppConfigState, AppPaths, LoggerState};
 use logger::{new_app_session_id, AppLogger};
 use storage::types::AppConfig;
 use storage::HammorPaths;
@@ -33,11 +33,15 @@ fn main() {
             app.manage(AppConfigState(config));
             app.manage(LoggerState(logger.clone()));
             app.manage(AnalyzerLoggerState(analyzer_logger));
+            app.manage(ActiveRunsState(std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            ))));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_settings::get_app_settings,
             commands::app_settings::save_app_settings,
+            commands::log_ui_debug,
             commands::list_prompts,
             commands::list_requests,
             commands::requests::get_request,
@@ -50,6 +54,7 @@ fn main() {
             commands::targets::get_target_meta,
             commands::targets::save_target_meta,
             commands::targets::save_target,
+            commands::targets::test_target_connection,
             commands::targets::delete_target,
             commands::scenarios::list_scenarios,
             commands::scenarios::create_scenario,
@@ -63,6 +68,7 @@ fn main() {
             commands::runs::start_run,
             commands::runs::start_scenario_run,
             commands::runs::start_transient_scenario_run,
+            commands::runs::stop_run,
             commands::runs::read_run_attempts,
             commands::runs::read_response_body,
             commands::runs::get_run_diagnostics,
@@ -76,6 +82,9 @@ fn main() {
             commands::analyzer_setup::fetch_analyzer_manifest,
             commands::analyzer_setup::download_and_install_analyzer,
             commands::analyzer_setup::uninstall_analyzer,
+            commands::secrets::set_bearer_token,
+            commands::secrets::forget_bearer_token,
+            commands::secrets::bearer_token_status,
         ])
         .build(tauri::generate_context!())
         .expect("error building hamm0r");

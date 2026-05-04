@@ -38,6 +38,66 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
 
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#btn-add-header-row')) {
+      event.preventDefault();
+      addStructuredHeaderRow();
+    }
+  }, true);
+
+  document.addEventListener('submit', (event) => {
+    if (event.target && event.target.id === 'target-form') {
+      void handleTargetFormSubmit(event);
+    }
+  }, true);
+
+  function updateTargetEditorDebugStatus(message) {
+    const box = $('#target-editor-debug');
+    const status = $('#target-editor-debug-status');
+    if (!box || !status) return;
+    box.style.display = '';
+    status.textContent = message;
+  }
+
+  function describeElementForDebug(element) {
+    if (!element) return '(none)';
+    const id = element.id ? `#${element.id}` : '';
+    const classNames = typeof element.className === 'string'
+      ? element.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).map((name) => `.${name}`).join('')
+      : '';
+    return `${element.tagName?.toLowerCase() || 'unknown'}${id}${classNames}`;
+  }
+
+  function publishTargetInteractionDebug(source, event) {
+    const target = event?.target || null;
+    const button = target?.closest?.('button') || null;
+    const rectSource = button || target;
+    let pointInfo = '(unavailable)';
+    if (rectSource?.getBoundingClientRect) {
+      const rect = rectSource.getBoundingClientRect();
+      const cx = Math.max(0, Math.floor(rect.left + Math.min(rect.width / 2, Math.max(rect.width - 1, 0))));
+      const cy = Math.max(0, Math.floor(rect.top + Math.min(rect.height / 2, Math.max(rect.height - 1, 0))));
+      pointInfo = describeElementForDebug(document.elementFromPoint(cx, cy));
+    }
+
+    const visibleModals = [...$$('.modal')]
+      .filter((modal) => {
+        const style = getComputedStyle(modal);
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.pointerEvents !== 'none';
+      })
+      .map((modal) => modal.id || '(anonymous modal)');
+
+    updateTargetEditorDebugStatus(
+      [
+        `Source: ${source}`,
+        `Target: ${describeElementForDebug(target)}`,
+        `Closest button: ${describeElementForDebug(button)}`,
+        `elementFromPoint: ${pointInfo}`,
+        `Visible modals: ${visibleModals.length ? visibleModals.join(', ') : '(none)'}`,
+      ].join('\n'),
+    );
+  }
+
   function esc(str) {
     if (str == null) return '';
     const div = document.createElement('div');
@@ -731,6 +791,32 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${wizardTargetDisplayName()} · ${scenario.name}`;
   }
 
+  function wizardBuildTargetDtoForTest() {
+    if (wizardState.targetMode === 'existing') {
+      return wizardCatalog.targets.find((target) => target.id === wizardState.existingTargetId) || null;
+    }
+
+    const nt = wizardState.newTarget;
+    return {
+      id: 'wizard-connection-test',
+      name: nt.name.trim() || 'Wizard Connection Test',
+      request_ids: ['wizard-connection-test'],
+      url: nt.baseUrl.trim(),
+      endpoint_type: wizardProtocolToEndpoint(nt.protocol),
+      auth_type: wizardAuthToApi(nt.auth),
+      auth_env: nt.authEnv.trim() || null,
+      auth_header: nt.authHeader.trim() || null,
+      session_strategy: nt.sessionHandling,
+      session_field: nt.sessionField.trim() || null,
+      request_field: nt.protocol === 'openai_compat' ? null : 'prompt',
+      response_field: nt.protocol === 'openai_compat' ? null : 'response',
+      timeout_seconds: nt.timeoutSeconds || 30,
+      notes: nt.protocol === 'anthropic'
+        ? 'Wizard protocol anthropic mapped to custom_rest adapter.'
+        : null,
+    };
+  }
+
   async function loadWizardCatalog() {
     const [targetsRes, promptsRes] = await Promise.allSettled([
       API.call('list_targets', {}),
@@ -816,7 +902,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const note = $('#wizard-test-status');
     note.textContent = wizardState.tested.message;
     note.classList.remove('ok', 'error');
-    note.classList.add(wizardState.tested.ok ? 'ok' : (wizardState.tested.message.includes('failed') ? 'error' : ''));
+    const noteStateClass = wizardState.tested.ok
+      ? 'ok'
+      : (wizardState.tested.message.includes('failed') ? 'error' : null);
+    if (noteStateClass) {
+      note.classList.add(noteStateClass);
+    }
   }
 
   function renderWizardStep2() {
@@ -1020,7 +1111,9 @@ document.addEventListener('DOMContentLoaded', () => {
     persistWizardState();
   }
 
-  function validateWizardTargetStep() {
+  async function validateWizardTargetStep() {
+    const testButton = $('#wizard-test-connection');
+
     if (wizardState.targetMode === 'existing') {
       if (!wizardState.existingTargetId) {
         wizardState.tested = { ok: false, message: 'Connection test failed: pick an existing target first.' };
@@ -1028,44 +1121,75 @@ document.addEventListener('DOMContentLoaded', () => {
         renderWizard();
         return false;
       }
-      wizardState.tested = { ok: true, message: 'Connection test passed: existing target configuration looks valid.' };
-      persistWizardState();
-      renderWizard();
-      return true;
     }
 
     const target = wizardState.newTarget;
-    if (!target.name.trim()) {
+    if (wizardState.targetMode === 'new' && !target.name.trim()) {
       wizardState.tested = { ok: false, message: 'Connection test failed: target name is required.' };
       persistWizardState();
       renderWizard();
       return false;
     }
-    try {
-      // eslint-disable-next-line no-new
-      new URL(target.baseUrl);
-    } catch (_err) {
-      wizardState.tested = { ok: false, message: 'Connection test failed: base URL is invalid.' };
+    if (wizardState.targetMode === 'new') {
+      try {
+        // eslint-disable-next-line no-new
+        new URL(target.baseUrl);
+      } catch (_err) {
+        wizardState.tested = { ok: false, message: 'Connection test failed: base URL is invalid.' };
+        persistWizardState();
+        renderWizard();
+        return false;
+      }
+      if (target.auth !== 'none' && !target.authEnv.trim()) {
+        wizardState.tested = { ok: false, message: 'Connection test failed: auth env var is required.' };
+        persistWizardState();
+        renderWizard();
+        return false;
+      }
+      if (target.auth === 'custom_header' && !target.authHeader.trim()) {
+        wizardState.tested = { ok: false, message: 'Connection test failed: custom header name is required.' };
+        persistWizardState();
+        renderWizard();
+        return false;
+      }
+    }
+
+    const dto = wizardBuildTargetDtoForTest();
+    if (!dto) {
+      wizardState.tested = { ok: false, message: 'Connection test failed: target configuration could not be built.' };
       persistWizardState();
       renderWizard();
       return false;
     }
-    if (target.auth !== 'none' && !target.authEnv.trim()) {
-      wizardState.tested = { ok: false, message: 'Connection test failed: auth env var is required.' };
-      persistWizardState();
-      renderWizard();
-      return false;
-    }
-    if (target.auth === 'custom_header' && !target.authHeader.trim()) {
-      wizardState.tested = { ok: false, message: 'Connection test failed: custom header name is required.' };
-      persistWizardState();
-      renderWizard();
-      return false;
-    }
-    wizardState.tested = { ok: true, message: 'Connection test passed: new target configuration looks valid.' };
+
+    wizardState.tested = { ok: false, message: 'Running connection test…' };
     persistWizardState();
     renderWizard();
-    return true;
+
+    if (testButton) testButton.disabled = true;
+    try {
+      const result = await API.call('test_target_connection', {
+        dto,
+        prompt_text: 'connection test',
+      });
+      wizardState.tested = {
+        ok: !!result?.ok,
+        message: result?.message || 'Connection test finished.',
+      };
+      persistWizardState();
+      renderWizard();
+      return !!result?.ok;
+    } catch (err) {
+      wizardState.tested = {
+        ok: false,
+        message: `Connection test failed: ${err.message}`,
+      };
+      persistWizardState();
+      renderWizard();
+      return false;
+    } finally {
+      if (testButton) testButton.disabled = false;
+    }
   }
 
   function wizardCanContinueFromStep() {
@@ -2579,6 +2703,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return { type: 'raw' };
   }
 
+  function requestAdapterToWireValue(adapter) {
+    if (adapter === 'openai_compat') return 'open-ai-compat';
+    if (adapter === 'raw_http') return 'raw-http';
+    return 'custom-rest';
+  }
+
   function buildRequestFromDraft(draft) {
     const headers = draft.headers_mode === 'raw'
       ? headersRowsToObject(rawHeadersToRows(draft.raw_headers))
@@ -2616,8 +2746,25 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       response: { extract: extractConfigToRequest(draft) },
       timeout_seconds: Number(draft.timeout_seconds || 30),
-      adapter: draft.endpoint_type,
+      adapter: requestAdapterToWireValue(draft.endpoint_type),
     };
+  }
+
+  function buildRequestFromDraftOrThrow(draft, options = {}) {
+    const requestLabel = draft.name || draft.id || 'request';
+    try {
+      return buildRequestFromDraft(draft);
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      const format = draft.body_format || 'json';
+      if (format === 'json') {
+        if (options.focusBody !== false) {
+          $('#target-body-text').focus();
+        }
+        throw new Error(`Request "${requestLabel}" has invalid JSON body content: ${message}`);
+      }
+      throw new Error(`Request "${requestLabel}" could not be prepared: ${message}`);
+    }
   }
 
   function extractConfigToDraft(extract) {
@@ -2681,6 +2828,125 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = $('#target-auth-type').value;
     $('#auth-value-row').style.display = v === 'none' ? 'none' : '';
     $('#auth-header-row').style.display = v === 'api_key' ? '' : 'none';
+    // Keychain-backed token UI is only shown for single-secret auth modes.
+    // Basic auth uses two env vars (user + pass) and is env-var-only for now.
+    const tokenRowVisible = v === 'bearer' || v === 'api_key';
+    $('#auth-token-row').style.display = tokenRowVisible ? '' : 'none';
+    if (tokenRowVisible) refreshAuthTokenStatus();
+  }
+
+  let _authTokenStatusDebounce = null;
+
+  async function refreshAuthTokenStatus() {
+    const statusEl = $('#auth-token-status');
+    const setBtn = $('#btn-auth-token-set');
+    const forgetBtn = $('#btn-auth-token-forget');
+    const varName = $('#target-auth-value').value.trim();
+
+    if (!varName) {
+      statusEl.dataset.state = 'empty';
+      statusEl.textContent = 'Enter an env var name above';
+      setBtn.disabled = true;
+      forgetBtn.style.display = 'none';
+      return;
+    }
+    setBtn.disabled = false;
+    setBtn.title = '';
+    statusEl.dataset.state = 'empty';
+    statusEl.textContent = 'Checking…';
+
+    try {
+      const status = await API.call('bearer_token_status', { var: varName });
+
+      // Keychain backend itself unreachable (typical on WSL/headless Linux
+      // without a Secret Service daemon). Force the env-var-only path.
+      if (status.keychain_available === false) {
+        if (status.env_var_set) {
+          statusEl.dataset.state = 'env';
+          statusEl.textContent = `Using env var $${varName} — keychain unavailable here`;
+        } else {
+          statusEl.dataset.state = 'missing';
+          statusEl.textContent = `Keychain unavailable — export $${varName} in your shell`;
+        }
+        setBtn.disabled = true;
+        setBtn.title = 'Keychain backend not reachable in this environment (e.g. WSL without Secret Service). Use the env var instead.';
+        forgetBtn.style.display = 'none';
+        return;
+      }
+
+      if (status.stored_in_keychain) {
+        statusEl.dataset.state = 'stored';
+        statusEl.textContent = status.env_var_set
+          ? 'Stored in keychain (env var also set — keychain wins)'
+          : 'Stored in keychain';
+        forgetBtn.style.display = '';
+      } else if (status.env_var_set) {
+        statusEl.dataset.state = 'env';
+        statusEl.textContent = `Using env var $${varName}`;
+        forgetBtn.style.display = 'none';
+      } else {
+        statusEl.dataset.state = 'missing';
+        statusEl.textContent = 'Not set — runs will fail';
+        forgetBtn.style.display = 'none';
+      }
+    } catch (err) {
+      statusEl.dataset.state = 'missing';
+      statusEl.textContent = 'Status check failed';
+      forgetBtn.style.display = 'none';
+      console.error('bearer_token_status', err);
+    }
+  }
+
+  function openAuthTokenModal() {
+    const varName = $('#target-auth-value').value.trim();
+    if (!varName) {
+      toast('Enter an env var name first', 'error');
+      return;
+    }
+    $('#auth-token-modal-var').textContent = varName;
+    const input = $('#auth-token-input');
+    input.value = '';
+    input.type = 'password';
+    $('#auth-token-reveal').checked = false;
+    $('#auth-token-modal').style.display = 'flex';
+    setTimeout(() => input.focus(), 0);
+  }
+
+  function closeAuthTokenModal() {
+    $('#auth-token-input').value = '';
+    $('#auth-token-modal').style.display = 'none';
+  }
+
+  async function saveAuthTokenFromModal() {
+    const varName = $('#auth-token-modal-var').textContent.trim();
+    const input = $('#auth-token-input');
+    const token = input.value;
+    if (!varName || !token) {
+      toast('Token cannot be empty', 'error');
+      return;
+    }
+    try {
+      await API.call('set_bearer_token', { var: varName, token });
+      input.value = '';
+      closeAuthTokenModal();
+      toast(`Token saved to keychain for ${varName}`, 'success');
+      refreshAuthTokenStatus();
+    } catch (err) {
+      toast(err.message || 'Failed to save token', 'error');
+    }
+  }
+
+  async function forgetAuthToken() {
+    const varName = $('#target-auth-value').value.trim();
+    if (!varName) return;
+    if (!confirm(`Remove the keychain entry for ${varName}?`)) return;
+    try {
+      await API.call('forget_bearer_token', { var: varName });
+      toast(`Token removed from keychain for ${varName}`, 'success');
+      refreshAuthTokenStatus();
+    } catch (err) {
+      toast(err.message || 'Failed to remove token', 'error');
+    }
   }
 
   function updateTargetEndpointUI() {
@@ -2739,16 +3005,241 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function collectHeaderRowsFromDom() {
-    return $$('#target-header-rows .header-row-item').map((row) => ({
+    return Array.from($$('#target-header-rows .header-row-item')).map((row) => ({
       key: row.querySelector('.target-header-key')?.value || '',
       value: row.querySelector('.target-header-value')?.value || '',
     }));
   }
 
+  function logTargetEditorDebug(event, fields = {}) {
+    const safeFields = Object.fromEntries(
+      Object.entries(fields)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => [key, String(value)]),
+    );
+    console.debug('[target-editor]', event, safeFields);
+    API.call('log_ui_debug', {
+      component: 'target-editor',
+      event,
+      fields: safeFields,
+    }).catch(() => {});
+  }
+
+  function addStructuredHeaderRow() {
+    syncCurrentRequestDraftFromForm();
+    const draft = ensureCurrentRequestDraft();
+    logTargetEditorDebug('add-header-click', {
+      target_id: $('#target-id')?.value.trim() || targetEditorState.targetId || '',
+      request_id: draft?.id || '',
+      request_count: targetEditorState.requests.length,
+      headers_mode: draft?.headers_mode || '',
+      header_rows_before: (draft?.headers || []).length,
+    });
+    if (!draft) {
+      toast('No request selected', 'error');
+      return;
+    }
+
+    const nextRows = draft.headers_mode === 'raw'
+      ? rawHeadersToRows(draft.raw_headers)
+      : (draft.headers || [{ key: '', value: '' }]);
+
+    draft.headers_mode = 'structured';
+    draft.headers = [...nextRows, { key: '', value: '' }];
+    draft.raw_headers = headersObjectToRaw(headersRowsToObject(draft.headers));
+
+    populateRequestEditor(draft);
+    logTargetEditorDebug('add-header-rendered', {
+      request_id: draft.id,
+      header_rows_after: (draft.headers || []).length,
+    });
+
+    const keys = $$('#target-header-rows .target-header-key');
+    const lastKey = keys[keys.length - 1];
+    if (lastKey) {
+      lastKey.focus();
+    }
+  }
+
+  function ensureCurrentRequestDraft() {
+    const targetName = $('#target-name')?.value.trim() || '';
+    const existingTargetId = $('#target-id')?.value.trim() || targetEditorState.targetId || '';
+    let currentId =
+      $('#target-request-id')?.value.trim() ||
+      targetEditorState.selectedRequestId ||
+      targetEditorState.requests[0]?.id ||
+      '';
+
+    if (!currentId) {
+      currentId = existingTargetId || slugifyEntityName(targetName || 'request', 'request');
+    }
+
+    let draft = targetEditorState.requests.find(r => r.id === currentId);
+    if (!draft) {
+      logTargetEditorDebug('ensure-current-request-create', {
+        current_id: currentId,
+        existing_target_id: existingTargetId,
+        selected_request_id: targetEditorState.selectedRequestId || '',
+        request_count_before: targetEditorState.requests.length,
+      });
+      draft = blankRequestDraft(existingTargetId, targetName);
+      draft.id = currentId;
+      draft.name = $('#target-request-name')?.value.trim() || draft.name;
+      draft.method = $('#target-method')?.value || draft.method;
+      draft.url = $('#target-url')?.value.trim() || draft.url;
+      draft.endpoint_type = $('#target-endpoint')?.value || draft.endpoint_type;
+      draft.auth_type = $('#target-auth-type')?.value || draft.auth_type;
+      draft.auth_env = $('#target-auth-value')?.value.trim() || draft.auth_env;
+      draft.auth_header = $('#target-auth-header')?.value.trim() || draft.auth_header;
+      draft.headers_mode = $('#target-headers-mode')?.value || draft.headers_mode;
+      draft.content_type_hint = $('#target-content-type')?.value.trim() || draft.content_type_hint;
+      draft.raw_headers = $('#target-headers-raw-text')?.value || draft.raw_headers;
+      draft.body_format = $('#target-body-format')?.value || draft.body_format;
+      draft.body_text = $('#target-body-text')?.value || draft.body_text;
+      draft.response_extract_type = $('#target-response-extract-type')?.value || draft.response_extract_type;
+      draft.response_extract_value = $('#target-response-extract-value')?.value.trim() || draft.response_extract_value;
+      draft.timeout_seconds = Number($('#target-timeout-seconds')?.value || draft.timeout_seconds || 30);
+      targetEditorState.requests.push(draft);
+      logTargetEditorDebug('ensure-current-request-created', {
+        draft_id: draft.id,
+        request_count_after: targetEditorState.requests.length,
+      });
+    }
+
+    targetEditorState.selectedRequestId = draft.id;
+    $('#target-request-id').value = draft.id;
+    return draft;
+  }
+
+  async function handleTargetFormSubmit(e) {
+    e.preventDefault();
+    publishTargetInteractionDebug('target-form submit', e);
+    syncCurrentRequestDraftFromForm();
+    ensureCurrentRequestDraft();
+
+    const targetName = $('#target-name').value.trim();
+    const existingId = $('#target-id').value.trim();
+    const targetId = existingId || slugifyEntityName(targetName || 'target', 'target');
+    $('#target-id').value = targetId;
+    targetEditorState.targetId = targetId;
+
+    const metaDto = {
+      id: targetId,
+      name: targetName,
+      request_ids: [],
+      session_strategy: $('#target-session-strategy').value,
+      session_field: $('#target-session-field').value.trim() || null,
+      notes: $('#target-system-prompt').value.trim() || null,
+    };
+
+    try {
+      updateTargetEditorDebugStatus('Save step: validating target and request data…');
+      logTargetEditorDebug('save-start', {
+        target_id: targetId,
+        selected_request_id: targetEditorState.selectedRequestId || '',
+        request_count: targetEditorState.requests.length,
+        target_name_len: targetName.length,
+      });
+      validateTargetEditorBeforeSave(targetName);
+      logTargetEditorDebug('save-validated', {
+        target_id: targetId,
+        selected_request_id: targetEditorState.selectedRequestId || '',
+      });
+
+      const requestsToSave = targetEditorState.requests.map((draft) => ({
+        draft,
+        request: buildRequestFromDraftOrThrow(draft),
+      }));
+      updateTargetEditorDebugStatus(`Save step: built ${requestsToSave.length} request payload(s). Saving target metadata…`);
+      logTargetEditorDebug('save-built-requests', {
+        target_id: targetId,
+        request_ids: requestsToSave.map((entry) => entry.request.id).join(','),
+        body_lengths: requestsToSave
+          .map((entry) => `${entry.request.id}:${JSON.stringify(entry.request.body?.content ?? '').length}`)
+          .join(','),
+      });
+      metaDto.request_ids = requestsToSave.map((entry) => entry.request.id);
+
+      await API.call('save_target_meta', metaDto);
+      updateTargetEditorDebugStatus('Save step: target metadata saved. Saving requests…');
+      logTargetEditorDebug('save-target-meta-ok', {
+        target_id: targetId,
+        request_ids: metaDto.request_ids.join(','),
+      });
+
+      for (const entry of requestsToSave) {
+        updateTargetEditorDebugStatus(`Save step: saving request "${entry.request.id}"…`);
+        logTargetEditorDebug('save-request-start', {
+          target_id: targetId,
+          request_id: entry.request.id,
+          url_len: (entry.request.url || '').length,
+          method: entry.request.method,
+        });
+        await API.call('save_request', { target_id: targetId, request: entry.request });
+        logTargetEditorDebug('save-request-ok', {
+          target_id: targetId,
+          request_id: entry.request.id,
+        });
+      }
+
+      toast('Target saved', 'success');
+      updateTargetEditorDebugStatus(`Save finished: target "${targetId}" saved successfully.`);
+      logTargetEditorDebug('save-finished', {
+        target_id: targetId,
+        request_count: requestsToSave.length,
+      });
+      await loadTargetList();
+      await openTargetEditor(targetId);
+    } catch (err) {
+      updateTargetEditorDebugStatus(`Save failed: ${err.message || String(err)}`);
+      logTargetEditorDebug('save-error', {
+        target_id: targetId,
+        selected_request_id: targetEditorState.selectedRequestId || '',
+        error: err.message || String(err),
+      });
+      toast(err.message, 'error');
+    }
+  }
+
+  function validateTargetEditorBeforeSave(targetName) {
+    if (!targetName) {
+      $('#target-name').focus();
+      throw new Error('Target name is required');
+    }
+
+    if (!targetEditorState.requests.length) {
+      throw new Error('Add at least one request before saving');
+    }
+
+    const selectedRequest = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId)
+      || targetEditorState.requests[0];
+
+    if (!selectedRequest) {
+      throw new Error('No request selected');
+    }
+
+    const requestName = String(selectedRequest.name || '').trim();
+    if (!requestName) {
+      $('#target-request-name').focus();
+      throw new Error('Request name is required');
+    }
+
+    const requestUrl = String(selectedRequest.url || '').trim();
+    if (!requestUrl) {
+      $('#target-url').focus();
+      throw new Error('Request URL is required');
+    }
+
+    try {
+      new URL(requestUrl);
+    } catch (_err) {
+      $('#target-url').focus();
+      throw new Error('Request URL must be a valid absolute URL');
+    }
+  }
+
   function syncCurrentRequestDraftFromForm() {
-    const currentId = $('#target-request-id').value.trim();
-    if (!currentId) return;
-    const draft = targetEditorState.requests.find(r => r.id === currentId);
+    const draft = ensureCurrentRequestDraft();
     if (!draft) return;
     draft.name = $('#target-request-name').value.trim() || draft.name;
     draft.method = $('#target-method').value;
@@ -2855,6 +3346,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   $('#target-auth-type').addEventListener('change', updateTargetAuthUI);
+  $('#target-auth-value').addEventListener('input', () => {
+    clearTimeout(_authTokenStatusDebounce);
+    _authTokenStatusDebounce = setTimeout(refreshAuthTokenStatus, 250);
+  });
+  $('#btn-auth-token-set').addEventListener('click', openAuthTokenModal);
+  $('#btn-auth-token-forget').addEventListener('click', forgetAuthToken);
+  $('#auth-token-modal-close').addEventListener('click', closeAuthTokenModal);
+  $('#auth-token-cancel').addEventListener('click', closeAuthTokenModal);
+  $('#auth-token-save').addEventListener('click', saveAuthTokenFromModal);
+  $('#auth-token-reveal').addEventListener('change', (e) => {
+    $('#auth-token-input').type = e.target.checked ? 'text' : 'password';
+  });
+  $('#auth-token-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveAuthTokenFromModal();
+    }
+  });
   $('#target-endpoint').addEventListener('change', updateTargetEndpointUI);
   $('#target-session-strategy').addEventListener('change', updateTargetSessionUI);
   $('#target-headers-mode').addEventListener('change', () => {
@@ -2868,11 +3377,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('#target-body-format').addEventListener('change', updateTargetEndpointUI);
   $('#target-response-extract-type').addEventListener('change', updateTargetResponseExtractUI);
-  $('#btn-add-header-row').addEventListener('click', () => {
-    const nextRows = collectHeaderRowsFromDom();
-    nextRows.push({ key: '', value: '' });
-    renderHeaderRows(nextRows);
-  });
   $('#btn-import-curl').addEventListener('click', () => {
     $('#curl-import-text').value = '';
     $('#curl-import-modal').style.display = 'flex';
@@ -2911,8 +3415,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
+      const request = buildRequestFromDraftOrThrow(draft);
       const result = await API.call('test_request', {
-        request: buildRequestFromDraft(draft),
+        request,
         session_strategy: $('#target-session-strategy').value,
         session_field: $('#target-session-field').value.trim() || null,
         prompt_text: $('#target-test-prompt').value,
@@ -2965,6 +3470,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#target-id').value = '';
     $('#target-request-id').value = requestDraft.id;
     $('#target-form').style.display = '';
+    updateTargetEditorDebugStatus('Waiting for interaction…');
     $('#btn-delete-target').style.display = 'none';
     $('#target-welcome').style.display = 'none';
     $('#target-content').style.display = '';
@@ -3004,6 +3510,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateTargetSessionUI();
 
       $('#target-form').style.display = '';
+      updateTargetEditorDebugStatus('Loaded target editor. Waiting for interaction…');
       $('#btn-delete-target').style.display = '';
       $('#target-welcome').style.display = 'none';
       $('#target-content').style.display = '';
@@ -3023,6 +3530,20 @@ document.addEventListener('DOMContentLoaded', () => {
     populateRequestEditor(draft);
     renderTargetRequestList();
   });
+
+  $('#target-form').addEventListener('click', (event) => {
+    publishTargetInteractionDebug('target-form click', event);
+  }, true);
+
+  $('#btn-save-target').addEventListener('click', (event) => {
+    event.preventDefault();
+    publishTargetInteractionDebug('save button click', event);
+    void handleTargetFormSubmit(event);
+  }, true);
+
+  $('#btn-add-header-row').addEventListener('click', (event) => {
+    publishTargetInteractionDebug('add-header button click', event);
+  }, true);
 
   $('#btn-delete-request').addEventListener('click', async () => {
     const requestId = $('#target-request-id').value.trim();
@@ -3064,38 +3585,6 @@ document.addEventListener('DOMContentLoaded', () => {
         wb.activeTargetId = null;
         loadWorkbenchTargets();
       }
-    } catch (err) { toast(err.message, 'error'); }
-  });
-
-  $('#target-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    syncCurrentRequestDraftFromForm();
-
-    const targetName = $('#target-name').value.trim();
-    const existingId = $('#target-id').value.trim();
-    const targetId = existingId || slugifyEntityName(targetName || 'target', 'target');
-    $('#target-id').value = targetId;
-    targetEditorState.targetId = targetId;
-
-    const metaDto = {
-      id: targetId,
-      name: targetName,
-      request_ids: targetEditorState.requests.map(r => r.id),
-      session_strategy: $('#target-session-strategy').value,
-      session_field: $('#target-session-field').value.trim() || null,
-      notes: $('#target-system-prompt').value.trim() || null,
-    };
-
-    try {
-      await API.call('save_target_meta', metaDto);
-
-      for (const draft of targetEditorState.requests) {
-        await API.call('save_request', { target_id: targetId, request: buildRequestFromDraft(draft) });
-      }
-
-      toast('Target saved', 'success');
-      await loadTargetList();
-      await openTargetEditor(targetId);
     } catch (err) { toast(err.message, 'error'); }
   });
 
@@ -3716,8 +4205,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#btn-stop-scenario').addEventListener('click', async () => {
     try {
-      await API.call('stop_run', {});
-      toast('Stop requested', 'info');
+      if (!currentRunId) {
+        toast('No scenario run is active right now', 'info');
+        return;
+      }
+      const result = await API.call('stop_run', { run_id: currentRunId });
+      toast(result?.stopped ? 'Stop requested' : 'Run is no longer active', 'info');
     } catch (err) { toast(err.message, 'error'); }
   });
 
@@ -3956,6 +4449,17 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#eng-detail-status').textContent = run?.status || '—';
     $('#eng-detail-start').textContent = formatEngagementDateTime(run?.started_at || '');
     $('#eng-detail-end').textContent = formatEngagementDateTime(endAt);
+    updateEngagementActionButtons(run);
+  }
+
+  function updateEngagementActionButtons(run = null) {
+    const rerunBtn = $('#btn-eng-rerun');
+    const stopBtn = $('#btn-eng-stop');
+    const selectedRun = run || engagementDetail.runs.find((item) => item.id === engagementDetail.activeRunId) || null;
+    const runIsRunning = String(selectedRun?.status || '').toLowerCase() === 'running';
+
+    if (rerunBtn) rerunBtn.disabled = !engagementDetail.slug || !engagementDetail.activeRunId || runIsRunning;
+    if (stopBtn) stopBtn.disabled = !engagementDetail.slug || !engagementDetail.activeRunId || !runIsRunning;
   }
 
   function highlightActiveEngagementCard(slug) {
@@ -3968,6 +4472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#runs-empty').textContent = message;
     $('#runs-empty').style.display = '';
     $('#eng-detail').style.display = 'none';
+    updateEngagementActionButtons(null);
   }
 
   async function openEngagementDetail(eng, { syncRoute = true, selectRunId = null } = {}) {
@@ -4086,6 +4591,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const isRunsViewActive = $('#view-runs').classList.contains('active');
+    updateEngagementActionButtons();
     if (!isRunsViewActive) return;
     if (!engagementDetail.activeRunId || engagementDetail.activeRunId !== runId) return;
     if (!engagementDetail.slug) return;
@@ -4334,6 +4840,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadRunResults(chosen.id, { engagementSlug, switchToResultsTab: false });
       }
       renderLiveActivity();
+      updateEngagementActionButtons();
       startEngagementProgressPoll(engagementSlug);
     } catch (err) {
       toast(err.message, 'error');
@@ -4415,6 +4922,7 @@ document.addEventListener('DOMContentLoaded', () => {
       updateEngagementHeader(runSummary, results);
       renderEngagementTimeline(results);
       renderEngagementReport(results, runSummary);
+      updateEngagementActionButtons(runSummary);
       startEngagementResultsPoll(engagementSlug, runId);
 
       if (switchToResultsTab) setEngagementDetailTab('results');
@@ -4519,6 +5027,40 @@ document.addEventListener('DOMContentLoaded', () => {
       toast(err.message, 'error');
     } finally {
       btn.disabled = false;
+    }
+  });
+
+  $('#btn-eng-stop')?.addEventListener('click', async () => {
+    const runId = engagementDetail.activeRunId;
+    if (!engagementDetail.slug || !runId) {
+      toast('Select a running run first', 'info');
+      return;
+    }
+
+    const selectedRun = (engagementDetail.runs || []).find((run) => run.id === runId);
+    if (String(selectedRun?.status || '').toLowerCase() !== 'running') {
+      toast('The selected run is no longer running', 'info');
+      updateEngagementActionButtons(selectedRun || null);
+      return;
+    }
+
+    const btn = $('#btn-eng-stop');
+    btn.disabled = true;
+    try {
+      const result = await API.call('stop_run', {
+        engagement_slug: engagementDetail.slug,
+        run_id: runId,
+      });
+      toast(result?.stopped ? `Stop requested for ${runId}` : `${runId} is no longer active`, 'info');
+      await loadRuns({
+        engagementSlug: engagementDetail.slug,
+        autoSelectFirst: false,
+        preferredRunId: runId,
+      });
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      updateEngagementActionButtons();
     }
   });
 
@@ -4701,7 +5243,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 // Analyzer activation flow
 // ============================================================
-(function initAnalyzerUI() {
+function initAnalyzerUI() {
   // Hardware class label lookup
   const HW_LABELS = {
     apple_silicon: 'Apple Silicon (Metal)',
@@ -4944,4 +5486,4 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAnalyzerCta();
     loadLoggingSettings().catch(() => {});
   }
-});
+}

@@ -9,6 +9,7 @@ use tauri::State;
 
 use super::{AppConfigState, AppPaths, LoggerState};
 use crate::error::CommandError;
+use storage::types::AppConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestRecordDto {
@@ -24,6 +25,59 @@ pub struct TestRequestResultDto {
     pub raw_response_body: String,
     pub extracted_response_body: Option<String>,
     pub duration_ms: u64,
+}
+
+pub(crate) async fn run_test_request(
+    config: &AppConfig,
+    logger: &crate::logger::AppLogger,
+    request: Request,
+    session_strategy: String,
+    session_field: Option<String>,
+    prompt_text: Option<String>,
+) -> Result<TestRequestResultDto, CommandError> {
+    let strategy = parse_session_strategy(&session_strategy, session_field);
+    let mut session_manager = SessionManager::new(strategy.clone(), request.timeout_seconds);
+    let client = session_manager
+        .client_for_with_timeout("test", request.timeout_seconds)
+        .map_err(anyhow::Error::from)?;
+    let payload = prompt_text.unwrap_or_default();
+
+    logger.info(
+        "request-test",
+        None,
+        &format!(
+            "Test request started method={} url={} adapter={:?}",
+            request.method, request.url, request.adapter
+        ),
+    );
+
+    let result = execute_with_session(client, &request, &payload, &strategy, "test")
+        .await
+        .map_err(|e| {
+            logger.error("request-test", None, &format!("Test request failed: {e}"));
+            anyhow::anyhow!(e)
+        })?;
+
+    let raw_response_body = String::from_utf8_lossy(&result.body_bytes).into_owned();
+
+    log_test_request(
+        logger,
+        &request,
+        &result.response_headers,
+        result.status,
+        result.duration_ms,
+        result.extracted.as_deref(),
+        &raw_response_body,
+        config.logging.body_logging_enabled,
+    );
+
+    Ok(TestRequestResultDto {
+        status: result.status,
+        response_headers: result.response_headers,
+        raw_response_body,
+        extracted_response_body: result.extracted,
+        duration_ms: result.duration_ms,
+    })
 }
 
 #[tauri::command]
@@ -138,51 +192,15 @@ pub async fn test_request(
     session_field: Option<String>,
     prompt_text: Option<String>,
 ) -> Result<TestRequestResultDto, CommandError> {
-    let strategy = parse_session_strategy(&session_strategy, session_field);
-    let mut session_manager = SessionManager::new(strategy.clone(), request.timeout_seconds);
-    let client = session_manager
-        .client_for_with_timeout("test", request.timeout_seconds)
-        .map_err(anyhow::Error::from)?;
-    let payload = prompt_text.unwrap_or_default();
-
-    logger.0.info(
-        "request-test",
-        None,
-        &format!(
-            "Test request started method={} url={} adapter={:?}",
-            request.method, request.url, request.adapter
-        ),
-    );
-
-    let result = execute_with_session(client, &request, &payload, &strategy, "test")
-        .await
-        .map_err(|e| {
-            logger
-                .0
-                .error("request-test", None, &format!("Test request failed: {e}"));
-            anyhow::anyhow!(e)
-        })?;
-
-    let raw_response_body = String::from_utf8_lossy(&result.body_bytes).into_owned();
-
-    log_test_request(
+    run_test_request(
+        &config_state.0,
         &logger.0,
-        &request,
-        &result.response_headers,
-        result.status,
-        result.duration_ms,
-        result.extracted.as_deref(),
-        &raw_response_body,
-        config_state.0.logging.body_logging_enabled,
-    );
-
-    Ok(TestRequestResultDto {
-        status: result.status,
-        response_headers: result.response_headers,
-        raw_response_body,
-        extracted_response_body: result.extracted,
-        duration_ms: result.duration_ms,
-    })
+        request,
+        session_strategy,
+        session_field,
+        prompt_text,
+    )
+    .await
 }
 
 fn normalized_request_ids(target: &storage::types::Target) -> Vec<String> {
@@ -204,7 +222,7 @@ fn normalized_request_ids(target: &storage::types::Target) -> Vec<String> {
     ids
 }
 
-fn parse_session_strategy(strategy: &str, field: Option<String>) -> SessionStrategy {
+pub(crate) fn parse_session_strategy(strategy: &str, field: Option<String>) -> SessionStrategy {
     match strategy {
         "cookie" => SessionStrategy::Cookie,
         "header" => SessionStrategy::Header {
@@ -231,7 +249,10 @@ fn log_test_request(
         "Test request completed".to_owned(),
         format!("request.method={}", request.method),
         format!("request.url={}", request.url),
-        format!("request.headers={}", format_headers(&request_headers_for_log(request))),
+        format!(
+            "request.headers={}",
+            format_headers(&request_headers_for_log(request))
+        ),
         format!("response.status={status}"),
         format!("response.headers={}", format_headers(response_headers)),
         format!("duration_ms={duration_ms}"),
@@ -315,15 +336,20 @@ fn limit_body_for_log(body: &str) -> String {
     if bytes.len() <= MAX_LOG_BODY_BYTES {
         return body.to_owned();
     }
-    format!("Won't log the payload since the size is {:.1}kb", bytes.len() as f64 / 1024.0)
+    format!(
+        "Won't log the payload since the size is {:.1}kb",
+        bytes.len() as f64 / 1024.0
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::{normalized_request_ids, parse_session_strategy, request_headers_for_log};
     use runner::session::SessionStrategy;
-    use storage::types::{AuthConfig, BodyConfig, BodyFormat, ExtractConfig, Request, ResponseConfig, Target};
     use std::collections::HashMap;
+    use storage::types::{
+        AuthConfig, BodyConfig, BodyFormat, ExtractConfig, Request, ResponseConfig, Target,
+    };
 
     #[test]
     fn normalized_request_ids_prefers_primary_and_deduplicates() {

@@ -22,3 +22,6 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tempfile = "3"
 directories = "5"
+# Native OS credential vaults (Win Credential Manager, macOS Keychain,
+# Linux Secret Service). Without these features, keyring uses a no-op mock.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }

@@ -13,7 +13,8 @@ use storage::{requests, scenarios, targets};
 use tauri::{AppHandle, Emitter as _, State};
 
 use super::{
-    emit_user_relevant_error, report_user_relevant_error, AppConfigState, AppPaths, LoggerState,
+    emit_user_relevant_error, report_user_relevant_error, ActiveRunsState, AppConfigState,
+    AppPaths, LoggerState,
 };
 use crate::error::CommandError;
 
@@ -49,6 +50,11 @@ pub struct RunDiagnostics {
     pub notes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct StopRunResult {
+    pub stopped: bool,
+}
+
 /// Start a run for the given engagement + request + payload list.
 ///
 /// Returns the run_id immediately and fires progress events (`run-progress`)
@@ -57,6 +63,7 @@ pub struct RunDiagnostics {
 #[tauri::command]
 pub async fn start_run(
     app: AppHandle,
+    active_runs: State<'_, ActiveRunsState>,
     config_state: State<'_, AppConfigState>,
     paths: State<'_, AppPaths>,
     logger: State<'_, LoggerState>,
@@ -99,6 +106,7 @@ pub async fn start_run(
         })
         .collect();
 
+    let cancellation = runner::run::RunCancellation::new();
     let config = RunConfig {
         engagement_dir,
         run_id: run_id.clone(),
@@ -107,6 +115,7 @@ pub async fn start_run(
         parallelism: parallelism.unwrap_or(4),
         runner_version: env!("CARGO_PKG_VERSION").to_owned(),
         body_logging_enabled: config_state.0.logging.body_logging_enabled,
+        cancellation: Some(cancellation.clone()),
         on_attempt_log: Some(Arc::new({
             let logger = logger.0.clone();
             let app = app.clone();
@@ -128,6 +137,11 @@ pub async fn start_run(
 
     let run_id_ret = run_id.clone();
     let logger = logger.0.clone();
+    let active_runs_map = active_runs.0.clone();
+    active_runs_map
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
+        .insert(run_id.clone(), cancellation);
 
     tokio::spawn(async move {
         let app_for_progress = app.clone();
@@ -173,6 +187,9 @@ pub async fn start_run(
                 },
             );
         }
+        if let Ok(mut runs) = active_runs_map.lock() {
+            runs.remove(&run_id);
+        }
     });
 
     Ok(run_id_ret)
@@ -182,6 +199,7 @@ pub async fn start_run(
 #[tauri::command]
 pub async fn start_scenario_run(
     app: AppHandle,
+    active_runs: State<'_, ActiveRunsState>,
     config_state: State<'_, AppConfigState>,
     paths: State<'_, AppPaths>,
     logger: State<'_, LoggerState>,
@@ -256,6 +274,7 @@ pub async fn start_scenario_run(
         })
         .collect();
 
+    let cancellation = runner::run::RunCancellation::new();
     let config = ScenarioRunConfig {
         engagement_dir,
         run_id: run_id.clone(),
@@ -266,6 +285,7 @@ pub async fn start_scenario_run(
         repeat: scenario.repeat.max(1),
         runner_version: env!("CARGO_PKG_VERSION").to_owned(),
         body_logging_enabled: config_state.0.logging.body_logging_enabled,
+        cancellation: Some(cancellation.clone()),
         on_attempt_log: Some(Arc::new({
             let logger = logger.0.clone();
             let app = app.clone();
@@ -291,6 +311,11 @@ pub async fn start_scenario_run(
 
     let run_id_ret = run_id.clone();
     let logger = logger.0.clone();
+    let active_runs_map = active_runs.0.clone();
+    active_runs_map
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
+        .insert(run_id.clone(), cancellation);
     tokio::spawn(async move {
         let app_for_progress = app.clone();
         let app_for_error = app;
@@ -335,6 +360,9 @@ pub async fn start_scenario_run(
                 },
             );
         }
+        if let Ok(mut runs) = active_runs_map.lock() {
+            runs.remove(&run_id);
+        }
     });
 
     Ok(run_id_ret)
@@ -344,6 +372,7 @@ pub async fn start_scenario_run(
 #[tauri::command]
 pub async fn start_transient_scenario_run(
     app: AppHandle,
+    active_runs: State<'_, ActiveRunsState>,
     config_state: State<'_, AppConfigState>,
     paths: State<'_, AppPaths>,
     logger: State<'_, LoggerState>,
@@ -374,6 +403,7 @@ pub async fn start_transient_scenario_run(
     let engagement_dir = paths.0.engagement_dir(&engagement_slug);
     let session_strategy = session_strategy_from_target(&target.session_config);
 
+    let cancellation = runner::run::RunCancellation::new();
     let config = ScenarioRunConfig {
         engagement_dir,
         run_id: run_id.clone(),
@@ -390,6 +420,7 @@ pub async fn start_transient_scenario_run(
         repeat: 1,
         runner_version: env!("CARGO_PKG_VERSION").to_owned(),
         body_logging_enabled: config_state.0.logging.body_logging_enabled,
+        cancellation: Some(cancellation.clone()),
         on_attempt_log: Some(Arc::new({
             let logger = logger.0.clone();
             let app = app.clone();
@@ -415,6 +446,11 @@ pub async fn start_transient_scenario_run(
 
     let run_id_ret = run_id.clone();
     let logger = logger.0.clone();
+    let active_runs_map = active_runs.0.clone();
+    active_runs_map
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
+        .insert(run_id.clone(), cancellation);
     tokio::spawn(async move {
         let app_for_progress = app.clone();
         let app_for_error = app;
@@ -459,9 +495,48 @@ pub async fn start_transient_scenario_run(
                 },
             );
         }
+        if let Ok(mut runs) = active_runs_map.lock() {
+            runs.remove(&run_id);
+        }
     });
 
     Ok(run_id_ret)
+}
+
+#[tauri::command]
+pub fn stop_run(
+    logger: State<'_, LoggerState>,
+    active_runs: State<'_, ActiveRunsState>,
+    engagement_slug: Option<String>,
+    run_id: String,
+) -> Result<StopRunResult, CommandError> {
+    logger.0.info(
+        "runner",
+        Some(&run_id),
+        &format!(
+            "stop_run requested for engagement={}",
+            engagement_slug.as_deref().unwrap_or("unknown")
+        ),
+    );
+
+    let runs = active_runs
+        .0
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?;
+    if let Some(cancellation) = runs.get(&run_id) {
+        cancellation.cancel();
+        logger
+            .0
+            .info("runner", Some(&run_id), "Run cancellation requested");
+        Ok(StopRunResult { stopped: true })
+    } else {
+        logger.0.debug(
+            "runner",
+            Some(&run_id),
+            "stop_run ignored because the run is no longer active",
+        );
+        Ok(StopRunResult { stopped: false })
+    }
 }
 
 /// Read attempt records from a run's JSONL file. Returns a JSON array of

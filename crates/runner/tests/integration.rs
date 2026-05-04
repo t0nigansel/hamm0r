@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use runner::run::{execute_run, execute_scenario_run, AttemptLog};
+use runner::run::{execute_run, execute_scenario_run, AttemptLog, RunCancellation};
 use runner::session::SessionStrategy;
 use runner::{Payload, RunConfig, ScenarioRunConfig, ScenarioStep};
-use storage::runs::{read_all, RunRecord};
+use storage::runs::{read_all, RunRecord, RunStatus};
 use storage::types::{
     AdapterType, AuthConfig, BodyConfig, BodyFormat, ExtractConfig, Request, ResponseConfig,
 };
@@ -48,6 +49,7 @@ fn make_config(tmp: &TempDir, request: Request, payloads: Vec<Payload>) -> RunCo
         runner_version: "test".into(),
         body_logging_enabled: false,
         on_attempt_log: None,
+        cancellation: None,
     }
 }
 
@@ -82,6 +84,7 @@ fn make_scenario_config(
         runner_version: "test".into(),
         body_logging_enabled: false,
         on_attempt_log: None,
+        cancellation: None,
     }
 }
 
@@ -259,6 +262,7 @@ async fn bounded_parallelism_fires_all_payloads() {
         runner_version: "test".into(),
         body_logging_enabled: false,
         on_attempt_log: None,
+        cancellation: None,
     };
 
     execute_run(config, |_| {}).await.unwrap();
@@ -309,6 +313,7 @@ async fn session_cookie_strategy_reuses_client() {
         runner_version: "test".into(),
         body_logging_enabled: false,
         on_attempt_log: None,
+        cancellation: None,
     };
 
     execute_run(config, |_| {}).await.unwrap();
@@ -493,6 +498,7 @@ async fn scenario_step_request_id_uses_matching_request() {
         runner_version: "test".into(),
         body_logging_enabled: false,
         on_attempt_log: None,
+        cancellation: None,
     };
 
     execute_scenario_run(config, |_| {}).await.unwrap();
@@ -571,4 +577,107 @@ async fn attempt_log_includes_bodies_when_body_logging_is_enabled() {
         .as_deref()
         .is_some_and(|body| body.contains("hello body")));
     assert_eq!(items[0].response_body.as_deref(), Some("ok-body"));
+}
+
+#[tokio::test]
+async fn run_cancellation_writes_aborted_footer() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(250))
+                .set_body_string("ok"),
+        )
+        .mount(&server)
+        .await;
+
+    let payloads: Vec<Payload> = (1..=3)
+        .map(|i| Payload {
+            prompt_id: "cat".into(),
+            payload_id: format!("p-{i:03}"),
+            text: format!("payload {i}"),
+            session: "default".into(),
+        })
+        .collect();
+
+    let tmp = TempDir::new().unwrap();
+    let cancellation = RunCancellation::new();
+    let mut config = make_config(
+        &tmp,
+        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
+        payloads,
+    );
+    config.parallelism = 1;
+    config.cancellation = Some(cancellation.clone());
+
+    let task = tokio::spawn(async move { execute_run(config, |_| {}).await.unwrap() });
+    tokio::time::sleep(Duration::from_millis(60)).await;
+    cancellation.cancel();
+    task.await.unwrap();
+
+    let records = read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
+    let footer = records.iter().find_map(|record| match record {
+        RunRecord::Footer(footer) => Some(footer),
+        _ => None,
+    });
+
+    let footer = footer.expect("aborted run should still write a footer");
+    assert_eq!(footer.status, RunStatus::AbortedByUser);
+    assert!(footer.attempts_total < 3);
+}
+
+#[tokio::test]
+async fn scenario_cancellation_writes_aborted_footer() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(250))
+                .set_body_string("ok"),
+        )
+        .mount(&server)
+        .await;
+
+    let steps = vec![
+        ScenarioStep {
+            id: "step-1".into(),
+            request_id: None,
+            prompt_id: Some("inj-001".into()),
+            prompt_text: "first".into(),
+            session: "A".into(),
+        },
+        ScenarioStep {
+            id: "step-2".into(),
+            request_id: None,
+            prompt_id: Some("inj-002".into()),
+            prompt_text: "second".into(),
+            session: "A".into(),
+        },
+    ];
+
+    let tmp = TempDir::new().unwrap();
+    let cancellation = RunCancellation::new();
+    let mut config = make_scenario_config(
+        &tmp,
+        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
+        steps,
+        2,
+        SessionStrategy::None,
+    );
+    config.cancellation = Some(cancellation.clone());
+
+    let task = tokio::spawn(async move { execute_scenario_run(config, |_| {}).await.unwrap() });
+    tokio::time::sleep(Duration::from_millis(60)).await;
+    cancellation.cancel();
+    task.await.unwrap();
+
+    let records = read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
+    let footer = records.iter().find_map(|record| match record {
+        RunRecord::Footer(footer) => Some(footer),
+        _ => None,
+    });
+
+    let footer = footer.expect("aborted scenario run should still write a footer");
+    assert_eq!(footer.status, RunStatus::AbortedByUser);
+    assert!(footer.attempts_total < 4);
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
@@ -11,6 +12,7 @@ use storage::runs::{
 };
 use storage::types::{AuthConfig, BodyFormat, Request, SessionConfig};
 use storage::{atomic_write, runs};
+use tokio::sync::Notify;
 use tokio::sync::Semaphore;
 
 use crate::adapter::{self, AdapterResponse};
@@ -39,6 +41,7 @@ pub struct RunConfig {
     pub runner_version: String,
     pub body_logging_enabled: bool,
     pub on_attempt_log: Option<Arc<dyn Fn(AttemptLog) + Send + Sync>>,
+    pub cancellation: Option<RunCancellation>,
 }
 
 /// A scenario step execution unit.
@@ -63,6 +66,7 @@ pub struct ScenarioRunConfig {
     pub runner_version: String,
     pub body_logging_enabled: bool,
     pub on_attempt_log: Option<Arc<dyn Fn(AttemptLog) + Send + Sync>>,
+    pub cancellation: Option<RunCancellation>,
 }
 
 /// Progress notification emitted after each attempt completes.
@@ -92,6 +96,34 @@ pub struct AttemptLog {
     pub duration_ms: u64,
     pub error: Option<String>,
     pub is_timeout: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RunCancellation {
+    cancelled: Arc<AtomicBool>,
+    notify: Arc<Notify>,
+}
+
+impl RunCancellation {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+        self.notify.notify_waiters();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+
+    async fn until_cancelled(&self) {
+        if self.is_cancelled() {
+            return;
+        }
+        self.notify.notified().await;
+    }
 }
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -149,6 +181,11 @@ struct RequestLogPayload {
     body_text: Option<String>,
 }
 
+enum AttemptTaskResult {
+    Written { failed: bool },
+    Cancelled,
+}
+
 // ── Execution ─────────────────────────────────────────────────────────────────
 
 /// Execute a full run: fire all payloads, write a JSONL line per attempt,
@@ -185,6 +222,7 @@ where
     let run_path = Arc::new(run_path);
     let responses_dir = Arc::new(responses_dir);
     let body_logging_enabled = config.body_logging_enabled;
+    let cancellation = config.cancellation.clone();
 
     let mut handles = Vec::new();
 
@@ -197,22 +235,45 @@ where
         let responses_dir = Arc::clone(&responses_dir);
         let on_progress = Arc::clone(&on_progress);
         let on_attempt_log = on_attempt_log.clone();
+        let cancellation = cancellation.clone();
 
         let handle = tokio::spawn(async move {
             let _permit = permit;
+
+            if cancellation
+                .as_ref()
+                .is_some_and(RunCancellation::is_cancelled)
+            {
+                return Ok::<_, RunnerError>(AttemptTaskResult::Cancelled);
+            }
 
             let http = crate::client::build_http_client(request.timeout_seconds)?;
             let sent_at = iso_now();
             let send_time = Instant::now();
 
-            let result = adapter::execute_with_session(
-                &http,
-                &request,
-                &payload.text,
-                &SessionStrategy::None,
-                &payload.session,
-            )
-            .await;
+            let result = if let Some(cancel) = &cancellation {
+                tokio::select! {
+                    _ = cancel.until_cancelled() => {
+                        return Ok(AttemptTaskResult::Cancelled);
+                    }
+                    result = adapter::execute_with_session(
+                        &http,
+                        &request,
+                        &payload.text,
+                        &SessionStrategy::None,
+                        &payload.session,
+                    ) => result
+                }
+            } else {
+                adapter::execute_with_session(
+                    &http,
+                    &request,
+                    &payload.text,
+                    &SessionStrategy::None,
+                    &payload.session,
+                )
+                .await
+            };
 
             let received_at = iso_now();
             let outcome =
@@ -290,26 +351,51 @@ where
                 finished: false,
             });
 
-            Ok::<_, RunnerError>(())
+            Ok::<_, RunnerError>(AttemptTaskResult::Written {
+                failed: outcome.error.is_some(),
+            })
         });
 
         handles.push(handle);
     }
 
     let mut attempts_failed = 0u32;
+    let mut attempts_written = 0u32;
     for handle in handles {
         match handle.await {
-            Ok(Ok(())) => {}
+            Ok(Ok(AttemptTaskResult::Written { failed })) => {
+                attempts_written += 1;
+                if failed {
+                    attempts_failed += 1;
+                }
+            }
+            Ok(Ok(AttemptTaskResult::Cancelled)) => {}
             Ok(Err(_)) | Err(_) => attempts_failed += 1,
         }
     }
 
-    write_footer(&run_path, &config.run_id, total, attempts_failed)?;
+    let cancelled = cancellation
+        .as_ref()
+        .is_some_and(RunCancellation::is_cancelled);
+    let status = if cancelled {
+        RunStatus::AbortedByUser
+    } else {
+        RunStatus::Completed
+    };
+    let attempts_total = if cancelled { attempts_written } else { total };
+
+    write_footer(
+        &run_path,
+        &config.run_id,
+        attempts_total,
+        attempts_failed,
+        status,
+    )?;
 
     on_progress(RunProgress {
         run_id: config.run_id,
-        seq: total,
-        total,
+        seq: attempts_written,
+        total: attempts_total,
         status: 0,
         error: None,
         finished: true,
@@ -354,9 +440,32 @@ where
     let mut seq = 0u32;
     let mut attempts_failed = 0u32;
     let on_attempt_log = config.on_attempt_log.clone();
+    let cancellation = config.cancellation.clone();
 
     for iteration in 1..=config.repeat.max(1) {
         for step in &config.steps {
+            if cancellation
+                .as_ref()
+                .is_some_and(RunCancellation::is_cancelled)
+            {
+                write_footer(
+                    &run_path,
+                    &config.run_id,
+                    seq,
+                    attempts_failed,
+                    RunStatus::AbortedByUser,
+                )?;
+                on_progress(RunProgress {
+                    run_id: config.run_id,
+                    seq,
+                    total: seq,
+                    status: 0,
+                    error: None,
+                    finished: true,
+                });
+                return Ok(());
+            }
+
             seq += 1;
 
             let sent_at = iso_now();
@@ -369,14 +478,45 @@ where
             let session_client =
                 session_manager.client_for_with_timeout(&step.session, request.timeout_seconds)?;
 
-            let result = adapter::execute_with_session(
-                session_client,
-                request,
-                &step.prompt_text,
-                &config.session_strategy,
-                &step.session,
-            )
-            .await;
+            let result = if let Some(cancel) = &cancellation {
+                tokio::select! {
+                    _ = cancel.until_cancelled() => {
+                        seq -= 1;
+                        write_footer(
+                            &run_path,
+                            &config.run_id,
+                            seq,
+                            attempts_failed,
+                            RunStatus::AbortedByUser,
+                        )?;
+                        on_progress(RunProgress {
+                            run_id: config.run_id,
+                            seq,
+                            total: seq,
+                            status: 0,
+                            error: None,
+                            finished: true,
+                        });
+                        return Ok(());
+                    }
+                    result = adapter::execute_with_session(
+                        session_client,
+                        request,
+                        &step.prompt_text,
+                        &config.session_strategy,
+                        &step.session,
+                    ) => result
+                }
+            } else {
+                adapter::execute_with_session(
+                    session_client,
+                    request,
+                    &step.prompt_text,
+                    &config.session_strategy,
+                    &step.session,
+                )
+                .await
+            };
 
             let received_at = iso_now();
             let outcome =
@@ -467,7 +607,13 @@ where
         }
     }
 
-    write_footer(&run_path, &config.run_id, total, attempts_failed)?;
+    write_footer(
+        &run_path,
+        &config.run_id,
+        total,
+        attempts_failed,
+        RunStatus::Completed,
+    )?;
 
     on_progress(RunProgress {
         run_id: config.run_id,
@@ -516,13 +662,14 @@ fn write_footer(
     run_id: &str,
     attempts_total: u32,
     attempts_failed: u32,
+    status: RunStatus,
 ) -> Result<(), RunnerError> {
     let footer = RunRecord::Footer(RunFooter {
         run_id: run_id.to_owned(),
         finished_at: iso_now(),
         attempts_total,
         attempts_failed,
-        status: RunStatus::Completed,
+        status,
     });
     runs::append(run_path, &footer).map_err(|e| anyhow::anyhow!(e).into())
 }

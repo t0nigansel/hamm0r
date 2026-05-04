@@ -21,7 +21,9 @@ pub struct AdapterResponse {
     pub first_byte_ms: Option<u64>,
 }
 
-/// Apply auth config to a request builder, reading secrets from env vars.
+/// Apply auth config to a request builder, reading secrets from the OS
+/// keychain first, then falling back to the environment variable of the
+/// same name.
 ///
 /// Invariant: secrets never appear in logs or in the request body stored on
 /// disk. Auth headers are masked in run logs.
@@ -31,35 +33,41 @@ fn apply_auth(
 ) -> Result<reqwest::RequestBuilder, RunnerError> {
     match auth {
         AuthConfig::Bearer { token_env } => {
-            let token = std::env::var(token_env).map_err(|_| RunnerError::MissingEnvVar {
-                var: token_env.clone(),
-            })?;
+            let token = resolve_secret(token_env)?;
             builder = builder.bearer_auth(token);
         }
         AuthConfig::Basic {
             user_env,
             password_env,
         } => {
-            let user = std::env::var(user_env).map_err(|_| RunnerError::MissingEnvVar {
-                var: user_env.clone(),
-            })?;
-            let pass = std::env::var(password_env).map_err(|_| RunnerError::MissingEnvVar {
-                var: password_env.clone(),
-            })?;
+            let user = resolve_secret(user_env)?;
+            let pass = resolve_secret(password_env)?;
             builder = builder.basic_auth(user, Some(pass));
         }
         AuthConfig::CustomHeader {
             header_name,
             value_env,
         } => {
-            let value = std::env::var(value_env).map_err(|_| RunnerError::MissingEnvVar {
-                var: value_env.clone(),
-            })?;
+            let value = resolve_secret(value_env)?;
             builder = builder.header(header_name.as_str(), value);
         }
         AuthConfig::None => {}
     }
     Ok(builder)
+}
+
+/// Look up a secret by env-var name, preferring the OS keychain over the
+/// environment. Returns `MissingEnvVar` (the historical error name) when
+/// neither source has a value, since the var name is what the user
+/// configured against.
+fn resolve_secret(var: &str) -> Result<String, RunnerError> {
+    match storage::secrets::resolve_token(var) {
+        Ok(Some(v)) => Ok(v),
+        Ok(None) => Err(RunnerError::MissingEnvVar {
+            var: var.to_owned(),
+        }),
+        Err(e) => Err(RunnerError::Storage(e)),
+    }
 }
 
 /// Extract the LLM's answer from a response body.

@@ -347,7 +347,11 @@
             <p class="muted" id="target-empty-msg" style="font-family:var(--mono);font-size:12px;color:var(--text-2);">Select a target from the list or create a new one.</p>
           </div>
 
-          <form id="target-form" autocomplete="off" style="display:none">
+          <form id="target-form" autocomplete="off" novalidate style="display:none">
+            <div id="target-editor-debug" class="target-editor-debug" style="display:none">
+              <div class="target-editor-debug-title">Target editor diagnostics</div>
+              <div id="target-editor-debug-status" class="target-editor-debug-status">Waiting for interaction…</div>
+            </div>
             <input type="hidden" id="target-id">
             <input type="hidden" id="target-request-id">
             <div class="form-grid-2">
@@ -443,6 +447,17 @@
             <div class="form-row" id="auth-value-row" style="display:none">
               <label for="target-auth-value">Auth env var name</label>
               <input id="target-auth-value" type="text" placeholder="e.g. OPENAI_API_KEY">
+            </div>
+            <div class="form-row auth-token-row" id="auth-token-row" style="display:none">
+              <label>Stored token</label>
+              <div class="auth-token-controls">
+                <span class="auth-token-status" id="auth-token-status" data-state="empty">Enter an env var name above</span>
+                <button type="button" class="btn btn-ghost btn-small" id="btn-auth-token-set">Set / Replace…</button>
+                <button type="button" class="btn btn-ghost btn-small" id="btn-auth-token-forget" style="display:none">Forget</button>
+              </div>
+              <small class="auth-token-help">
+                Token is stored in your OS credential vault (Windows Credential Manager / macOS Keychain / Linux Secret Service). If no token is stored, hamm0r reads the env var of the same name instead. The token never lands in <code>config.yaml</code>, run logs, or diagnostic exports.
+              </small>
             </div>
             <div class="form-row" id="auth-header-row" style="display:none">
               <label for="target-auth-header">Auth header</label>
@@ -544,7 +559,7 @@
               </div>
             </fieldset>
             <div class="editor-actions">
-              <button type="submit" class="btn btn-primary">Save Target + Request</button>
+              <button type="submit" id="btn-save-target" class="btn btn-primary">Save</button>
               <button type="button" id="btn-delete-request" class="btn btn-ghost" style="display:none">Delete Request</button>
               <button type="button" id="btn-delete-target" class="btn btn-danger" style="display:none">Delete</button>
             </div>
@@ -770,6 +785,7 @@
               </div>
               <div class="eng-detail-actions">
                 <button id="btn-eng-rerun" class="btn btn-primary">Re-run</button>
+                <button id="btn-eng-stop" class="btn btn-ghost" disabled>Stop</button>
                 <button id="btn-eng-export-md" class="btn btn-ghost">Export MD</button>
                 <button id="btn-eng-export-pdf" class="btn btn-ghost">Export PDF</button>
                 <button id="btn-eng-archive" class="btn btn-ghost">Archive</button>
@@ -913,6 +929,45 @@
     <div class="detail-section">
       <strong>Run Metadata</strong>
       <div class="detail-meta-grid" id="detail-meta"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     Bearer token paste modal
+     ================================================================ -->
+<div id="auth-token-modal" class="modal" style="display:none">
+  <div class="modal-content modal-small">
+    <button class="modal-close" id="auth-token-modal-close">&times;</button>
+    <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Set token for <span id="auth-token-modal-var" class="mono"></span></h3>
+    <p class="auth-token-modal-intro">
+      Paste the <strong>raw token only</strong> — for a JWT, that's the part starting with <code>ey…</code>. <strong>Do not</strong> include the word <code>Bearer</code> or the <code>Authorization:</code> header — hamm0r adds those for you.
+    </p>
+    <div class="auth-token-format-examples">
+      <div class="auth-token-format-row good">
+        <span class="auth-token-format-label">Paste this</span>
+        <code>eyJhbGciOiJIUzI1NiJ9.eyJzdWIi…</code>
+      </div>
+      <div class="auth-token-format-row bad">
+        <span class="auth-token-format-label">Not this</span>
+        <code>Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIi…</code>
+      </div>
+      <div class="auth-token-format-row bad">
+        <span class="auth-token-format-label">Not this</span>
+        <code>Authorization: Bearer eyJhbGciOiJIUzI1NiJ9…</code>
+      </div>
+    </div>
+    <div class="form-row">
+      <label for="auth-token-input">Token</label>
+      <input id="auth-token-input" type="password" autocomplete="off" spellcheck="false" placeholder="ey…">
+      <label class="auth-token-reveal-row">
+        <input id="auth-token-reveal" type="checkbox">
+        <span>Reveal while typing</span>
+      </label>
+    </div>
+    <div class="editor-actions">
+      <button type="button" id="auth-token-save" class="btn btn-primary">Save to keychain</button>
+      <button type="button" id="auth-token-cancel" class="btn btn-ghost">Cancel</button>
     </div>
   </div>
 </div>
@@ -1221,7 +1276,7 @@
   </div>
 </div>
 
-<script src="js/api.js?v=20260425"></script>
-<script src="js/app.js?v=20260425"></script>
+<script src="js/api.js?v=20260502a"></script>
+<script src="js/app.js?v=20260502a"></script>
 </body>
 </html>

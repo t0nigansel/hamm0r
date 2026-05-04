@@ -137,6 +137,16 @@ const API = (() => {
       return invoke('save_app_settings', { settings });
     },
 
+    async log_ui_debug({ component, event, fields }) {
+      return invoke('log_ui_debug', {
+        payload: {
+          component,
+          event,
+          fields: fields || {},
+        },
+      });
+    },
+
     async get_target({ id }) {
       const targets = await invoke('list_targets');
       return targets.find(t => t.id === id) || null;
@@ -150,12 +160,36 @@ const API = (() => {
       return invoke('save_target', { dto });
     },
 
+    async test_target_connection({ dto, prompt_text }) {
+      return invoke('test_target_connection', {
+        dto,
+        promptText: prompt_text || null,
+      });
+    },
+
     async save_target_meta(dto) {
       return invoke('save_target_meta', { dto });
     },
 
     async delete_target({ id }) {
       return invoke('delete_target', { id });
+    },
+
+    // ── Bearer token (OS keychain) ───────────────────────────────────
+    // The plaintext token only crosses this boundary on `set_bearer_token`.
+    // No command returns the stored value — the runner reads it directly
+    // from the keychain at request time.
+
+    async set_bearer_token({ var: varName, token }) {
+      return invoke('set_bearer_token', { var: varName, token });
+    },
+
+    async forget_bearer_token({ var: varName }) {
+      return invoke('forget_bearer_token', { var: varName });
+    },
+
+    async bearer_token_status({ var: varName }) {
+      return invoke('bearer_token_status', { var: varName });
     },
 
     async get_request({ id }) {
@@ -305,9 +339,12 @@ const API = (() => {
       };
     },
 
-    async stop_run() {
-      // Graceful cancellation is planned; keep API shape stable for now.
-      return { ok: true };
+    async stop_run({ engagement_slug, run_id }) {
+      if (!run_id) throw new Error('No run selected to stop.');
+      return invoke('stop_run', {
+        engagementSlug: engagement_slug || _activeSlug || null,
+        runId: run_id,
+      });
     },
 
     async start_run({ engagement_slug, request_id, payloads, parallelism }) {

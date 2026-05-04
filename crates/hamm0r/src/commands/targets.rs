@@ -9,6 +9,7 @@ use storage::{requests, targets};
 use tauri::State;
 
 use super::AppPaths;
+use super::{AppConfigState, LoggerState};
 use crate::error::CommandError;
 
 /// Flat target descriptor used by the UI — combines the Target YAML and its
@@ -65,6 +66,17 @@ pub struct TargetMetaDto {
     pub session_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestTargetConnectionResultDto {
+    pub ok: bool,
+    pub status: u16,
+    pub response_headers: HashMap<String, String>,
+    pub raw_response_body: String,
+    pub extracted_response_body: Option<String>,
+    pub duration_ms: u64,
+    pub message: String,
 }
 
 fn dto_to_pair(dto: &TargetDto) -> (Target, Request) {
@@ -365,6 +377,57 @@ pub fn save_target(paths: State<'_, AppPaths>, dto: TargetDto) -> Result<TargetD
     targets::save(&paths.0.targets_dir(), &target)?;
     requests::save(&paths.0.requests_dir(), &request)?;
     Ok(dto)
+}
+
+#[tauri::command]
+pub async fn test_target_connection(
+    config_state: State<'_, AppConfigState>,
+    logger: State<'_, LoggerState>,
+    dto: TargetDto,
+    prompt_text: Option<String>,
+) -> Result<TestTargetConnectionResultDto, CommandError> {
+    let (target, request) = dto_to_pair(&dto);
+    let (session_strategy, session_field) = match &target.session_config {
+        SessionConfig::None => ("none".to_owned(), None),
+        SessionConfig::Cookie => ("cookie".to_owned(), None),
+        SessionConfig::Header { header_name } => ("header".to_owned(), Some(header_name.clone())),
+        SessionConfig::BodyField { field_name } => {
+            ("body_field".to_owned(), Some(field_name.clone()))
+        }
+    };
+
+    let result = super::requests::run_test_request(
+        &config_state.0,
+        &logger.0,
+        request,
+        session_strategy,
+        session_field,
+        prompt_text.or_else(|| Some("connection test".to_owned())),
+    )
+    .await?;
+
+    let ok = (200..400).contains(&result.status);
+    let message = if ok {
+        format!(
+            "Connection test passed: HTTP {} in {} ms.",
+            result.status, result.duration_ms
+        )
+    } else {
+        format!(
+            "Connection test failed: HTTP {} in {} ms.",
+            result.status, result.duration_ms
+        )
+    };
+
+    Ok(TestTargetConnectionResultDto {
+        ok,
+        status: result.status,
+        response_headers: result.response_headers,
+        raw_response_body: result.raw_response_body,
+        extracted_response_body: result.extracted_response_body,
+        duration_ms: result.duration_ms,
+        message,
+    })
 }
 
 #[tauri::command]

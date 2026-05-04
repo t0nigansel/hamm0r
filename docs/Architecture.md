@@ -65,7 +65,6 @@ the two components isolated.
                 ├── reports/report-NNN.html
                 └── responses/<run>/*.txt
 ```
-
 Two things to notice:
 
 - The storage crate is the only component that touches the filesystem.
@@ -258,6 +257,40 @@ runtime.
 
 ---
 
+## Secret handling
+
+Bearer tokens, basic-auth credentials, and custom-header values are
+secrets. Per ProductVision and CLAUDE.md Invariant 11, they never live
+in `config.yaml`, in run logs, or in any artifact under
+`~/hamm0r/engagements/`.
+
+Each `AuthConfig` variant identifies a secret by the **name** of an
+env var that shadows it (e.g. `token_env: "PROFILER_BEARER_TOKEN"`).
+At request time the runner resolves the value via `storage::secrets`,
+which checks two sources in order:
+
+1. **OS keychain** — Windows Credential Manager, macOS Keychain, or
+   Linux Secret Service, queried under service `"hamm0r"` with the
+   env-var name as the account. Populated when the user pastes a
+   token into the Target editor.
+2. **Environment variable** — `std::env::var(name)`, the original
+   mechanism. Still works when no keychain entry is set.
+
+If neither has a value, the runner returns `MissingEnvVar` and the UI
+shows a hint pointing the user at both options.
+
+The plaintext token crosses the JS→Rust bridge exactly once per
+save, via the `set_bearer_token` Tauri command. No command exposes
+the stored value back to the UI; the renderer shows status only
+("stored in keychain", "using env var", "not set"). The runner reads
+the value directly from `storage::secrets` — it never travels
+through the command layer.
+
+Diagnostic exports redact the env-var name only, never include
+keychain values, and never read environment variables.
+
+---
+
 ## Crates and dependencies
 
 Core depends on:
@@ -268,6 +301,7 @@ Core depends on:
 - `serde` + `serde_yaml` + `serde_json` for serialization
 - `minijinja` for request template substitution
 - `anyhow` / `thiserror` for error handling
+- `keyring` for OS-credential-vault access (bearer/api-key storage)
 
 Analyzer additionally depends on:
 

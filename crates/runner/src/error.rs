@@ -14,6 +14,6 @@ pub enum RunnerError {
     #[error("storage error: {0}")]
     Storage(#[from] anyhow::Error),
 
-    #[error("auth env var '{var}' not set")]
+    #[error("no token found for '{var}' — paste one in the target editor or export the env var, then retry")]
     MissingEnvVar { var: String },
 }

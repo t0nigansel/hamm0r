@@ -6,11 +6,14 @@ pub mod library;
 pub mod requests;
 pub mod runs;
 pub mod scenarios;
+pub mod secrets;
 pub mod targets;
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
+use runner::run::RunCancellation;
+use serde::{Deserialize, Serialize};
 use storage::types::{AppConfig, PromptEntry, Request};
 use storage::{prompts, requests as request_store, HammorPaths};
 use tauri::{AppHandle, Emitter as _, State};
@@ -22,12 +25,21 @@ pub struct AppPaths(pub HammorPaths);
 pub struct AppConfigState(pub AppConfig);
 pub struct LoggerState(pub AppLogger);
 pub struct AnalyzerLoggerState(pub AppLogger);
+pub struct ActiveRunsState(pub Arc<Mutex<HashMap<String, RunCancellation>>>);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UserRelevantErrorEvent {
     pub scope: String,
     pub run_id: Option<String>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UiDebugLogRequest {
+    pub component: String,
+    pub event: String,
+    #[serde(default)]
+    pub fields: HashMap<String, String>,
 }
 
 pub fn emit_user_relevant_error(app: &AppHandle, scope: &str, run_id: Option<&str>, message: &str) {
@@ -51,6 +63,33 @@ pub fn report_user_relevant_error(
 ) {
     logger.error(component, run_id, message);
     emit_user_relevant_error(app, scope, run_id, message);
+}
+
+#[tauri::command]
+pub fn log_ui_debug(
+    logger: State<'_, LoggerState>,
+    payload: UiDebugLogRequest,
+) -> Result<(), CommandError> {
+    let mut field_pairs: Vec<String> = payload
+        .fields
+        .into_iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
+    field_pairs.sort();
+
+    let suffix = if field_pairs.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", field_pairs.join(" "))
+    };
+
+    logger.0.info(
+        &payload.component,
+        None,
+        &format!("ui-event={}{}", payload.event, suffix),
+    );
+
+    Ok(())
 }
 
 #[tauri::command]
