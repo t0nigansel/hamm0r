@@ -20,16 +20,13 @@ runner = { path = "../runner" }
 # HTTP client for manifest fetch + model download (no OpenSSL, same choice as runner)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 sha2 = "0.10"
-# The `analyzer` dep is only pulled in when the `analyzer` feature is on.
-analyzer = { path = "../analyzer", optional = true }
-
-[features]
-# Off by default — the analyzer is a multi-GB opt-in download.
-# CI checks: `cargo tree -p hamm0r --no-default-features` must not list `analyzer`.
-# Enables the analyzer crate *with* its LLM runtime so in-process judging works
-# for users on toolchains where libclang is available. The forthcoming
-# `analyz0r` CLI binary will be the long-term carrier of the runtime instead.
-analyzer = ["dep:analyzer", "analyzer/runtime"]
+# Heuristic-judge + report pipeline. Runtime-free: the LLM runtime
+# (llama-cpp-2) lives behind `analyzer/runtime`, which only the
+# standalone `analyz0r` CLI bundle enables. Core never compiles it in.
+analyzer = { path = "../analyzer" }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile.workspace = true

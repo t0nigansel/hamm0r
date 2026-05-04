@@ -5,14 +5,13 @@ edition.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
-# The analyzer crate is only compiled when the `analyzer` feature is enabled
-# on the `hamm0r` binary crate. It must never appear in the default dep tree.
-# CI enforces this via:
-#   cargo tree -p hamm0r --no-default-features   (must not list `analyzer`)
+# The analyzer crate's default build is runtime-free (heuristic judge +
+# report rendering). It is pulled in by the `hamm0r` core binary as a
+# regular dependency.
 #
-# Default build = judging primitives + heuristic + report rendering only.
 # Pulling in the LLM runtime (llama-cpp-2) requires `--features runtime`,
-# which is what the forthcoming `analyz0r` CLI binary turns on.
+# which only the standalone `analyz0r` CLI bundle turns on. Core never
+# enables it.
 
 [dependencies]
 anyhow.workspace = true

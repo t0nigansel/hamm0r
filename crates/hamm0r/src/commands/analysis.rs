@@ -1,19 +1,32 @@
-use std::path::PathBuf;
+//! Tauri command surface for analyzer/judge functionality.
+//!
+//! Heuristic-only commands (`judge_result`, `judge_all`, …) call into
+//! `analyzer::pipeline` directly — runtime-free, always available in core.
+//! `start_analysis` is the only path that needs the LLM: it shells out to
+//! the standalone `analyz0r` binary when both the binary and a model are
+//! installed, and falls back to the in-process heuristic otherwise.
+//!
+//! Binary discovery (in priority order):
+//!   1. `$HAMM0R_ANALYZOR_BIN` — explicit override (dev convenience).
+//!   2. `~/hamm0r/analyzer/bin/analyz0r[.exe]` — production install layout.
 
+use std::path::PathBuf;
+use std::process::Stdio;
+
+use analyzer::pipeline::{
+    self, JudgeOneOptions, JudgeOutcome, JudgeRunOptions, JudgeRunSummary, Progress,
+};
 use serde::Serialize;
 use storage::verdicts::VerdictEntry;
 use storage::HammorPaths;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter as _, State};
+use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
+use tokio::process::Command;
 
-#[cfg(feature = "analyzer")]
-use analyzer::pipeline::{self, JudgeOneOptions, JudgeOutcome, JudgeRunOptions, Progress};
-#[cfg(feature = "analyzer")]
-use tauri::Emitter as _;
-
-#[cfg(feature = "analyzer")]
-use super::report_user_relevant_error;
-use super::{AnalyzerLoggerState, AppPaths};
+use super::{report_user_relevant_error, AnalyzerLoggerState, AppPaths};
 use crate::error::CommandError;
+
+const ANALYZOR_BIN_ENV: &str = "HAMM0R_ANALYZOR_BIN";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -48,7 +61,6 @@ pub struct JudgeAllDto {
     pub results: Vec<JudgeResultDto>,
 }
 
-#[cfg(feature = "analyzer")]
 #[derive(Debug, Clone, Serialize)]
 pub struct AnalysisProgressEvent {
     pub run_id: String,
@@ -100,31 +112,19 @@ pub fn generate_report(
     engagement_slug: String,
     run_id: String,
 ) -> Result<String, CommandError> {
-    #[cfg(not(feature = "analyzer"))]
-    {
-        let _ = (&logger, &paths, &engagement_slug, &run_id);
-        Err(anyhow::anyhow!(
-            "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
-        )
-        .into())
-    }
-
-    #[cfg(feature = "analyzer")]
-    {
-        logger.0.info(
-            "analysis",
-            Some(&run_id),
-            &format!("Generating report for engagement={engagement_slug}"),
-        );
-        let engagement_dir = paths.0.engagement_dir(&engagement_slug);
-        let report_path = pipeline::generate_report(&engagement_dir, &run_id)?;
-        logger.0.info(
-            "analysis",
-            Some(&run_id),
-            &format!("Report generated at {}", report_path.display()),
-        );
-        Ok(report_path.to_string_lossy().into_owned())
-    }
+    logger.0.info(
+        "analysis",
+        Some(&run_id),
+        &format!("Generating report for engagement={engagement_slug}"),
+    );
+    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
+    let report_path = pipeline::generate_report(&engagement_dir, &run_id)?;
+    logger.0.info(
+        "analysis",
+        Some(&run_id),
+        &format!("Report generated at {}", report_path.display()),
+    );
+    Ok(report_path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -169,52 +169,40 @@ pub async fn judge_result(
     result_id: String,
     force: Option<bool>,
 ) -> Result<JudgeResultDto, CommandError> {
-    #[cfg(not(feature = "analyzer"))]
-    {
-        let _ = (&logger, &paths, &engagement_slug, &result_id, force);
-        Err(anyhow::anyhow!(
-            "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
-        )
-        .into())
-    }
+    let (run_id, seq) = pipeline::parse_result_id(&result_id)?;
+    let force = force.unwrap_or(false);
+    logger.0.info(
+        "analysis",
+        Some(&run_id),
+        &format!("judge_result requested for seq={seq} force={force}"),
+    );
 
-    #[cfg(feature = "analyzer")]
-    {
-        let (run_id, seq) = pipeline::parse_result_id(&result_id)?;
-        let force = force.unwrap_or(false);
-        logger.0.info(
-            "analysis",
-            Some(&run_id),
-            &format!("judge_result requested for seq={seq} force={force}"),
-        );
+    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
+    let prompts_dir = paths.0.prompts_dir();
+    let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
+    let run_id_for_blocking = run_id.clone();
 
-        let engagement_dir = paths.0.engagement_dir(&engagement_slug);
-        let prompts_dir = paths.0.prompts_dir();
-        let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
-        let run_id_for_blocking = run_id.clone();
-
-        let outcome = tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeOutcome> {
-            pipeline::judge_one_heuristic(&JudgeOneOptions {
-                engagement_dir: &engagement_dir,
-                prompts_dir: &prompts_dir,
-                run_id: &run_id_for_blocking,
-                seq,
-                analyzer_version: &analyzer_version,
-                force,
-            })
+    let outcome = tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeOutcome> {
+        pipeline::judge_one_heuristic(&JudgeOneOptions {
+            engagement_dir: &engagement_dir,
+            prompts_dir: &prompts_dir,
+            run_id: &run_id_for_blocking,
+            seq,
+            analyzer_version: &analyzer_version,
+            force,
         })
-        .await
-        .map_err(|e| anyhow::anyhow!("judge task join failure: {e}"))??;
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("judge task join failure: {e}"))??;
 
-        let status = if outcome.was_judged() { "judged" } else { "skipped" };
-        logger.0.info(
-            "analysis",
-            Some(&run_id),
-            &format!("judge_result completed status={status} seq={seq}"),
-        );
+    let status = if outcome.was_judged() { "judged" } else { "skipped" };
+    logger.0.info(
+        "analysis",
+        Some(&run_id),
+        &format!("judge_result completed status={status} seq={seq}"),
+    );
 
-        Ok(to_judge_result_dto(status, &run_id, outcome.entry()))
-    }
+    Ok(to_judge_result_dto(status, &run_id, outcome.entry()))
 }
 
 #[tauri::command]
@@ -226,105 +214,86 @@ pub async fn judge_all(
     run_id: Option<String>,
     force: Option<bool>,
 ) -> Result<JudgeAllDto, CommandError> {
-    #[cfg(not(feature = "analyzer"))]
-    {
-        let _ = (
-            &logger,
-            &paths,
-            &engagement_slug,
-            &result_ids,
-            &run_id,
-            force,
-        );
-        Err(anyhow::anyhow!(
-            "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
-        )
-        .into())
+    let force = force.unwrap_or(false);
+    logger.0.info(
+        "analysis",
+        run_id.as_deref(),
+        &format!(
+            "judge_all requested for engagement={} explicit_results={} force={force}",
+            engagement_slug,
+            result_ids.len()
+        ),
+    );
+
+    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
+    let prompts_dir = paths.0.prompts_dir();
+    let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
+
+    // Resolve target (run_id, seq) pairs synchronously up front so the
+    // blocking task only does the judging work.
+    let mut targets: Vec<(String, u32)> = if result_ids.is_empty() {
+        let rid = run_id
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("run_id is required when result_ids is empty"))?;
+        let run_path = pipeline::run_path_for(&engagement_dir, rid);
+        let attempts = pipeline::load_attempts(&run_path)?;
+        attempts.into_iter().map(|a| (rid.to_owned(), a.seq)).collect()
+    } else {
+        result_ids
+            .iter()
+            .map(|id| pipeline::parse_result_id(id))
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    if let Some(filter) = run_id.as_deref() {
+        targets.retain(|(rid, _)| rid == filter);
     }
+    targets.sort();
+    targets.dedup();
 
-    #[cfg(feature = "analyzer")]
-    {
-        let force = force.unwrap_or(false);
-        logger.0.info(
-            "analysis",
-            run_id.as_deref(),
-            &format!(
-                "judge_all requested for engagement={} explicit_results={} force={force}",
-                engagement_slug,
-                result_ids.len()
-            ),
-        );
+    let dto = tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeAllDto> {
+        let mut judged = 0u32;
+        let mut skipped_existing = 0u32;
+        let mut results = Vec::new();
 
-        let engagement_dir = paths.0.engagement_dir(&engagement_slug);
-        let prompts_dir = paths.0.prompts_dir();
-        let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
-
-        // Resolve target (run_id, seq) pairs synchronously up front so the
-        // blocking task only does the judging work.
-        let mut targets: Vec<(String, u32)> = if result_ids.is_empty() {
-            let rid = run_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("run_id is required when result_ids is empty"))?;
-            let run_path = pipeline::run_path_for(&engagement_dir, rid);
-            let attempts = pipeline::load_attempts(&run_path)?;
-            attempts.into_iter().map(|a| (rid.to_owned(), a.seq)).collect()
-        } else {
-            result_ids
-                .iter()
-                .map(|id| pipeline::parse_result_id(id))
-                .collect::<Result<Vec<_>, _>>()?
-        };
-
-        if let Some(filter) = run_id.as_deref() {
-            targets.retain(|(rid, _)| rid == filter);
+        for (rid, seq) in targets {
+            let outcome = pipeline::judge_one_heuristic(&JudgeOneOptions {
+                engagement_dir: &engagement_dir,
+                prompts_dir: &prompts_dir,
+                run_id: &rid,
+                seq,
+                analyzer_version: &analyzer_version,
+                force,
+            })?;
+            let status = if outcome.was_judged() {
+                judged += 1;
+                "judged"
+            } else {
+                skipped_existing += 1;
+                "skipped"
+            };
+            results.push(to_judge_result_dto(status, &rid, outcome.entry()));
         }
-        targets.sort();
-        targets.dedup();
 
-        let dto = tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeAllDto> {
-            let mut judged = 0u32;
-            let mut skipped_existing = 0u32;
-            let mut results = Vec::new();
-
-            for (rid, seq) in targets {
-                let outcome = pipeline::judge_one_heuristic(&JudgeOneOptions {
-                    engagement_dir: &engagement_dir,
-                    prompts_dir: &prompts_dir,
-                    run_id: &rid,
-                    seq,
-                    analyzer_version: &analyzer_version,
-                    force,
-                })?;
-                let status = if outcome.was_judged() {
-                    judged += 1;
-                    "judged"
-                } else {
-                    skipped_existing += 1;
-                    "skipped"
-                };
-                results.push(to_judge_result_dto(status, &rid, outcome.entry()));
-            }
-
-            Ok(JudgeAllDto {
-                judged,
-                skipped_existing,
-                results,
-            })
+        Ok(JudgeAllDto {
+            judged,
+            skipped_existing,
+            results,
         })
-        .await
-        .map_err(|e| anyhow::anyhow!("judge_all task join failure: {e}"))??;
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("judge_all task join failure: {e}"))??;
 
-        logger.0.info(
-            "analysis",
-            run_id.as_deref(),
-            &format!(
-                "judge_all completed judged={} skipped_existing={}",
-                dto.judged, dto.skipped_existing
-            ),
-        );
+    logger.0.info(
+        "analysis",
+        run_id.as_deref(),
+        &format!(
+            "judge_all completed judged={} skipped_existing={}",
+            dto.judged, dto.skipped_existing
+        ),
+    );
 
-        Ok(dto)
-    }
+    Ok(dto)
 }
 
 #[tauri::command]
@@ -336,70 +305,57 @@ pub async fn start_analysis(
     run_id: String,
     force: Option<bool>,
 ) -> Result<String, CommandError> {
-    #[cfg(not(feature = "analyzer"))]
-    {
-        let _ = (&app, &logger, &paths, &engagement_slug, &run_id, force);
-        Err(anyhow::anyhow!(
-            "Analyzer not available in this build. Rebuild hamm0r with --features analyzer."
+    let paths = paths.0.clone();
+    let run_id_ret = run_id.clone();
+    let force = force.unwrap_or(false);
+    let logger = logger.0.clone();
+
+    tokio::spawn(async move {
+        logger.info(
+            "analysis",
+            Some(&run_id),
+            &format!("Analysis task spawned for engagement={engagement_slug} force={force}"),
+        );
+        if let Err(err) = analyze_run_and_emit(
+            app.clone(),
+            paths.clone(),
+            engagement_slug.clone(),
+            run_id.clone(),
+            force,
         )
-        .into())
-    }
-
-    #[cfg(feature = "analyzer")]
-    {
-        let paths = paths.0.clone();
-        let run_id_ret = run_id.clone();
-        let force = force.unwrap_or(false);
-        let logger = logger.0.clone();
-
-        tokio::spawn(async move {
-            logger.info(
+        .await
+        {
+            let message = format!("analysis execution failed: {err}");
+            report_user_relevant_error(
+                &app,
+                &logger,
                 "analysis",
+                "analysis-execution",
                 Some(&run_id),
-                &format!("Analysis task spawned for engagement={engagement_slug} force={force}"),
+                &message,
             );
-            if let Err(err) = analyze_run_and_emit(
-                app.clone(),
-                paths.clone(),
-                engagement_slug.clone(),
-                run_id.clone(),
-                force,
-            )
-            .await
-            {
-                let message = format!("analysis execution failed: {err}");
-                report_user_relevant_error(
-                    &app,
-                    &logger,
-                    "analysis",
-                    "analysis-execution",
-                    Some(&run_id),
-                    &message,
-                );
-                let _ = app.emit(
-                    "analysis-progress",
-                    AnalysisProgressEvent {
-                        run_id: run_id.clone(),
-                        processed: 0,
-                        total: 0,
-                        judged: 0,
-                        skipped_existing: 0,
-                        finished: true,
-                        error: Some(message),
-                    },
-                );
-            } else {
-                logger.info("analysis", Some(&run_id), "Analysis completed");
-            }
-        });
+            let _ = app.emit(
+                "analysis-progress",
+                AnalysisProgressEvent {
+                    run_id: run_id.clone(),
+                    processed: 0,
+                    total: 0,
+                    judged: 0,
+                    skipped_existing: 0,
+                    finished: true,
+                    error: Some(message),
+                },
+            );
+        } else {
+            logger.info("analysis", Some(&run_id), "Analysis completed");
+        }
+    });
 
-        Ok(run_id_ret)
-    }
+    Ok(run_id_ret)
 }
 
-// ── Analyzer-only implementation ──────────────────────────────────────────────
+// ── start_analysis implementation ─────────────────────────────────────────────
 
-#[cfg(feature = "analyzer")]
 async fn analyze_run_and_emit(
     app: AppHandle,
     paths: HammorPaths,
@@ -407,15 +363,69 @@ async fn analyze_run_and_emit(
     run_id: String,
     force: bool,
 ) -> anyhow::Result<()> {
-    let engagement_dir = paths.engagement_dir(&engagement_slug);
-    let prompts_dir = paths.prompts_dir();
+    let bin = resolve_analyzor_bin(&paths);
     let model_path = pipeline::find_model_file(&paths.analyzer_models_dir());
-    let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
-    let run_id_for_blocking = run_id.clone();
-    let run_id_for_progress = run_id.clone();
-    let app_for_progress = app.clone();
 
-    let summary = tokio::task::spawn_blocking(move || -> anyhow::Result<pipeline::JudgeRunSummary> {
+    let summary = match (bin, &model_path) {
+        (Some(bin), Some(model)) => {
+            run_via_subprocess(
+                app.clone(),
+                bin,
+                paths.engagement_dir(&engagement_slug),
+                paths.prompts_dir(),
+                run_id.clone(),
+                model.clone(),
+                force,
+            )
+            .await?
+        }
+        _ => {
+            // Either the analyzer binary or the model is missing — judging
+            // happens in-process with the heuristic. The user's UI surfaces
+            // the install state separately (Settings → analyzer).
+            run_in_process_heuristic(
+                app.clone(),
+                paths.engagement_dir(&engagement_slug),
+                paths.prompts_dir(),
+                run_id.clone(),
+                force,
+            )
+            .await?
+        }
+    };
+
+    // Both paths leave verdict JSONL behind; rendering the report is a
+    // pure reader, so we always do it here in the orchestrator.
+    pipeline::generate_report(&paths.engagement_dir(&engagement_slug), &run_id)?;
+
+    let _ = app.emit(
+        "analysis-progress",
+        AnalysisProgressEvent {
+            run_id,
+            processed: summary.processed,
+            total: summary.total,
+            judged: summary.judged,
+            skipped_existing: summary.skipped_existing,
+            finished: true,
+            error: None,
+        },
+    );
+
+    Ok(())
+}
+
+async fn run_in_process_heuristic(
+    app: AppHandle,
+    engagement_dir: PathBuf,
+    prompts_dir: PathBuf,
+    run_id: String,
+    force: bool,
+) -> anyhow::Result<JudgeRunSummary> {
+    let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
+    let run_id_for_progress = run_id.clone();
+    let app_for_progress = app;
+
+    tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeRunSummary> {
         let mut on_progress = |p: Progress| {
             let _ = app_for_progress.emit(
                 "analysis-progress",
@@ -434,8 +444,8 @@ async fn analyze_run_and_emit(
             &JudgeRunOptions {
                 engagement_dir: &engagement_dir,
                 prompts_dir: &prompts_dir,
-                run_id: &run_id_for_blocking,
-                model_path: model_path.as_deref(),
+                run_id: &run_id,
+                model_path: None,
                 analyzer_version: &analyzer_version,
                 force,
             },
@@ -443,25 +453,139 @@ async fn analyze_run_and_emit(
         )
     })
     .await
-    .map_err(|e| anyhow::anyhow!("analysis task join failure: {e}"))??;
+    .map_err(|e| anyhow::anyhow!("analysis task join failure: {e}"))?
+}
 
-    // Generate the report once judging finished.
-    let _report = pipeline::generate_report(&paths.engagement_dir(&engagement_slug), &run_id)?;
+async fn run_via_subprocess(
+    app: AppHandle,
+    bin: PathBuf,
+    engagement_dir: PathBuf,
+    prompts_dir: PathBuf,
+    run_id: String,
+    model_path: PathBuf,
+    force: bool,
+) -> anyhow::Result<JudgeRunSummary> {
+    let mut cmd = Command::new(&bin);
+    cmd.arg("judge-run")
+        .arg("--engagement-dir")
+        .arg(&engagement_dir)
+        .arg("--prompts-dir")
+        .arg(&prompts_dir)
+        .arg("--run")
+        .arg(&run_id)
+        .arg("--model")
+        .arg(&model_path);
+    if force {
+        cmd.arg("--force");
+    }
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let _ = app.emit(
-        "analysis-progress",
-        AnalysisProgressEvent {
-            run_id,
-            processed: summary.processed,
-            total: summary.total,
-            judged: summary.judged,
-            skipped_existing: summary.skipped_existing,
-            finished: true,
-            error: None,
-        },
-    );
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("failed to spawn {}: {e}", bin.display()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("analyz0r stdout not captured"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("analyz0r stderr not captured"))?;
 
-    Ok(())
+    let app_clone = app.clone();
+    let run_id_clone = run_id.clone();
+    let stdout_task = tokio::spawn(async move {
+        let mut summary: Option<JudgeRunSummary> = None;
+        let mut error_message: Option<String> = None;
+        let mut reader = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = reader.next_line().await {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            match value.get("event").and_then(|v| v.as_str()) {
+                Some("progress") => {
+                    let _ = app_clone.emit(
+                        "analysis-progress",
+                        AnalysisProgressEvent {
+                            run_id: run_id_clone.clone(),
+                            processed: u32_field(&value, "processed"),
+                            total: u32_field(&value, "total"),
+                            judged: u32_field(&value, "judged"),
+                            skipped_existing: u32_field(&value, "skipped_existing"),
+                            finished: false,
+                            error: None,
+                        },
+                    );
+                }
+                Some("result") => {
+                    summary = Some(JudgeRunSummary {
+                        processed: u32_field(&value, "processed"),
+                        total: u32_field(&value, "total"),
+                        judged: u32_field(&value, "judged"),
+                        skipped_existing: u32_field(&value, "skipped_existing"),
+                    });
+                }
+                Some("error") => {
+                    error_message = value
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_owned());
+                }
+                _ => {}
+            }
+        }
+        (summary, error_message)
+    });
+
+    let stderr_task = tokio::spawn(async move {
+        let mut buf = String::new();
+        let _ = BufReader::new(stderr).read_to_string(&mut buf).await;
+        buf
+    });
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| anyhow::anyhow!("analyz0r wait: {e}"))?;
+    let (summary, error_message) = stdout_task
+        .await
+        .map_err(|e| anyhow::anyhow!("analyz0r stdout task: {e}"))?;
+    let stderr_text = stderr_task.await.unwrap_or_default();
+
+    if !status.success() {
+        let detail = error_message
+            .or_else(|| Some(stderr_text.trim().to_owned()).filter(|s| !s.is_empty()))
+            .unwrap_or_else(|| "no diagnostic output".to_owned());
+        return Err(anyhow::anyhow!(
+            "analyz0r exited with code {}: {}",
+            status.code().unwrap_or(-1),
+            detail
+        ));
+    }
+
+    summary.ok_or_else(|| anyhow::anyhow!("analyz0r finished without emitting a result event"))
+}
+
+fn u32_field(value: &serde_json::Value, key: &str) -> u32 {
+    value
+        .get(key)
+        .and_then(|v| v.as_u64())
+        .map(|n| n as u32)
+        .unwrap_or(0)
+}
+
+fn resolve_analyzor_bin(paths: &HammorPaths) -> Option<PathBuf> {
+    if let Ok(env_path) = std::env::var(ANALYZOR_BIN_ENV) {
+        let p = PathBuf::from(env_path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    let bundled = paths
+        .analyzer_dir()
+        .join("bin")
+        .join(if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" });
+    bundled.exists().then_some(bundled)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -504,7 +628,6 @@ fn to_run_verdict_dto(run_id: &str, verdict: &VerdictEntry) -> RunVerdictDto {
     }
 }
 
-#[cfg(feature = "analyzer")]
 fn to_judge_result_dto(status: &str, run_id: &str, verdict: &VerdictEntry) -> JudgeResultDto {
     JudgeResultDto {
         status: status.to_owned(),
@@ -515,5 +638,41 @@ fn to_judge_result_dto(status: &str, run_id: &str, verdict: &VerdictEntry) -> Ju
         judge_reason: verdict.rationale.clone(),
         judge_model_used: verdict.model_used.clone(),
         judge_evaluated_at: verdict.evaluated_at.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// Bundled-path discovery and env-var override are exercised in a single
+    /// test because both touch the process-wide `HAMM0R_ANALYZOR_BIN` and
+    /// would otherwise race under `cargo test`'s parallel execution.
+    #[test]
+    fn resolve_analyzor_bin_picks_env_then_bundled() {
+        let tmp = TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+
+        // Baseline: nothing installed → None.
+        std::env::remove_var(ANALYZOR_BIN_ENV);
+        assert!(resolve_analyzor_bin(&paths).is_none());
+
+        // Create the bundled-install layout and check it gets picked up.
+        let bin_dir = paths.analyzer_dir().join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        let bundled = bin_dir.join(bin_name);
+        fs::write(&bundled, b"#!/bin/sh\nexit 0\n").unwrap();
+        assert_eq!(resolve_analyzor_bin(&paths), Some(bundled.clone()));
+
+        // Env var must override the bundled path, even when both exist.
+        let override_path = tmp.path().join("custom-analyz0r");
+        fs::write(&override_path, b"#!/bin/sh\nexit 0\n").unwrap();
+        std::env::set_var(ANALYZOR_BIN_ENV, &override_path);
+        let resolved = resolve_analyzor_bin(&paths);
+        std::env::remove_var(ANALYZOR_BIN_ENV);
+        assert_eq!(resolved, Some(override_path));
     }
 }
