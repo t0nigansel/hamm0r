@@ -1,3 +1,4 @@
+pub mod analyzer_install;
 pub mod engagements;
 pub mod logs;
 pub mod paths;
