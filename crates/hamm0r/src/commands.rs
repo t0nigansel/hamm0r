@@ -26,6 +26,10 @@ pub struct AppConfigState(pub AppConfig);
 pub struct LoggerState(pub AppLogger);
 pub struct AnalyzerLoggerState(pub AppLogger);
 pub struct ActiveRunsState(pub Arc<Mutex<HashMap<String, RunCancellation>>>);
+/// Tracks an in-flight analyzer install. `Some(variant_id)` while the
+/// download/extract task is running, `None` otherwise. Used by
+/// `get_analyzer_status` to surface the `downloading` state.
+pub struct AnalyzerInstallTracker(pub Arc<Mutex<Option<String>>>);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UserRelevantErrorEvent {

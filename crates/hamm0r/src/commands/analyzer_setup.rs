@@ -13,7 +13,9 @@ use storage::HammorPaths;
 use tauri::{AppHandle, Emitter as _, State};
 use tokio::io::AsyncWriteExt as _;
 
-use super::{report_user_relevant_error, AnalyzerLoggerState, AppPaths};
+use super::{
+    report_user_relevant_error, AnalyzerInstallTracker, AnalyzerLoggerState, AppPaths,
+};
 use crate::error::CommandError;
 
 // ── Manifest types (mirror of analyzer::manifest) ─────────────────────────────
@@ -128,49 +130,125 @@ fn bundled_manifest() -> AnalyzerManifest {
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
+/// State of the analyzer install. Stable string values are emitted in the
+/// Tauri DTO so the UI can switch on them without depending on Rust enum
+/// reordering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallState {
+    NotInstalled,
+    Downloading,
+    Installed,
+    BrokenInstall,
+    IncompatibleVersion,
+}
+
+impl InstallState {
+    fn as_str(self) -> &'static str {
+        match self {
+            InstallState::NotInstalled => "not_installed",
+            InstallState::Downloading => "downloading",
+            InstallState::Installed => "installed",
+            InstallState::BrokenInstall => "broken_install",
+            InstallState::IncompatibleVersion => "incompatible_version",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AnalyzerStatus {
-    /// `true` when a valid `install.json` is present. Phase 3 will turn
-    /// this into a richer state machine; for now it's a single bool.
+    /// One of `not_installed | downloading | installed | broken_install |
+    /// incompatible_version`. Source of truth for the UI; the legacy
+    /// `installed` bool below is just `state == "installed"`.
+    pub state: String,
+    /// Convenience field kept for the existing UI; equals `state == "installed"`.
     pub installed: bool,
-    /// File name of the installed model (if any) — kept for the existing
-    /// UI label. Read from disk separately from install.json so the user
-    /// sees the actual file present in `models/`.
+    /// File name of the installed model (if any) — read from disk separately
+    /// from install.json so the user sees the actual `.gguf` file present.
     pub model_file: Option<String>,
     /// Detected hardware class ("apple_silicon", "x86_64_avx2", "generic").
     pub hardware: String,
-    /// Variant id from install.json, when installed.
+    /// Variant id from install.json, when installed or in a broken install.
     pub variant_id: Option<String>,
     /// Bundle version from install.json, when installed.
     pub bundle_version: Option<String>,
+    /// Variant id of the in-flight download, when `state == "downloading"`.
+    pub downloading_variant_id: Option<String>,
 }
 
 #[tauri::command]
 pub fn get_analyzer_status(
     logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
+    tracker: State<'_, AnalyzerInstallTracker>,
 ) -> AnalyzerStatus {
-    let install = analyzer_install::read(&paths.0).ok().flatten();
+    let downloading = tracker.0.lock().ok().and_then(|g| g.clone());
+    let (state, install) = if downloading.is_some() {
+        // The on-disk layout during a download is mid-state — surface that
+        // instead of "installed/not_installed", which would flap.
+        (InstallState::Downloading, None)
+    } else {
+        install_state_on_disk(&paths.0)
+    };
+
     let model_file = first_gguf(&paths.0.analyzer_models_dir())
         .as_ref()
         .and_then(|p| p.file_name())
         .map(|n| n.to_string_lossy().into_owned());
+
     let status = AnalyzerStatus {
-        installed: install.is_some(),
+        state: state.as_str().to_owned(),
+        installed: state == InstallState::Installed,
         model_file,
         hardware: hardware_id(detect_hardware()),
         variant_id: install.as_ref().map(|i| i.variant_id.clone()),
         bundle_version: install.as_ref().map(|i| i.bundle_version.clone()),
+        downloading_variant_id: downloading,
     };
     logger.0.debug(
         "analyzer-setup",
         None,
         &format!(
-            "Analyzer status checked installed={} variant={:?} hardware={}",
-            status.installed, status.variant_id, status.hardware
+            "Analyzer status checked state={} variant={:?} hardware={}",
+            status.state, status.variant_id, status.hardware
         ),
     );
     status
+}
+
+/// Resolve the on-disk install state by reading `install.json` and
+/// cross-checking the layout. Distinguishes broken-install from
+/// incompatible-version by parsing the JSON in two passes (raw `Value`
+/// for the schema-version probe, then typed deserialization).
+fn install_state_on_disk(paths: &HammorPaths) -> (InstallState, Option<AnalyzerInstall>) {
+    let path = analyzer_install::install_path(paths);
+    if !path.exists() {
+        return (InstallState::NotInstalled, None);
+    }
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(_) => return (InstallState::BrokenInstall, None),
+    };
+    let value: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return (InstallState::BrokenInstall, None),
+    };
+    let version = value.get("version").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+    if version != CURRENT_VERSION {
+        return (InstallState::IncompatibleVersion, None);
+    }
+    let install: AnalyzerInstall = match serde_json::from_value(value) {
+        Ok(v) => v,
+        Err(_) => return (InstallState::BrokenInstall, None),
+    };
+
+    // Layout sanity check: the entrypoint binary and at least one model
+    // file must actually exist for the install to count as healthy.
+    let entrypoint = paths.analyzer_dir().join(&install.entrypoint);
+    let model_present = first_gguf(&paths.analyzer_models_dir()).is_some();
+    if !entrypoint.exists() || !model_present {
+        return (InstallState::BrokenInstall, Some(install));
+    }
+    (InstallState::Installed, Some(install))
 }
 
 // ── Manifest ──────────────────────────────────────────────────────────────────
@@ -224,27 +302,48 @@ pub struct DownloadProgress {
 }
 
 /// Start a background download + install of the specified analyzer variant.
-/// Emits `analyzer-download-progress` events throughout.
+/// Emits `analyzer-download-progress` events throughout. Refuses to start
+/// a second install while one is already in flight.
 #[tauri::command]
 pub async fn download_and_install_analyzer(
     app: AppHandle,
     logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
+    tracker: State<'_, AnalyzerInstallTracker>,
     variant_id: String,
 ) -> Result<String, CommandError> {
+    // Atomically claim the install slot. Holding the guard across the manifest
+    // fetch is fine — the lock is uncontended in the steady state.
+    {
+        let mut guard = tracker
+            .0
+            .lock()
+            .map_err(|_| anyhow::anyhow!("analyzer install tracker poisoned"))?;
+        if let Some(active) = guard.as_ref() {
+            return Err(
+                anyhow::anyhow!("analyzer install already in progress (variant {active})").into(),
+            );
+        }
+        *guard = Some(variant_id.clone());
+    }
+
     let manifest = match reqwest::get(MANIFEST_URL).await {
         Ok(r) if r.status().is_success() => r.json::<AnalyzerManifest>().await.ok(),
         _ => None,
     }
     .unwrap_or_else(bundled_manifest);
 
-    let variant = manifest
-        .variants
-        .into_iter()
-        .find(|v| v.id == variant_id)
-        .ok_or_else(|| anyhow::anyhow!("unknown variant id: {variant_id}"))?;
+    let variant = match manifest.variants.into_iter().find(|v| v.id == variant_id) {
+        Some(v) => v,
+        None => {
+            // Release the slot we just claimed before returning the error.
+            *tracker.0.lock().unwrap() = None;
+            return Err(anyhow::anyhow!("unknown variant id: {variant_id}").into());
+        }
+    };
 
     let paths_for_task = paths.0.clone();
+    let tracker_for_task = tracker.0.clone();
     let variant_id_ret = variant_id.clone();
     let logger = logger.0.clone();
 
@@ -254,7 +353,15 @@ pub async fn download_and_install_analyzer(
             None,
             &format!("Analyzer install task spawned for variant_id={variant_id}"),
         );
-        if let Err(e) = do_install(app.clone(), paths_for_task, variant).await {
+        let result = do_install(app.clone(), paths_for_task, variant).await;
+
+        // Release the install slot before reporting outcome so a follow-up
+        // install attempt isn't blocked by a stale tracker entry.
+        if let Ok(mut guard) = tracker_for_task.lock() {
+            *guard = None;
+        }
+
+        if let Err(e) = result {
             let message = format!("analyzer install failed for variant {variant_id}: {e}");
             report_user_relevant_error(
                 &app,
@@ -734,6 +841,128 @@ mod tests {
         assert!(!analyzer.join("models").exists());
         assert!(!analyzer.join(".staging").exists());
         assert!(analyzer_install::read(&paths).unwrap().is_none());
+    }
+
+    fn sample_install() -> AnalyzerInstall {
+        AnalyzerInstall {
+            version: CURRENT_VERSION,
+            bundle_version: "0.1.0".into(),
+            installed_at: "2026-05-04T00:00:00Z".into(),
+            variant_id: "qwen2.5-3b-q4-windows".into(),
+            model_id: "qwen2.5-3b-q4".into(),
+            platform: "windows-x86_64".into(),
+            entrypoint: if cfg!(windows) {
+                "bin/analyz0r.exe".into()
+            } else {
+                "bin/analyz0r".into()
+            },
+        }
+    }
+
+    fn lay_down_intact_install(paths: &HammorPaths) {
+        let analyzer = paths.analyzer_dir();
+        let bin_dir = analyzer.join("bin");
+        let models_dir = analyzer.join("models");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        std::fs::create_dir_all(&models_dir).unwrap();
+        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        std::fs::write(bin_dir.join(bin_name), b"#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::write(models_dir.join("test.gguf"), b"FAKE GGUF").unwrap();
+        analyzer_install::write(paths, &sample_install()).unwrap();
+    }
+
+    #[test]
+    fn state_is_not_installed_when_install_json_missing() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        let (state, install) = install_state_on_disk(&paths);
+        assert_eq!(state, InstallState::NotInstalled);
+        assert!(install.is_none());
+    }
+
+    #[test]
+    fn state_is_installed_when_layout_intact() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        lay_down_intact_install(&paths);
+        let (state, install) = install_state_on_disk(&paths);
+        assert_eq!(state, InstallState::Installed);
+        assert_eq!(install.unwrap().variant_id, "qwen2.5-3b-q4-windows");
+    }
+
+    #[test]
+    fn state_is_broken_install_when_entrypoint_missing() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        // install.json + model present, but no bin/.
+        let models_dir = paths.analyzer_dir().join("models");
+        std::fs::create_dir_all(&models_dir).unwrap();
+        std::fs::write(models_dir.join("test.gguf"), b"FAKE").unwrap();
+        analyzer_install::write(&paths, &sample_install()).unwrap();
+
+        let (state, install) = install_state_on_disk(&paths);
+        assert_eq!(state, InstallState::BrokenInstall);
+        // install.json is parsed, so we still hand the metadata back.
+        assert!(install.is_some());
+    }
+
+    #[test]
+    fn state_is_broken_install_when_model_missing() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        // install.json + bin present, but models/ empty.
+        let bin_dir = paths.analyzer_dir().join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        std::fs::write(bin_dir.join(bin_name), b"x").unwrap();
+        analyzer_install::write(&paths, &sample_install()).unwrap();
+
+        let (state, _) = install_state_on_disk(&paths);
+        assert_eq!(state, InstallState::BrokenInstall);
+    }
+
+    #[test]
+    fn state_is_incompatible_version_for_unknown_schema() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        // Lay down an install.json with a version this binary doesn't understand.
+        let install_path = analyzer_install::install_path(&paths);
+        std::fs::create_dir_all(install_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &install_path,
+            br#"{"version":99,"bundle_version":"x","installed_at":"x","variant_id":"x","model_id":"x","platform":"x","entrypoint":"x"}"#,
+        )
+        .unwrap();
+
+        let (state, install) = install_state_on_disk(&paths);
+        assert_eq!(state, InstallState::IncompatibleVersion);
+        assert!(install.is_none());
+    }
+
+    #[test]
+    fn state_is_broken_install_for_malformed_json() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        let install_path = analyzer_install::install_path(&paths);
+        std::fs::create_dir_all(install_path.parent().unwrap()).unwrap();
+        std::fs::write(&install_path, b"{not json").unwrap();
+
+        let (state, _) = install_state_on_disk(&paths);
+        assert_eq!(state, InstallState::BrokenInstall);
+    }
+
+    #[test]
+    fn install_state_string_values_are_stable() {
+        // The UI switches on these strings — pin them so a Rust enum
+        // reorder can't silently rename a state.
+        assert_eq!(InstallState::NotInstalled.as_str(), "not_installed");
+        assert_eq!(InstallState::Downloading.as_str(), "downloading");
+        assert_eq!(InstallState::Installed.as_str(), "installed");
+        assert_eq!(InstallState::BrokenInstall.as_str(), "broken_install");
+        assert_eq!(
+            InstallState::IncompatibleVersion.as_str(),
+            "incompatible_version"
+        );
     }
 
     #[test]

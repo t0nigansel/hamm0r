@@ -4,7 +4,10 @@ mod commands;
 mod error;
 mod logger;
 
-use commands::{ActiveRunsState, AnalyzerLoggerState, AppConfigState, AppPaths, LoggerState};
+use commands::{
+    ActiveRunsState, AnalyzerInstallTracker, AnalyzerLoggerState, AppConfigState, AppPaths,
+    LoggerState,
+};
 use logger::{new_app_session_id, AppLogger};
 use storage::types::AppConfig;
 use storage::HammorPaths;
@@ -36,6 +39,9 @@ fn main() {
             app.manage(ActiveRunsState(std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             ))));
+            app.manage(AnalyzerInstallTracker(std::sync::Arc::new(
+                std::sync::Mutex::new(None),
+            )));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -55,6 +61,7 @@ fn main() {
             commands::targets::save_target_meta,
             commands::targets::save_target,
             commands::targets::test_target_connection,
+            commands::targets::acquire_target_auth,
             commands::targets::delete_target,
             commands::scenarios::list_scenarios,
             commands::scenarios::create_scenario,
@@ -65,6 +72,8 @@ fn main() {
             commands::engagements::create_engagement,
             commands::engagements::list_runs,
             commands::engagements::get_run_progress,
+            commands::engagements::save_markdown_export,
+            commands::engagements::open_export_path,
             commands::runs::start_run,
             commands::runs::start_scenario_run,
             commands::runs::start_transient_scenario_run,
