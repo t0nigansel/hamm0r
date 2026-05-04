@@ -1,0 +1,30 @@
+[package]
+name = "analyzor-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+# Standalone CLI that wraps `analyzer::pipeline`. Future versions of hamm0r
+# will invoke this binary as a subprocess instead of compiling the analyzer
+# in-process. See docs/analyzorPlan.md (Phase 1 / Phase 4).
+
+[[bin]]
+name = "analyz0r"
+path = "src/main.rs"
+
+[dependencies]
+analyzer = { path = "../analyzer" }
+storage = { path = "../storage" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# clap: de-facto standard CLI parser; derive feature lets us keep the
+# subcommand definitions next to their handler types.
+clap = { version = "4", features = ["derive"] }
+
+[features]
+# Off by default so the CLI builds on hosts without libclang (e.g. plain
+# Windows dev boxes) — `judge-run --model …` errors out at runtime instead.
+# Release bundles must enable this feature to ship a working LLM judge.
+runtime = ["analyzer/runtime"]

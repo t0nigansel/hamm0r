@@ -5,6 +5,7 @@ members = [
     "crates/runner",
     "crates/storage",
     "crates/analyzer",
+    "crates/analyzor-cli",
 ]
 
 [workspace.package]
