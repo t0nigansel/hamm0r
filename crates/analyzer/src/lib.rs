@@ -1,5 +1,7 @@
+#[cfg(feature = "runtime")]
 pub mod llm;
 pub mod manifest;
+pub mod pipeline;
 pub mod report;
 
 use serde::{Deserialize, Serialize};
@@ -151,6 +153,7 @@ pub fn judge(input: &JudgeInput) -> Result<JudgeOutput, AnalyzerError> {
 }
 
 /// Run the judge through the LLM. Falls back to heuristic if JSON parse fails.
+#[cfg(feature = "runtime")]
 pub fn judge_with_llm(
     input: &JudgeInput,
     llm: &llm::LlmJudge,
@@ -162,6 +165,7 @@ pub fn judge_with_llm(
     Ok(parse_llm_output(&raw, &llm.model_id))
 }
 
+#[cfg(feature = "runtime")]
 fn parse_llm_output(raw: &str, model_id: &str) -> JudgeOutput {
     #[derive(Deserialize)]
     struct LlmResponse {
@@ -210,6 +214,7 @@ fn parse_llm_output(raw: &str, model_id: &str) -> JudgeOutput {
 }
 
 /// Extract the first balanced JSON object from an arbitrary string.
+#[cfg(feature = "runtime")]
 fn extract_json(s: &str) -> Option<&str> {
     let start = s.find('{')?;
     let end = s.rfind('}')?;

@@ -26,7 +26,10 @@ analyzer = { path = "../analyzer", optional = true }
 [features]
 # Off by default — the analyzer is a multi-GB opt-in download.
 # CI checks: `cargo tree -p hamm0r --no-default-features` must not list `analyzer`.
-analyzer = ["dep:analyzer"]
+# Enables the analyzer crate *with* its LLM runtime so in-process judging works
+# for users on toolchains where libclang is available. The forthcoming
+# `analyz0r` CLI binary will be the long-term carrier of the runtime instead.
+analyzer = ["dep:analyzer", "analyzer/runtime"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

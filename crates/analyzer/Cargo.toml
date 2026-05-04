@@ -10,7 +10,9 @@ rust-version.workspace = true
 # CI enforces this via:
 #   cargo tree -p hamm0r --no-default-features   (must not list `analyzer`)
 #
-# LLM runtime (llama-cpp-2) will be added here in Milestone 6.
+# Default build = judging primitives + heuristic + report rendering only.
+# Pulling in the LLM runtime (llama-cpp-2) requires `--features runtime`,
+# which is what the forthcoming `analyz0r` CLI binary turns on.
 
 [dependencies]
 anyhow.workspace = true
@@ -22,10 +24,15 @@ sha2 = "0.10"
 minijinja = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-2 = { version = "0.1", features = ["metal", "sampler"] }
+llama-cpp-2 = { version = "0.1", features = ["metal", "sampler"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-llama-cpp-2 = { version = "0.1", features = ["sampler"] }
+llama-cpp-2 = { version = "0.1", features = ["sampler"], optional = true }
+
+[features]
+# Pulls in llama-cpp-2 + the `llm` module. Off by default so the analyzer
+# crate compiles on hosts without libclang.
+runtime = ["dep:llama-cpp-2"]
 
 [dev-dependencies]
 insta = "1"
