@@ -61,6 +61,7 @@ pub struct StopRunResult {
 /// via Tauri as each attempt completes. The JSONL file is written to
 /// `<engagements_dir>/<engagement_slug>/runs/<run_id>.jsonl`.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn start_run(
     app: AppHandle,
     active_runs: State<'_, ActiveRunsState>,
@@ -370,6 +371,7 @@ pub async fn start_scenario_run(
 
 /// Start a transient one-step scenario (used by Quick Run / Workbench).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn start_transient_scenario_run(
     app: AppHandle,
     active_runs: State<'_, ActiveRunsState>,
@@ -595,13 +597,12 @@ pub fn read_response_body(
         &format!("read_response_body invoked for seq={seq} engagement={engagement_slug}"),
     );
     storage::runs::read_response_body(&engagement_dir, &run_id, seq)
-        .map(|body| {
+        .inspect(|body| {
             logger.0.debug(
                 "runner",
                 Some(&run_id),
                 &format!("read_response_body completed has_body={}", body.is_some()),
             );
-            body
         })
         .map_err(|err| {
             logger.0.error(

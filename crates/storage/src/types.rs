@@ -264,32 +264,22 @@ pub struct EngagementMeta {
 // —— App config ————————————————————————————————————————————————————————————————
 // Stored as ~/hamm0r/config.yaml.
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
+    #[default]
     System,
     Light,
     Dark,
 }
 
-impl Default for Theme {
-    fn default() -> Self {
-        Self::System
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Error,
+    #[default]
     Info,
     Debug,
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Info
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -235,6 +235,7 @@ pub(crate) fn parse_session_strategy(strategy: &str, field: Option<String>) -> S
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn log_test_request(
     logger: &crate::logger::AppLogger,
     request: &Request,

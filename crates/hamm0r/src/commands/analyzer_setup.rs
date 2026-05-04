@@ -383,7 +383,7 @@ fn detect_hardware() -> HardwareClass {
         if is_x86_feature_detected!("avx2") {
             return HardwareClass::X86_64Avx2;
         }
-        return HardwareClass::Generic;
+        HardwareClass::Generic
     }
 
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]

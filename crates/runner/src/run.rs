@@ -935,6 +935,7 @@ fn limit_body_for_log(body: Vec<u8>) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -1035,8 +1036,8 @@ fn estimate_request_body_size(request: &Request, prompt: &str, session_value: &s
 
     let render_len = |text: String| -> u64 {
         crate::template::render(&text, prompt)
-            .map(|s| s.as_bytes().len() as u64)
-            .unwrap_or(text.as_bytes().len() as u64)
+            .map(|s| s.len() as u64)
+            .unwrap_or(text.len() as u64)
     };
 
     match request.body.format {
