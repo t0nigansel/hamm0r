@@ -52,7 +52,13 @@ pub struct Artifact {
     pub size_bytes: u64,
 }
 
-pub const MANIFEST_URL: &str = "https://hamm0r.io/analyzer/manifest.json";
+/// Where hamm0r fetches the analyzer manifest. The manifest is a small
+/// JSON file kept in this repo at `analyzer/manifest.json` and served
+/// by GitHub's raw-content CDN. Bundle zips referenced by the manifest
+/// live as GitHub Release assets — see `analyzer/README.md` for the
+/// publish recipe.
+pub const MANIFEST_URL: &str =
+    "https://raw.githubusercontent.com/t0nigansel/hamm0r/main/analyzer/manifest.json";
 
 /// Fetch the manifest for use inside a spawned task. The Tauri-facing
 /// version of the same logic with logger plumbing lives in `mod.rs`.
