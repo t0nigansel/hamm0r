@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>hamm0r — AI Security Testing</title>
   <link rel="icon" type="image/png" href="images/hamm0r_favicon_32x32.png?v=1">
-  <link rel="stylesheet" href="style.css?v=20260425b">
+  <link rel="stylesheet" href="style.css?v=20260504a">
 </head>
 <body>
 
@@ -463,6 +463,71 @@
               <label for="target-auth-header">Auth header</label>
               <input id="target-auth-header" type="text" placeholder="Authorization (default)">
             </div>
+            <fieldset class="request-editor-group" id="target-auth-fetch-group" style="display:none">
+              <legend>Token acquisition</legend>
+              <div class="form-grid-2">
+                <div class="form-row">
+                  <label for="target-auth-source">Auth source</label>
+                  <select id="target-auth-source">
+                    <option value="manual">Manual / keychain</option>
+                    <option value="env_only">Env var only</option>
+                    <option value="http_login">HTTP login</option>
+                  </select>
+                </div>
+                <div class="form-row" id="target-auth-fetch-action-row" style="display:none">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn btn-ghost" id="btn-auth-fetch-token">Fetch token</button>
+                </div>
+              </div>
+              <div id="target-auth-http-config" style="display:none">
+                <div class="form-grid-2">
+                  <div class="form-row">
+                    <label for="target-auth-login-env">Login env var name</label>
+                    <input id="target-auth-login-env" type="text" placeholder="e.g. PROFILER_LOGIN">
+                  </div>
+                  <div class="form-row">
+                    <label for="target-auth-password-env">Password env var name</label>
+                    <input id="target-auth-password-env" type="text" placeholder="e.g. PROFILER_PASSWORD">
+                  </div>
+                </div>
+                <div class="form-grid-2">
+                  <div class="form-row">
+                    <label for="target-auth-login-url">Login URL</label>
+                    <input id="target-auth-login-url" type="url" placeholder="https://api.example.com/auth/login">
+                  </div>
+                  <div class="form-row">
+                    <label for="target-auth-login-method">Login method</label>
+                    <select id="target-auth-login-method">
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="PATCH">PATCH</option>
+                      <option value="GET">GET</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-grid-2">
+                  <div class="form-row">
+                    <label for="target-auth-login-timeout">Login timeout (seconds)</label>
+                    <input id="target-auth-login-timeout" type="number" min="1" step="1" value="60">
+                  </div>
+                  <div class="form-row">
+                    <label for="target-auth-token-path">Token JSONPath</label>
+                    <input id="target-auth-token-path" type="text" placeholder="$.jwToken">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <label for="target-auth-login-headers">Login headers</label>
+                  <textarea id="target-auth-login-headers" rows="4" placeholder="Content-Type: application/json"></textarea>
+                </div>
+                <div class="form-row">
+                  <label for="target-auth-body-template">Login body template</label>
+                  <textarea id="target-auth-body-template" rows="6" placeholder='{"email":"{{login}}","password":"{{password}}"}'></textarea>
+                </div>
+                <small class="auth-token-help">
+                  Credentials are read from the configured env vars at fetch time. Only the acquired bearer token is stored in the OS keychain under the auth env var above.
+                </small>
+              </div>
+            </fieldset>
 
             <fieldset class="request-editor-group">
               <legend>Headers</legend>
@@ -1190,12 +1255,48 @@
 <!-- ================================================================
      Settings modal
      ================================================================ -->
-<div id="analyzer-modal" class="modal" style="display:none">
-  <div class="modal-content modal-analyzer">
-    <button class="modal-close" id="analyzer-modal-close">&times;</button>
+<div id="settings-modal" class="modal" style="display:none">
+  <div class="modal-content modal-settings">
+    <button class="modal-close" id="settings-modal-close">&times;</button>
     <h3 class="modal-heading">Settings</h3>
 
     <section class="settings-section">
+      <div class="settings-section-head">
+        <h4 class="settings-section-title">General</h4>
+        <span class="settings-section-note">App-wide preferences</span>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label for="settings-app-version">App version</label>
+          <input id="settings-app-version" type="text" value="—" readonly>
+        </div>
+      </div>
+      <div class="settings-inline-note">
+        Configuration lives in <code>~/hamm0r/config.yaml</code>.
+      </div>
+    </section>
+
+    <section class="settings-section settings-section-divider">
+      <div class="settings-section-head">
+        <h4 class="settings-section-title">Appearance</h4>
+        <span class="settings-section-note">Theme &amp; profile</span>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label for="settings-theme">Theme</label>
+          <select id="settings-theme" disabled>
+            <option value="default">hamm0r (default)</option>
+            <option value="spirit">Spirit Testing</option>
+            <option value="testsolutions">TestSolutions</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-inline-note">
+        Alternate themes are not implemented yet — the picker is reserved for the upcoming theming work.
+      </div>
+    </section>
+
+    <section class="settings-section settings-section-divider">
       <div class="settings-section-head">
         <h4 class="settings-section-title">Logging</h4>
         <span class="settings-section-note">Applied after app restart</span>
@@ -1266,17 +1367,18 @@
 
     <div class="editor-actions" style="margin-top:1.2rem">
       <button id="btn-analyzer-install" class="btn btn-primary" disabled>Download &amp; Install</button>
+      <button id="btn-analyzer-repair" class="btn btn-primary" style="display:none">Repair install</button>
       <button id="btn-analyzer-uninstall" class="btn btn-danger" style="display:none">Remove Model</button>
     </div>
     </section>
 
     <div class="editor-actions" style="margin-top:1.2rem">
-      <button id="analyzer-modal-cancel" class="btn btn-ghost">Close</button>
+      <button id="settings-modal-cancel" class="btn btn-ghost">Close</button>
     </div>
   </div>
 </div>
 
-<script src="js/api.js?v=20260502a"></script>
-<script src="js/app.js?v=20260502a"></script>
+<script src="js/api.js?v=20260504b"></script>
+<script src="js/app.js?v=20260504b"></script>
 </body>
 </html>

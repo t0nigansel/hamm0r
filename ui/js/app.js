@@ -261,6 +261,32 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => el.remove(), 4000);
   }
 
+  function toastAction(message, actionLabel, onAction, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type} toast-action`;
+
+    const text = document.createElement('span');
+    text.className = 'toast-message';
+    text.textContent = message;
+    el.appendChild(text);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-link';
+    btn.textContent = actionLabel;
+    btn.addEventListener('click', async () => {
+      try {
+        await onAction();
+      } catch (err) {
+        toast(err.message || String(err), 'error');
+      }
+    });
+    el.appendChild(btn);
+
+    $('#toast-container').appendChild(el);
+    setTimeout(() => el.remove(), 7000);
+  }
+
   // ── Workbench state ────────────────────────────────────────────────
   const wb = {
     activeTargetId: null,
@@ -742,12 +768,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function wizardSelectedPrompts() {
-    return wizardCatalog.prompts.filter((p) => {
-      const inOwasp = wizardState.selectedOwaspRefs.includes(p.owasp_ref);
-      const inCustom = wizardState.selectedCustomLibraries.includes(p.category || '');
-      return inOwasp || inCustom;
+  function wizardPromptIdentity(prompt) {
+    const category = String(prompt?.category || '');
+    const id = String(prompt?.id || '');
+    const text = String(prompt?.text || '');
+    return `${category}\u0000${id}\u0000${text}`;
+  }
+
+  function wizardPromptsForSelection(selectedRefs = [], selectedCustomLibraries = []) {
+    const selected = [];
+    const seen = new Set();
+
+    wizardCatalog.prompts.forEach((prompt) => {
+      const inOwasp = selectedRefs.includes(prompt.owasp_ref);
+      const inCustom = selectedCustomLibraries.includes(prompt.category || '');
+      if (!inOwasp && !inCustom) return;
+
+      const key = wizardPromptIdentity(prompt);
+      if (seen.has(key)) return;
+      seen.add(key);
+      selected.push(prompt);
     });
+
+    return selected;
+  }
+
+  function wizardSelectedPrompts() {
+    return wizardPromptsForSelection(
+      wizardState.selectedOwaspRefs,
+      wizardState.selectedCustomLibraries,
+    );
+  }
+
+  function wizardScenarioPromptCount(scenarioId) {
+    const scenario = wizardScenarioById(scenarioId);
+    if (!scenario) return 0;
+    return wizardPromptsForSelection(
+      scenario.defaultOwaspRefs,
+      scenario.defaultCustomLibraries,
+    ).length;
   }
 
   function wizardTargetDisplayName() {
@@ -914,6 +973,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const grid = $('#wizard-scenario-cards');
     grid.innerHTML = '';
     WIZARD_SCENARIOS.forEach((scenario) => {
+      const promptCount = wizardScenarioPromptCount(scenario.id);
+      const runtime = wizardEstimatedRuntime(promptCount);
       const card = document.createElement('button');
       card.type = 'button';
       card.className = `wizard-scenario-card${wizardState.scenarioId === scenario.id ? ' active' : ''}`;
@@ -924,8 +985,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <h4>${esc(scenario.name)}</h4>
         <p>${esc(scenario.description)}</p>
         <div class="wizard-scenario-meta">
-          <span>${scenario.estimatedPrompts ? `${scenario.estimatedPrompts} prompts` : 'custom size'}</span>
-          <span>${esc(scenario.estimatedRuntime)}</span>
+          <span>${promptCount > 0 ? `${promptCount} prompts` : 'custom size'}</span>
+          <span>${esc(promptCount > 0 ? runtime : scenario.estimatedRuntime)}</span>
         </div>
         <div class="wizard-scenario-badges">${badges}</div>
       `;
@@ -996,15 +1057,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedRefs = wizardState.selectedOwaspRefs || [];
     const selectedCustom = wizardState.selectedCustomLibraries || [];
     const groups = [];
+    const seenPromptKeys = new Set();
 
     selectedRefs.forEach((ref) => {
       const prompts = wizardCatalog.prompts.filter((p) => p.owasp_ref === ref);
-      groups.push({ label: `OWASP ${ref}`, prompts });
+      const uniquePrompts = prompts.filter((prompt) => {
+        const key = wizardPromptIdentity(prompt);
+        if (seenPromptKeys.has(key)) return false;
+        seenPromptKeys.add(key);
+        return true;
+      });
+      groups.push({ label: `OWASP ${ref}`, prompts, uniquePrompts });
     });
 
     selectedCustom.forEach((lib) => {
       const prompts = wizardCatalog.prompts.filter((p) => (p.category || '') === lib);
-      groups.push({ label: lib, prompts });
+      const uniquePrompts = prompts.filter((prompt) => {
+        const key = wizardPromptIdentity(prompt);
+        if (seenPromptKeys.has(key)) return false;
+        seenPromptKeys.add(key);
+        return true;
+      });
+      groups.push({ label: lib, prompts, uniquePrompts });
     });
 
     if (groups.length === 0) {
@@ -1013,8 +1087,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     preview.innerHTML = groups.map((group) => {
-      const promptRows = group.prompts.length > 0
-        ? group.prompts.map((prompt) => `
+      const promptRows = group.uniquePrompts.length > 0
+        ? group.uniquePrompts.map((prompt) => `
             <div class="wizard-lib-prompt">
               <div class="wizard-lib-prompt-meta">
                 <span class="wizard-lib-prompt-id">${esc(prompt.id || 'custom')}</span>
@@ -1023,13 +1097,19 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="wizard-lib-prompt-text">${esc(prompt.text || '')}</div>
             </div>
           `).join('')
-        : '<div class="wizard-lib-prompt"><div class="wizard-lib-prompt-text">No prompts found in this library.</div></div>';
+        : group.prompts.length > 0
+          ? '<div class="wizard-lib-prompt"><div class="wizard-lib-prompt-text">All prompts in this group are already included above.</div></div>'
+          : '<div class="wizard-lib-prompt"><div class="wizard-lib-prompt-text">No prompts found in this library.</div></div>';
+
+      const countLabel = group.prompts.length === group.uniquePrompts.length
+        ? `${group.prompts.length} prompts`
+        : `${group.uniquePrompts.length} shown of ${group.prompts.length} prompts`;
 
       return `
         <div class="wizard-lib-group">
           <div class="wizard-lib-group-header">
             <span class="wizard-lib-group-name">${esc(group.label)}</span>
-            <span class="wizard-lib-group-count">${group.prompts.length} prompts</span>
+            <span class="wizard-lib-group-count">${countLabel}</span>
           </div>
           <div class="wizard-lib-prompt-list">${promptRows}</div>
         </div>
@@ -2362,6 +2442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     targetId: '',
     requests: [],
     selectedRequestId: '',
+    authAcquisition: null,
   };
 
   function slugifyEntityName(name, fallback = 'item') {
@@ -2393,6 +2474,20 @@ document.addEventListener('DOMContentLoaded', () => {
       response_extract_value: '$.response',
       timeout_seconds: 30,
       target_id: targetId || '',
+    };
+  }
+
+  function blankAuthAcquisitionDraft() {
+    return {
+      auth_source: 'manual',
+      auth_login_env: '',
+      auth_password_env: '',
+      auth_login_url: '',
+      auth_login_method: 'POST',
+      auth_login_headers: { 'Content-Type': 'application/json' },
+      auth_login_body_template: '{"email":"{{login}}","password":"{{password}}"}',
+      auth_token_json_path: '$.jwToken',
+      auth_login_timeout_seconds: 60,
     };
   }
 
@@ -2828,11 +2923,80 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = $('#target-auth-type').value;
     $('#auth-value-row').style.display = v === 'none' ? 'none' : '';
     $('#auth-header-row').style.display = v === 'api_key' ? '' : 'none';
+    $('#target-auth-fetch-group').style.display = v === 'bearer' ? '' : 'none';
     // Keychain-backed token UI is only shown for single-secret auth modes.
     // Basic auth uses two env vars (user + pass) and is env-var-only for now.
     const tokenRowVisible = v === 'bearer' || v === 'api_key';
     $('#auth-token-row').style.display = tokenRowVisible ? '' : 'none';
+    updateTargetAuthAcquisitionUI();
     if (tokenRowVisible) refreshAuthTokenStatus();
+  }
+
+  function ensureAuthAcquisitionDraft() {
+    if (!targetEditorState.authAcquisition) {
+      targetEditorState.authAcquisition = blankAuthAcquisitionDraft();
+    }
+    return targetEditorState.authAcquisition;
+  }
+
+  function syncAuthAcquisitionDraftFromForm() {
+    const draft = ensureAuthAcquisitionDraft();
+    draft.auth_source = $('#target-auth-source').value || 'manual';
+    draft.auth_login_env = $('#target-auth-login-env').value.trim();
+    draft.auth_password_env = $('#target-auth-password-env').value.trim();
+    draft.auth_login_url = $('#target-auth-login-url').value.trim();
+    draft.auth_login_method = $('#target-auth-login-method').value || 'POST';
+    draft.auth_login_headers = headersRowsToObject(rawHeadersToRows($('#target-auth-login-headers').value));
+    draft.auth_login_body_template = $('#target-auth-body-template').value;
+    draft.auth_token_json_path = $('#target-auth-token-path').value.trim();
+    draft.auth_login_timeout_seconds = Number($('#target-auth-login-timeout').value || 60);
+    return draft;
+  }
+
+  function populateAuthAcquisitionEditor(draft) {
+    const next = draft || blankAuthAcquisitionDraft();
+    targetEditorState.authAcquisition = {
+      ...blankAuthAcquisitionDraft(),
+      ...next,
+      auth_login_headers: next.auth_login_headers || { 'Content-Type': 'application/json' },
+    };
+
+    $('#target-auth-source').value = targetEditorState.authAcquisition.auth_source || 'manual';
+    $('#target-auth-login-env').value = targetEditorState.authAcquisition.auth_login_env || '';
+    $('#target-auth-password-env').value = targetEditorState.authAcquisition.auth_password_env || '';
+    $('#target-auth-login-url').value = targetEditorState.authAcquisition.auth_login_url || '';
+    $('#target-auth-login-method').value = targetEditorState.authAcquisition.auth_login_method || 'POST';
+    $('#target-auth-login-headers').value = headersObjectToRaw(targetEditorState.authAcquisition.auth_login_headers || {});
+    $('#target-auth-body-template').value = targetEditorState.authAcquisition.auth_login_body_template || '';
+    $('#target-auth-token-path').value = targetEditorState.authAcquisition.auth_token_json_path || '';
+    $('#target-auth-login-timeout').value = targetEditorState.authAcquisition.auth_login_timeout_seconds || 60;
+    updateTargetAuthAcquisitionUI();
+  }
+
+  function updateTargetAuthAcquisitionUI() {
+    const authType = $('#target-auth-type').value;
+    const authSource = $('#target-auth-source').value || 'manual';
+    const bearerMode = authType === 'bearer';
+    const httpMode = bearerMode && authSource === 'http_login';
+    $('#target-auth-http-config').style.display = httpMode ? '' : 'none';
+    $('#target-auth-fetch-action-row').style.display = httpMode ? '' : 'none';
+  }
+
+  function buildAcquireTargetAuthDto() {
+    syncAuthAcquisitionDraftFromForm();
+    return {
+      auth_type: $('#target-auth-type').value,
+      auth_env: $('#target-auth-value').value.trim() || null,
+      auth_source: targetEditorState.authAcquisition?.auth_source || 'manual',
+      auth_login_env: targetEditorState.authAcquisition?.auth_login_env || null,
+      auth_password_env: targetEditorState.authAcquisition?.auth_password_env || null,
+      auth_login_url: targetEditorState.authAcquisition?.auth_login_url || null,
+      auth_login_method: targetEditorState.authAcquisition?.auth_login_method || null,
+      auth_login_headers: targetEditorState.authAcquisition?.auth_login_headers || {},
+      auth_login_body_template: targetEditorState.authAcquisition?.auth_login_body_template || null,
+      auth_token_json_path: targetEditorState.authAcquisition?.auth_token_json_path || null,
+      auth_login_timeout_seconds: Number(targetEditorState.authAcquisition?.auth_login_timeout_seconds || 60),
+    };
   }
 
   let _authTokenStatusDebounce = null;
@@ -2946,6 +3110,17 @@ document.addEventListener('DOMContentLoaded', () => {
       refreshAuthTokenStatus();
     } catch (err) {
       toast(err.message || 'Failed to remove token', 'error');
+    }
+  }
+
+  async function fetchAuthToken() {
+    try {
+      const dto = buildAcquireTargetAuthDto();
+      const result = await API.call('acquire_target_auth', { dto });
+      toast(result.message || 'Token fetched', 'success');
+      refreshAuthTokenStatus();
+    } catch (err) {
+      toast(err.message || 'Failed to fetch token', 'error');
     }
   }
 
@@ -3115,6 +3290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     publishTargetInteractionDebug('target-form submit', e);
     syncCurrentRequestDraftFromForm();
+    syncAuthAcquisitionDraftFromForm();
     ensureCurrentRequestDraft();
 
     const targetName = $('#target-name').value.trim();
@@ -3129,6 +3305,15 @@ document.addEventListener('DOMContentLoaded', () => {
       request_ids: [],
       session_strategy: $('#target-session-strategy').value,
       session_field: $('#target-session-field').value.trim() || null,
+      auth_source: targetEditorState.authAcquisition?.auth_source || 'manual',
+      auth_login_env: targetEditorState.authAcquisition?.auth_login_env || null,
+      auth_password_env: targetEditorState.authAcquisition?.auth_password_env || null,
+      auth_login_url: targetEditorState.authAcquisition?.auth_login_url || null,
+      auth_login_method: targetEditorState.authAcquisition?.auth_login_method || null,
+      auth_login_headers: targetEditorState.authAcquisition?.auth_login_headers || {},
+      auth_login_body_template: targetEditorState.authAcquisition?.auth_login_body_template || null,
+      auth_token_json_path: targetEditorState.authAcquisition?.auth_token_json_path || null,
+      auth_login_timeout_seconds: Number(targetEditorState.authAcquisition?.auth_login_timeout_seconds || 60),
       notes: $('#target-system-prompt').value.trim() || null,
     };
 
@@ -3257,6 +3442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     draft.response_extract_type = $('#target-response-extract-type').value;
     draft.response_extract_value = $('#target-response-extract-value').value.trim();
     draft.timeout_seconds = Number($('#target-timeout-seconds').value || 30);
+    syncAuthAcquisitionDraftFromForm();
   }
 
   function populateRequestEditor(draft) {
@@ -3346,9 +3532,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   $('#target-auth-type').addEventListener('change', updateTargetAuthUI);
+  $('#target-auth-source').addEventListener('change', () => {
+    syncAuthAcquisitionDraftFromForm();
+    updateTargetAuthAcquisitionUI();
+  });
   $('#target-auth-value').addEventListener('input', () => {
     clearTimeout(_authTokenStatusDebounce);
     _authTokenStatusDebounce = setTimeout(refreshAuthTokenStatus, 250);
+  });
+  $('#btn-auth-fetch-token').addEventListener('click', () => {
+    void fetchAuthToken();
   });
   $('#btn-auth-token-set').addEventListener('click', openAuthTokenModal);
   $('#btn-auth-token-forget').addEventListener('click', forgetAuthToken);
@@ -3467,6 +3660,7 @@ document.addEventListener('DOMContentLoaded', () => {
     targetEditorState.targetId = targetId;
     targetEditorState.requests = [requestDraft];
     targetEditorState.selectedRequestId = requestDraft.id;
+    targetEditorState.authAcquisition = blankAuthAcquisitionDraft();
     $('#target-id').value = '';
     $('#target-request-id').value = requestDraft.id;
     $('#target-form').style.display = '';
@@ -3481,6 +3675,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTargetHeadersUI();
     updateTargetResponseExtractUI();
     populateRequestEditor(requestDraft);
+    populateAuthAcquisitionEditor(targetEditorState.authAcquisition);
     renderTargetRequestList();
   }
 
@@ -3499,6 +3694,18 @@ document.addEventListener('DOMContentLoaded', () => {
       targetEditorState.requests = (requestRecords || []).map(requestRecordToDraft);
       targetEditorState.selectedRequestId =
         (targetEditorState.requests.find(r => r.primary) || targetEditorState.requests[0] || {}).id || '';
+      targetEditorState.authAcquisition = {
+        ...blankAuthAcquisitionDraft(),
+        auth_source: meta.auth_source || 'manual',
+        auth_login_env: meta.auth_login_env || '',
+        auth_password_env: meta.auth_password_env || '',
+        auth_login_url: meta.auth_login_url || '',
+        auth_login_method: meta.auth_login_method || 'POST',
+        auth_login_headers: meta.auth_login_headers || { 'Content-Type': 'application/json' },
+        auth_login_body_template: meta.auth_login_body_template || '{"email":"{{login}}","password":"{{password}}"}',
+        auth_token_json_path: meta.auth_token_json_path || '$.jwToken',
+        auth_login_timeout_seconds: Number(meta.auth_login_timeout_seconds || 60),
+      };
 
       $('#target-id').value = meta.id;
       $('#target-name').value = meta.name || '';
@@ -3516,6 +3723,7 @@ document.addEventListener('DOMContentLoaded', () => {
       $('#target-content').style.display = '';
 
       ensureSelectedRequest();
+      populateAuthAcquisitionEditor(targetEditorState.authAcquisition);
       $$('#target-list .target-card-row').forEach(li => li.classList.toggle('active', li.dataset.id === targetId));
     } catch (err) { toast(err.message, 'error'); }
   }
@@ -4393,6 +4601,9 @@ document.addEventListener('DOMContentLoaded', () => {
       summary.textContent = 'Select a run to build the report snapshot.';
       coverage.innerHTML = '';
       preview.textContent = 'No report data yet.';
+      preview.style.display = '';
+      const frame = document.getElementById('eng-report-frame');
+      if (frame) frame.style.display = 'none';
       return;
     }
 
@@ -4431,6 +4642,46 @@ document.addEventListener('DOMContentLoaded', () => {
       `results_failed: ${failed}`,
       `avg_latency_ms: ${Number.isFinite(avgLatency) ? avgLatency.toFixed(1) : 'n/a'}`,
     ].join('\n');
+
+    // If the analyzer has produced an HTML report for this run, replace
+    // the textual snapshot with the rendered report. Reports live next
+    // to verdicts in the engagement folder; absence is normal.
+    if (run?.id && engagementDetail.slug) {
+      tryRenderRunReportHtml(engagementDetail.slug, run.id, preview);
+    }
+  }
+
+  async function tryRenderRunReportHtml(engagementSlug, runId, preview) {
+    try {
+      const html = await API.call('read_report_html', { engagement_slug: engagementSlug, run_id: runId });
+      // Race guard: if the user switched runs while the read was in
+      // flight, this resolution is for a stale run — drop it rather
+      // than overwriting the now-current run's report.
+      if (engagementDetail.activeRunId !== runId) return;
+      if (engagementDetail.slug !== engagementSlug) return;
+
+      let frame = document.getElementById('eng-report-frame');
+      if (!html) {
+        // No generated report — keep the textual snapshot, hide any old frame.
+        if (frame) frame.style.display = 'none';
+        preview.style.display = '';
+        return;
+      }
+      // Render the generated report inside a sandboxed iframe alongside
+      // the textual preview, hiding the latter while the report is shown.
+      if (!frame) {
+        frame = document.createElement('iframe');
+        frame.id = 'eng-report-frame';
+        frame.className = 'eng-report-preview';
+        frame.setAttribute('sandbox', '');
+        preview.parentNode.insertBefore(frame, preview);
+      }
+      frame.srcdoc = html;
+      frame.style.display = '';
+      preview.style.display = 'none';
+    } catch (_) {
+      // Silently leave the textual preview in place on read errors.
+    }
   }
 
   function updateEngagementHeader(run, results) {
@@ -4784,9 +5035,118 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000);
   }
 
+  // ── Analyzer availability for run-level Analyze button ──────────────
+  // Cached per loadRuns call so we don't refetch per row. Refreshed on
+  // each loadRuns invocation, which happens whenever the runs view is
+  // re-rendered (incl. after install completes via checkAnalyzerCta).
+  let analyzerAvailability = { state: 'not_installed', installed: false };
+
+  async function refreshAnalyzerAvailability() {
+    try {
+      analyzerAvailability = await API.call('get_analyzer_status');
+    } catch (_) {
+      analyzerAvailability = { state: 'not_installed', installed: false };
+    }
+  }
+
+  function analyzerUnavailableReason(status) {
+    switch (status?.state) {
+      case 'installed': return null;
+      case 'downloading': return 'Analyzer is downloading — try again after it finishes.';
+      case 'broken_install': return 'Analyzer install is broken — repair it in Settings.';
+      case 'incompatible_version': return 'Installed analyzer is incompatible — reinstall in Settings.';
+      case 'not_installed':
+      default: return 'Analyzer not installed — install it in Settings → Analyz0r.';
+    }
+  }
+
+  // Apply current analyzer availability to every Analyze button already
+  // rendered in the runs table. Called when the install/uninstall flow
+  // dispatches `analyzer-state-changed`, so the user does not need to
+  // leave and re-enter the runs view to see the buttons enable.
+  function applyAnalyzerAvailabilityToRows() {
+    const reason = analyzerUnavailableReason(analyzerAvailability);
+    $$('#runs-tbody .btn-analyze-run').forEach((btn) => {
+      // Don't trample a row that is currently mid-analysis; its label
+      // and disabled state belong to analyzeRun() until it finishes.
+      if (btn.dataset.analyzing === 'true') return;
+      btn.disabled = !!reason;
+      btn.title = reason || 'Run local analyzer on this run';
+    });
+  }
+
+  window.addEventListener('analyzer-state-changed', async () => {
+    await refreshAnalyzerAvailability();
+    applyAnalyzerAvailabilityToRows();
+  });
+
+  function findAnalyzeBtn(runId) {
+    const tr = [...$$('#runs-tbody tr')].find((row) => row.dataset.runId === runId);
+    return tr?.querySelector('.btn-analyze-run') || null;
+  }
+
+  async function analyzeRun({ engagementSlug, runId, force = false }) {
+    const reason = analyzerUnavailableReason(analyzerAvailability);
+    if (reason) { toast(reason, 'error'); return; }
+
+    const btn = findAnalyzeBtn(runId);
+    const restoreBtn = () => {
+      if (!btn) return;
+      btn.dataset.analyzing = 'false';
+      btn.disabled = false;
+      btn.textContent = 'Analyze';
+      btn.title = 'Run local analyzer on this run';
+    };
+    if (btn) {
+      // While analyzing, the button doubles as a Cancel button: enabled
+      // (so the user can click it), labelled "Cancel", and tagged so
+      // applyAnalyzerAvailabilityToRows() leaves it alone.
+      btn.dataset.analyzing = 'true';
+      btn.disabled = false;
+      btn.textContent = 'Cancel';
+      btn.title = 'Cancel this analysis';
+    }
+
+    let unlisten = null;
+    try {
+      unlisten = await window.__TAURI__.event.listen('analysis-progress', async (ev) => {
+        const p = ev.payload || {};
+        if (p.run_id !== runId) return;
+        // Inline progress on the row's button: "Cancel · 3/12".
+        if (btn && !p.finished && Number.isFinite(p.total) && p.total > 0) {
+          btn.textContent = `Cancel · ${p.processed || 0}/${p.total}`;
+        }
+        if (p.error) {
+          toast(`Analysis failed: ${p.error}`, 'error');
+        }
+        if (p.finished) {
+          if (unlisten) { unlisten(); unlisten = null; }
+          restoreBtn();
+          if (!p.error) {
+            try {
+              await API.call('generate_report', { engagement_slug: engagementSlug, run_id: runId });
+              toast('Analysis complete — report generated.', 'success');
+            } catch (err) {
+              toast(`Report generation failed: ${err.message}`, 'error');
+            }
+            // Refresh results + report tab so verdicts/HTML show up.
+            await loadRunResults(runId, { engagementSlug, switchToResultsTab: false }).catch(() => {});
+          }
+        }
+      });
+      await API.call('start_analysis', { engagement_slug: engagementSlug, run_id: runId, force });
+      toast('Analysis started.', 'info');
+    } catch (err) {
+      if (unlisten) { unlisten(); }
+      restoreBtn();
+      toast(`Could not start analysis: ${err.message}`, 'error');
+    }
+  }
+
   async function loadRuns({ engagementSlug = activeEngagementSlug, autoSelectFirst = false, preferredRunId = null } = {}) {
     if (!engagementSlug) return;
     try {
+      await refreshAnalyzerAvailability();
       const runs = await API.call('list_runs', { engagement_slug: engagementSlug });
       engagementDetail.runs = runs;
       const tbody = $('#runs-tbody');
@@ -4822,6 +5182,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td style="font-family:var(--mono);font-size:11px;">${esc(formatRunStarted(r.started_at))}</td>
           <td>
             <button class="btn-small btn-view-results">Results</button>
+            <button class="btn-small btn-analyze-run" title="Run local analyzer on this run">Analyze</button>
           </td>`;
         tr.addEventListener('click', (e) => {
           if (e.target.closest('button')) return;
@@ -4830,6 +5191,23 @@ document.addEventListener('DOMContentLoaded', () => {
         tr.querySelector('.btn-view-results').addEventListener('click', (e) => {
           e.stopPropagation();
           loadRunResults(r.id, { engagementSlug, switchToResultsTab: true }).catch(err => toast(err.message, 'error'));
+        });
+        const analyzeBtn = tr.querySelector('.btn-analyze-run');
+        const reason = analyzerUnavailableReason(analyzerAvailability);
+        if (reason) {
+          analyzeBtn.disabled = true;
+          analyzeBtn.title = reason;
+        }
+        analyzeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          // Mid-flight click is a cancel; otherwise start a new analysis.
+          if (analyzeBtn.dataset.analyzing === 'true') {
+            API.call('cancel_analysis', { run_id: r.id }).catch((err) => {
+              toast(`Cancel failed: ${err.message}`, 'error');
+            });
+            return;
+          }
+          analyzeRun({ engagementSlug, runId: r.id });
         });
         tbody.appendChild(tr);
       });
@@ -4935,50 +5313,235 @@ document.addEventListener('DOMContentLoaded', () => {
     const target = engagementDetail.targetMatch?.name || '—';
     const scenario = engagementDetail.scenarioName || '—';
     const status = run?.status || '—';
-    const total = results.length;
-    const failed = results.filter(r => !!r.error_message || Number(r.status_code || 0) === 0).length;
-    const successful = total - failed;
+    const start = formatEngagementDateTime(run?.started_at || '');
+    const endCandidates = [...results]
+      .map(r => r.received_at || r.sent_at || '')
+      .filter(Boolean)
+      .sort();
+    const end = formatEngagementDateTime(endCandidates[endCandidates.length - 1] || '');
+    const progress = `${run?.completed ?? results.length}/${run?.total_prompts ?? results.length}`;
+    const errors = run?.errors ?? results.filter(r => !!r.error_message || Number(r.status_code || 0) === 0).length;
 
     const lines = [
-      `# Engagement Report`,
+      `# Run Export`,
       ``,
-      `- Engagement: ${engagementDetail.name}`,
-      `- Slug: ${engagementDetail.slug}`,
-      `- Run: ${run?.id || '—'}`,
       `- Target: ${target}`,
       `- Scenario: ${scenario}`,
       `- Status: ${status}`,
-      `- Started: ${formatEngagementDateTime(run?.started_at || '')}`,
-      `- Total results: ${total}`,
-      `- Successful: ${successful}`,
-      `- Failed: ${failed}`,
+      `- Start: ${start || '—'}`,
+      `- End: ${end || '—'}`,
       ``,
-      `## Attempts`,
+      `## Run Summary`,
       ``,
-      `| Seq | Prompt ID | Status | Latency | Session |`,
-      `| --- | --- | --- | --- | --- |`,
+      `| Run ID | Status | Progress | Errors | Started | Actions |`,
+      `| --- | --- | --- | --- | --- | --- |`,
+      `| ${run?.id || '—'} | ${status} | ${progress} | ${errors} | ${formatRunStarted(run?.started_at || '') || '—'} | Results |`,
+      ``,
+      `## Results`,
+      ``,
+      `| Step | Session | Prompt ID | Status | Request | Prompt | Response | Latency |`,
+      `| --- | --- | --- | --- | --- | --- | --- | --- |`,
     ];
 
     results
       .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
       .forEach((r) => {
         const statusText = r.error_message ? 'ERROR' : String(r.status_code || '?');
-        lines.push(`| ${r.step_order || '-'} | ${r.prompt_id || '-'} | ${statusText} | ${r.latency_ms != null ? `${r.latency_ms}ms` : '-'} | ${r.session_label || '-'} |`);
+        const requestText = [String(r.request_method || '').toUpperCase(), String(r.request_url || '').trim()]
+          .filter(Boolean)
+          .join(' ') || '-';
+        const promptText = String(r.prompt_text || '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+        const responseText = String(r.response_text || r.error_message || '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+        lines.push(`| ${r.step_order || '-'} | ${r.session_label || '-'} | ${r.prompt_id || '-'} | ${statusText} | ${requestText.replace(/\|/g, '\\|')} | ${promptText || '-'} | ${responseText || '-'} | ${r.latency_ms != null ? `${r.latency_ms}ms` : '-'} |`);
       });
 
     return lines.join('\n');
   }
 
-  function downloadTextFile(filename, text) {
-    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  function buildRunExportHtml(results, run) {
+    const target = engagementDetail.targetMatch?.name || '—';
+    const scenario = engagementDetail.scenarioName || '—';
+    const status = run?.status || '—';
+    const start = formatEngagementDateTime(run?.started_at || '') || '—';
+    const endCandidates = [...results]
+      .map(r => r.received_at || r.sent_at || '')
+      .filter(Boolean)
+      .sort();
+    const end = formatEngagementDateTime(endCandidates[endCandidates.length - 1] || '') || '—';
+    const progress = `${run?.completed ?? results.length}/${run?.total_prompts ?? results.length}`;
+    const errors = run?.errors ?? results.filter(r => !!r.error_message || Number(r.status_code || 0) === 0).length;
+
+    const summaryRows = `
+      <tr>
+        <td>${esc(run?.id || '—')}</td>
+        <td>${esc(status)}</td>
+        <td>${esc(progress)}</td>
+        <td>${esc(String(errors))}</td>
+        <td>${esc(formatRunStarted(run?.started_at || '') || '—')}</td>
+        <td>Results</td>
+      </tr>
+    `;
+
+    const resultRows = [...results]
+      .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
+      .map((r) => {
+        const statusText = r.error_message ? 'ERROR' : String(r.status_code || '?');
+        const requestText = [String(r.request_method || '').toUpperCase(), String(r.request_url || '').trim()]
+          .filter(Boolean)
+          .join(' ') || '-';
+        return `
+          <tr>
+            <td>${esc(String(r.step_order || '-'))}</td>
+            <td>${esc(r.session_label || '-')}</td>
+            <td>${esc(r.prompt_id || '-')}</td>
+            <td>${esc(statusText)}</td>
+            <td>${esc(requestText)}</td>
+            <td>${esc(r.prompt_text || '')}</td>
+            <td>${esc(r.response_text || r.error_message || '')}</td>
+            <td>${esc(r.latency_ms != null ? `${r.latency_ms}ms` : '-')}</td>
+          </tr>
+        `;
+      }).join('');
+
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${esc(`${engagementDetail.name || 'Engagement'} · ${run?.id || 'run'}`)}</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #111827;
+      margin: 32px;
+      line-height: 1.4;
+    }
+    h1, h2 {
+      margin: 0 0 12px;
+    }
+    .meta {
+      margin: 0 0 24px;
+    }
+    .meta-row {
+      margin: 4px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 12px;
+      word-break: break-word;
+    }
+    th {
+      background: #f3f4f6;
+    }
+    .mono {
+      font-family: "Consolas", "Courier New", monospace;
+    }
+    @media print {
+      body {
+        margin: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Run Export</h1>
+  <div class="meta">
+    <div class="meta-row"><strong>Target:</strong> ${esc(target)}</div>
+    <div class="meta-row"><strong>Scenario:</strong> ${esc(scenario)}</div>
+    <div class="meta-row"><strong>Status:</strong> ${esc(status)}</div>
+    <div class="meta-row"><strong>Start:</strong> ${esc(start)}</div>
+    <div class="meta-row"><strong>End:</strong> ${esc(end)}</div>
+  </div>
+
+  <h2>Run Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Run ID</th>
+        <th>Status</th>
+        <th>Progress</th>
+        <th>Errors</th>
+        <th>Started</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${summaryRows}
+    </tbody>
+  </table>
+
+  <h2>Results</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Step</th>
+        <th>Session</th>
+        <th>Prompt ID</th>
+        <th>Status</th>
+        <th>Request</th>
+        <th>Prompt</th>
+        <th>Response</th>
+        <th>Latency</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${resultRows}
+    </tbody>
+  </table>
+</body>
+</html>`;
+  }
+
+  function printRunExport(results, run) {
+    const html = buildRunExportHtml(results, run);
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(iframe);
+
+    const cleanup = () => {
+      setTimeout(() => {
+        iframe.remove();
+      }, 250);
+    };
+
+    const frameWindow = iframe.contentWindow;
+    if (!frameWindow) {
+      iframe.remove();
+      throw new Error('Could not open print preview frame.');
+    }
+
+    frameWindow.document.open();
+    frameWindow.document.write(html);
+    frameWindow.document.close();
+
+    const triggerPrint = () => {
+      try {
+        frameWindow.focus();
+        frameWindow.print();
+      } finally {
+        cleanup();
+      }
+    };
+
+    if (frameWindow.document.readyState === 'complete') {
+      setTimeout(triggerPrint, 50);
+    } else {
+      iframe.addEventListener('load', () => setTimeout(triggerPrint, 50), { once: true });
+    }
   }
 
   $('#btn-eng-rerun')?.addEventListener('click', async () => {
@@ -5064,7 +5627,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  $('#btn-eng-export-md')?.addEventListener('click', () => {
+  $('#btn-eng-export-md')?.addEventListener('click', async () => {
     const runId = engagementDetail.activeRunId;
     if (!runId) {
       toast('Select a run first', 'info');
@@ -5073,9 +5636,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const results = engagementDetail.resultsByRunId.get(runId) || [];
     const run = engagementDetail.runs.find(r => r.id === runId) || null;
     const markdown = buildMarkdownReport(results, run);
-    const filename = `${engagementDetail.slug || 'engagement'}-${runId}.md`;
-    downloadTextFile(filename, markdown);
-    toast('Markdown report exported', 'success');
+    try {
+      const exported = await API.call('save_markdown_export', {
+        engagement_slug: engagementDetail.slug,
+        run_id: runId,
+        markdown,
+      });
+      toastAction('Markdown report exported', 'Export öffnen', () => API.call('open_export_path', {
+        path: exported.path,
+      }), 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   });
 
   $('#btn-eng-export-pdf')?.addEventListener('click', async () => {
@@ -5085,8 +5657,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     try {
-      const report = await API.call('export_findings_pdf', { run_id: runId });
-      toast(`Report generated: ${report.path}`, 'success');
+      const results = engagementDetail.resultsByRunId.get(runId) || [];
+      const run = engagementDetail.runs.find(r => r.id === runId) || null;
+      printRunExport(results, run);
+      toast('Print dialog opened. Choose "Save as PDF" to export.', 'success');
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -5236,8 +5810,38 @@ document.addEventListener('DOMContentLoaded', () => {
   // Mark the initial view so the sidebar reflects the active state on load.
   showView('view-home');
 
+  // ── Settings modal: open + close handlers (outer-scope, robust) ────
+  // These run independently of initAnalyzerUI() so the dialog can be
+  // opened and closed even if the analyzer init below throws.
+  const settingsModal = document.querySelector('#settings-modal');
+  const settingsNavBtn = document.querySelector('[data-nav="settings"]');
+  const settingsCloseX = document.querySelector('#settings-modal-close');
+  const settingsCloseBtn = document.querySelector('#settings-modal-cancel');
+
+  if (settingsNavBtn && settingsModal) {
+    settingsNavBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'flex';
+    });
+  }
+  if (settingsCloseX && settingsModal) {
+    settingsCloseX.addEventListener('click', () => {
+      settingsModal.style.display = 'none';
+    });
+  }
+  if (settingsCloseBtn && settingsModal) {
+    settingsCloseBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'none';
+    });
+  }
+
   // ── Analyzer activation ────────────────────────────────────────────
-  initAnalyzerUI();
+  // Wrapped: if init throws, the rest of the app keeps working and the
+  // settings modal still opens/closes thanks to the handlers above.
+  try {
+    initAnalyzerUI();
+  } catch (err) {
+    console.error('[Settings init] initAnalyzerUI failed:', err);
+  }
 });
 
 // ============================================================
@@ -5255,8 +5859,8 @@ function initAnalyzerUI() {
   let downloadUnlisten = null;
   let analyzerStatus = null;
 
-  function openAnalyzerModal() {
-    $('#analyzer-modal').style.display = 'flex';
+  function openSettingsModal() {
+    $('#settings-modal').style.display = 'flex';
     loadLoggingSettings().catch(err => {
       $('#settings-logging-status').textContent = `Failed to load settings: ${err.message}`;
     });
@@ -5265,6 +5869,7 @@ function initAnalyzerUI() {
 
   async function loadLoggingSettings() {
     const settings = await API.call('get_app_settings');
+    $('#settings-app-version').value = settings.app_version || '0.4';
     $('#settings-logging-enabled').checked = !!settings.logging?.enabled;
     $('#settings-log-level').value = settings.logging?.level || 'info';
     $('#settings-body-logging-enabled').checked = !!settings.logging?.body_logging_enabled;
@@ -5276,6 +5881,7 @@ function initAnalyzerUI() {
     // Reset state
     selectedVariantId = null;
     $('#btn-analyzer-install').disabled = true;
+    $('#btn-analyzer-repair').style.display = 'none';
     $('#analyzer-download-section').style.display = 'none';
     $('#analyzer-variants').innerHTML = '<div class="analyzer-loading">loading…</div>';
 
@@ -5285,17 +5891,45 @@ function initAnalyzerUI() {
       $('#analyzer-hw-badge').textContent = HW_LABELS[hw] || hw;
       $('#analyzer-hw-badge').dataset.hw = hw;
 
-      if (analyzerStatus.installed) {
-        $('#analyzer-install-badge').textContent =
-          `installed: ${analyzerStatus.model_file}`;
-        $('#analyzer-install-badge').dataset.state = 'installed';
-        $('#btn-analyzer-uninstall').style.display = '';
-        $('#btn-analyzer-install').textContent = 'Re-download';
-      } else {
-        $('#analyzer-install-badge').textContent = 'not installed';
-        $('#analyzer-install-badge').dataset.state = 'none';
-        $('#btn-analyzer-uninstall').style.display = 'none';
-        $('#btn-analyzer-install').textContent = 'Download & Install';
+      // The five install states are the source of truth from the backend —
+      // `installed` is just `state === 'installed'` in disguise.
+      const badge = $('#analyzer-install-badge');
+      const state = analyzerStatus.state || (analyzerStatus.installed ? 'installed' : 'not_installed');
+      badge.dataset.state = state;
+      switch (state) {
+        case 'installed':
+          badge.textContent = `installed: ${analyzerStatus.model_file || analyzerStatus.variant_id || ''}`;
+          $('#btn-analyzer-uninstall').style.display = '';
+          $('#btn-analyzer-install').textContent = 'Re-download';
+          break;
+        case 'downloading':
+          badge.textContent = `downloading: ${analyzerStatus.downloading_variant_id || ''}`;
+          $('#btn-analyzer-uninstall').style.display = 'none';
+          $('#btn-analyzer-install').textContent = 'Download & Install';
+          break;
+        case 'broken_install':
+          badge.textContent = analyzerStatus.variant_id
+            ? `broken install: ${analyzerStatus.variant_id}`
+            : 'broken install';
+          $('#btn-analyzer-uninstall').style.display = '';
+          $('#btn-analyzer-install').textContent = 'Download & Install';
+          // Offer one-click repair using the recorded variant id.
+          if (analyzerStatus.variant_id) {
+            $('#btn-analyzer-repair').style.display = '';
+            $('#btn-analyzer-repair').dataset.variantId = analyzerStatus.variant_id;
+          }
+          break;
+        case 'incompatible_version':
+          badge.textContent = 'incompatible install — reinstall required';
+          $('#btn-analyzer-uninstall').style.display = '';
+          $('#btn-analyzer-install').textContent = 'Download & Install';
+          break;
+        case 'not_installed':
+        default:
+          badge.textContent = 'not installed';
+          $('#btn-analyzer-uninstall').style.display = 'none';
+          $('#btn-analyzer-install').textContent = 'Download & Install';
+          break;
       }
 
       const manifest = await API.call('fetch_analyzer_manifest');
@@ -5324,7 +5958,7 @@ function initAnalyzerUI() {
 
     $('#analyzer-variants').innerHTML = sorted.map(v => {
       const isMatch = v.hardware === hw;
-      const sizeGb = (v.model.size_bytes / 1e9).toFixed(1);
+      const sizeGb = (v.bundle.size_bytes / 1e9).toFixed(1);
       const hwLabel = HW_LABELS[v.hardware] || v.hardware;
       return `
         <div class="analyzer-variant${isMatch ? ' analyzer-variant-match' : ''}"
@@ -5357,19 +5991,22 @@ function initAnalyzerUI() {
     $('#btn-analyzer-install').disabled = false;
   }
 
-  // ── Install button ──────────────────────────────────────────────────
-  $('#btn-analyzer-install').addEventListener('click', async () => {
-    if (!selectedVariantId) return;
+  // ── Install (shared by Install + Repair buttons) ────────────────────
+  // Both the variant-picker install and the broken-install repair flow
+  // funnel through this so they share progress UI, listener lifecycle,
+  // and error handling. Repair just hands in the variant id recorded in
+  // install.json instead of one the user clicked.
+  async function startInstall(variantId) {
+    if (!variantId) return;
 
-    // Show progress section
     $('#analyzer-download-section').style.display = '';
     $('#btn-analyzer-install').disabled = true;
+    $('#btn-analyzer-repair').disabled = true;
     $('#analyzer-progress-bar').style.width = '0%';
     $('#analyzer-progress-text').textContent = 'Starting download…';
     $('#analyzer-progress-pct').textContent = '0%';
     $('#analyzer-progress-bytes').textContent = '';
 
-    // Subscribe to progress events before firing the command
     if (downloadUnlisten) { downloadUnlisten(); downloadUnlisten = null; }
     downloadUnlisten = await window.__TAURI__.event.listen(
       'analyzer-download-progress',
@@ -5377,12 +6014,17 @@ function initAnalyzerUI() {
     );
 
     try {
-      await API.call('download_and_install_analyzer', { variant_id: selectedVariantId });
+      await API.call('download_and_install_analyzer', { variant_id: variantId });
     } catch (err) {
       toast(`Download failed: ${err.message}`, 'error');
       $('#analyzer-download-section').style.display = 'none';
       $('#btn-analyzer-install').disabled = false;
+      $('#btn-analyzer-repair').disabled = false;
     }
+  }
+
+  $('#btn-analyzer-install').addEventListener('click', () => {
+    startInstall(selectedVariantId);
   });
 
   function onDownloadProgress(p) {
@@ -5411,11 +6053,23 @@ function initAnalyzerUI() {
       refreshAnalyzerModal();
       // Refresh home CTA
       checkAnalyzerCta();
+      // Notify other views (runs view) that availability flipped so
+      // their per-row Analyze buttons can re-render without waiting
+      // for the user to navigate away and back.
+      window.dispatchEvent(new CustomEvent('analyzer-state-changed'));
       toast('Analyz0r activated. Judgments will use the local LLM on next analysis run.', 'success');
     } else {
       $('#analyzer-progress-text').textContent = 'Downloading…';
     }
   }
+
+  // ── Repair button ───────────────────────────────────────────────────
+  // Repair re-runs install for the variant recorded in install.json.
+  // do_install moves the existing layout aside before extracting, so a
+  // failure mid-repair rolls back rather than leaving the user worse off.
+  $('#btn-analyzer-repair').addEventListener('click', () => {
+    startInstall($('#btn-analyzer-repair').dataset.variantId);
+  });
 
   // ── Uninstall button ────────────────────────────────────────────────
   $('#btn-analyzer-uninstall').addEventListener('click', async () => {
@@ -5424,6 +6078,7 @@ function initAnalyzerUI() {
       toast('Analyzer model removed.', 'success');
       refreshAnalyzerModal();
       checkAnalyzerCta();
+      window.dispatchEvent(new CustomEvent('analyzer-state-changed'));
     } catch (err) {
       toast(`Uninstall failed: ${err.message}`, 'error');
     }
@@ -5453,19 +6108,11 @@ function initAnalyzerUI() {
     }
   });
 
-  // ── Close handlers ──────────────────────────────────────────────────
-  $('#analyzer-modal-close').addEventListener('click', () => {
-    $('#analyzer-modal').style.display = 'none';
-  });
-  $('#analyzer-modal-cancel').addEventListener('click', () => {
-    $('#analyzer-modal').style.display = 'none';
-  });
-
-  // ── Settings sidebar entry-point ────────────────────────────────────
-  document.querySelector('[data-nav="settings"]').addEventListener('click', openAnalyzerModal);
+  // Open + close handlers for the settings modal live in the outer
+  // DOMContentLoaded scope (above) so they survive any failure here.
 
   // ── Home CTA ────────────────────────────────────────────────────────
-  $('#btn-home-activate-analyzer').addEventListener('click', openAnalyzerModal);
+  $('#btn-home-activate-analyzer').addEventListener('click', openSettingsModal);
 
   async function checkAnalyzerCta() {
     try {

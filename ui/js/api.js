@@ -167,6 +167,10 @@ const API = (() => {
       });
     },
 
+    async acquire_target_auth({ dto }) {
+      return invoke('acquire_target_auth', { dto });
+    },
+
     async save_target_meta(dto) {
       return invoke('save_target_meta', { dto });
     },
@@ -373,6 +377,18 @@ const API = (() => {
       });
     },
 
+    async save_markdown_export({ engagement_slug, run_id, markdown }) {
+      return invoke('save_markdown_export', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
+        markdown,
+      });
+    },
+
+    async open_export_path({ path }) {
+      return invoke('open_export_path', { path });
+    },
+
     async read_run_attempts({ engagement_slug, run_id }) {
       return invoke('read_run_attempts', {
         engagementSlug: engagement_slug || _activeSlug,
@@ -474,6 +490,10 @@ const API = (() => {
         runId: run_id,
         force: !!force,
       });
+    },
+
+    async cancel_analysis({ run_id }) {
+      return invoke('cancel_analysis', { runId: run_id });
     },
 
     async generate_report({ engagement_slug, run_id }) {
