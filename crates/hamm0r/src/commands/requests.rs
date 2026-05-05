@@ -361,6 +361,7 @@ mod tests {
             request_ids: vec!["secondary".into(), "primary".into(), "secondary".into()],
             request_id: "primary".into(),
             session_config: Default::default(),
+            auth_acquisition: Default::default(),
             notes: None,
         };
 
@@ -379,6 +380,7 @@ mod tests {
             request_ids: vec!["secondary".into()],
             request_id: String::new(),
             session_config: Default::default(),
+            auth_acquisition: Default::default(),
             notes: None,
         };
 

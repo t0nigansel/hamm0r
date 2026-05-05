@@ -13,6 +13,7 @@ pub struct LoggingSettingsDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettingsDto {
+    pub app_version: String,
     pub logging: LoggingSettingsDto,
 }
 
@@ -25,6 +26,7 @@ pub fn get_app_settings(
     let root = paths.0.root().to_string_lossy().into_owned();
     let config = storage::settings::load_or_default(&paths.0.config_path(), root)?;
     let dto = AppSettingsDto {
+        app_version: "0.4".to_owned(),
         logging: LoggingSettingsDto {
             enabled: config.logging.enabled,
             level: log_level_label(&config.logging.level).to_owned(),
@@ -54,6 +56,7 @@ pub fn save_app_settings(
     storage::settings::save(&paths.0.config_path(), &config)?;
 
     let dto = AppSettingsDto {
+        app_version: "0.4".to_owned(),
         logging: LoggingSettingsDto {
             enabled: config.logging.enabled,
             level: log_level_label(&config.logging.level).to_owned(),

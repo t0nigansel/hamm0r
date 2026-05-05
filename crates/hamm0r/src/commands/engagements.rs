@@ -17,6 +17,11 @@ pub struct RunSummary {
     pub started_at: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportFileDto {
+    pub path: String,
+}
+
 #[tauri::command]
 pub fn list_engagements(paths: State<'_, AppPaths>) -> Result<Vec<EngagementMeta>, CommandError> {
     engagements::list(&paths.0.engagements_dir()).map_err(Into::into)
@@ -105,6 +110,52 @@ pub fn get_run_progress(
 
     let records = read_all(&run_path)?;
     Ok(Some(summarize_run(&run_id, &records)))
+}
+
+#[tauri::command]
+pub fn save_markdown_export(
+    paths: State<'_, AppPaths>,
+    engagement_slug: String,
+    run_id: String,
+    markdown: String,
+) -> Result<ExportFileDto, CommandError> {
+    let path = storage::reports::write_markdown_report(
+        &paths.0.engagement_dir(&engagement_slug),
+        &run_id,
+        &markdown,
+    )?;
+    Ok(ExportFileDto {
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+pub fn open_export_path(path: String) -> Result<(), CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(anyhow::Error::from)?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(anyhow::Error::from)?;
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(anyhow::Error::from)?;
+    }
+
+    Ok(())
 }
 
 fn make_slug(name: &str) -> String {
