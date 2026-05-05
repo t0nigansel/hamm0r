@@ -44,9 +44,11 @@ these files).
 │   ├── my-internal-chatbot.yaml
 │   └── ...
 │
-├── analyzer/                             # opt-in, created on activation
-│   ├── manifest.json                     # cached model manifest
-│   ├── runtime/                          # runtime binary
+├── analyzer/                             # opt-in, created on install
+│   ├── install.json                      # install metadata (source of truth)
+│   ├── bin/
+│   │   └── analyz0r[.exe]                # standalone analyzer subprocess
+│   ├── runtime/                          # bundled runtime libs/assets
 │   └── models/
 │       └── qwen3-4b-q4.gguf              # or whichever model variant
 │
@@ -405,6 +407,47 @@ new fields invented.
 
 ---
 
+## Analyzer install metadata — `analyzer/install.json`
+
+Written by core after a bundle install completes successfully. It is
+the **source of truth** for whether the analyzer is installed; layout
+on disk without a valid `install.json` counts as `not_installed`. A
+parseable `install.json` whose layout cannot be validated (entrypoint
+missing, no model file, etc.) flips the status to `broken_install`,
+and a `version` value the running app does not understand flips it to
+`incompatible_version`.
+
+```json
+{
+  "version": 1,
+  "bundle_version": "0.1.0",
+  "installed_at": "2026-05-04T12:00:00Z",
+  "variant_id": "qwen2.5-3b-q4-windows",
+  "model_id": "qwen2.5-3b-q4",
+  "platform": "windows-x86_64",
+  "entrypoint": "bin/analyz0r.exe"
+}
+```
+
+Field notes:
+
+- `version` — schema version of this file. Bumped only when readers
+  must change. Mismatch → `incompatible_version`.
+- `bundle_version` — version of the analyzer bundle that was
+  installed. Surfaced in Settings.
+- `entrypoint` — path **relative to `~/hamm0r/analyzer/`** of the
+  binary core launches as a subprocess.
+- `installed_at` / `platform` / `model_id` / `variant_id` — recorded
+  for diagnostics and so a *Repair* action can re-install the same
+  variant without re-prompting the user.
+
+Uninstall removes the entire `analyzer/` tree, including this file,
+but never touches `engagements/<slug>/runs/*.verdicts.jsonl` or
+`engagements/<slug>/reports/*.html`. Verdicts and reports are user
+data.
+
+---
+
 ## Schema versioning
 
 Every file with a schema declares `version: N` at the top (YAML) or
@@ -460,6 +503,31 @@ request_id: openai-chat-completion
 - `request_id` remains the primary/default Request reference for backward
   compatibility and legacy flows.
 - Existing Target files containing only `request_id` remain valid.
+
+Targets may also carry optional auth-acquisition metadata for GUI-driven token
+fetching:
+
+```yaml
+auth_acquisition:
+  mode: http_login
+  http_login:
+    login_env: PROFILER_LOGIN
+    password_env: PROFILER_PASSWORD
+    url: https://profiler-test.example/api/auth/users/login
+    method: POST
+    headers:
+      Content-Type: application/json
+    body_template: |
+      {"email":"{{login}}","password":"{{password}}"}
+    token_json_path: $.jwToken
+    timeout_seconds: 60
+```
+
+- `mode` is `manual`, `env_only`, or `http_login`.
+- Only env var names are stored here. Login values, passwords, and acquired
+  bearer tokens must never be written into Target YAML.
+- `http_login` config is target metadata only. It does not change the run JSONL
+  schema or the request template contract.
 
 ### Scenario file notes
 

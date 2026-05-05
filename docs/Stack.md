@@ -128,20 +128,23 @@ Errors that cross the Tauri boundary to the UI are serialised as
 `{ kind: string, message: string }` — the UI never sees a Rust
 `Debug` representation.
 
-## llama-cpp-2 (analyzer only)
+## llama-cpp-2 (analyzer bundle only)
 
-Local LLM inference, in-process, behind the `analyzer` Cargo feature.
-Loads GGUF models from `~/hamm0r/analyzer/models/`. Default judge
-model: a small Qwen 2.5 or Gemma variant in 4-bit quantization,
-selected by the manifest based on host hardware.
+Local LLM inference, used inside the standalone `analyz0r` binary
+that ships in the per-OS analyzer bundle. Loads GGUF models from
+`~/hamm0r/analyzer/models/`. Default judge model: a small Qwen 2.5
+variant in 4-bit quantization, selected by the manifest based on
+host hardware.
 
-The analyzer crate is the **only** thing that depends on
-`llama-cpp-2`. Enabling the feature is what produces the analyzer
-bundle artefact.
+Only `crates/analyzor-cli/` (and the parts of `crates/analyzer/`
+reused inside the bundle) depend on `llama-cpp-2`. Core does **not**
+link it — the boundary is the subprocess + the on-disk artifacts
+described in [`docs/analyzorPlan.md`](analyzorPlan.md). There is no
+longer a `--features analyzer` Cargo gate; the analyzer is delivered
+as runtime install metadata, not as a build mode.
 
-**Do not use**: `ollama` as a subprocess (we said no sidecars,
-including an LLM one), `candle` (revisit later — see Architecture
-D-1), any cloud inference API.
+**Do not use**: `ollama` as a third-party sidecar, `candle` (revisit
+later — see Architecture D-1), any cloud inference API.
 
 ## HTML reports (analyzer only)
 

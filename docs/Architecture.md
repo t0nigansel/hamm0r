@@ -17,9 +17,14 @@ window is Rust.
 
 The system has two cleanly separated components: **core** (always
 present, compiled into the main binary) and **analyzer** (opt-in,
-downloaded on activation as a separate dynamic library plus model
-files). The user experience is a single app; the architecture keeps
-the two components isolated.
+downloaded on activation as a self-contained per-OS bundle containing
+its own executable, runtime, and model). The user experience is a
+single app; the architecture keeps the two components isolated.
+
+Core invokes the analyzer as a **subprocess**, not as a linked library.
+That is the deliberate boundary: the analyzer never shares an address
+space with core, and core never compiles in an LLM runtime. See
+[`docs/analyzorPlan.md`](analyzorPlan.md) for the install plan.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -36,14 +41,14 @@ the two components isolated.
 │  │    Command handlers · Runner · Storage                     │  │
 │  └───────┬───────────────────────────────────────┬────────────┘  │
 │          │                                       │               │
-│          │ in-process                            │ dynamic load  │
+│          │ in-process                            │ subprocess    │
 │          │                                       │ (opt-in)      │
 │  ┌───────▼─────────┐                    ┌────────▼────────────┐  │
-│  │  Storage crate  │                    │   Analyzer crate    │  │
-│  │                 │                    │      (opt-in)       │  │
+│  │  Storage crate  │                    │   analyz0r binary   │  │
+│  │                 │                    │   (installed bundle)│  │
 │  │  YAML · JSONL · │                    │                     │  │
-│  │   atomic writes │                    │   embedded LLM +    │  │
-│  └───────┬─────────┘                    │      verdicts       │  │
+│  │   atomic writes │                    │   local LLM +       │  │
+│  └───────┬─────────┘                    │   verdict pipeline  │  │
 │          │                              └─────────┬───────────┘  │
 │          │                                        │              │
 │          │ reads/writes                           │ reads        │
@@ -129,15 +134,22 @@ race condition appears in a write, one crate is responsible. If we
 ever add an optional index (SQLite-as-cache, per the ProductVision
 clause), it plugs in here and only here.
 
-### `analyzer/` — the verdict engine
+### `analyzer/` and `analyzor-cli/` — the verdict engine
 
-A Rust crate that the user opts into. Embeds a local LLM runtime
-(`llama-cpp-2` or `candle` — see D-1) and the model file. Reads run
-JSONL plus response files, produces verdicts, generates a single-file
-HTML report.
+`analyzer/` is a Rust library crate holding the judge + report
+pipeline. It is reused both in core (for heuristic-only judging that
+needs no LLM) and inside the analyzer bundle (for LLM-backed judging).
+
+`analyzor-cli/` builds the standalone `analyz0r` binary that ships
+inside the per-OS bundle. It wraps `analyzer::pipeline` behind a
+stable subcommand contract (`judge-result`, `judge-run`,
+`generate-report`) with NDJSON stdout. Core invokes it via
+`tokio::process::Command` and parses progress events line by line.
+See [`crates/analyzor-cli/src/main.rs`](../crates/analyzor-cli/src/main.rs).
 
 **Must not:** modify run JSONL files written by the runner, make cloud
-calls, be linked into the default build.
+calls, be linked into the default core build, or share a Rust address
+space with core (boundary is the subprocess + the on-disk artifacts).
 
 ### `prompts/` (repo), `~/hamm0r/prompts/` (user)
 
@@ -150,37 +162,48 @@ are offered as additions, never forced — the user's copy is sacred.
 
 ## The analyzer as a separable module
 
-The analyzer is large (model files alone are 1–4 GB depending on
-variant). It must not be part of the default install. The two-modes
-invariant is enforced at the crate-graph level:
+The analyzer bundle is large (binary + runtime + model, 1–4 GB
+depending on variant). It must not be part of the default install.
+The two-modes invariant is enforced at the build- and runtime level:
 
 - The default workspace build (`cargo build -p hamm0r`) does **not**
-  compile `analyzer`. It is behind a Cargo feature `analyzer` that is
-  off by default.
-- Lint check in CI: `cargo tree -p hamm0r --no-default-features` must
-  not list `analyzer` or any LLM-runtime crate.
-- The release pipeline produces two artifacts: `hamm0r` (the core app,
-  small) and `hamm0r-analyzer-bundle-<platform>` (a separately
-  downloadable bundle containing the analyzer dynamic library plus
-  the default model file).
+  compile any LLM runtime. There is no `--features analyzer` gate any
+  more — that gate was removed because it conflated *runtime
+  activation* with *build configuration*.
+- Core can run the heuristic judge through `analyzer::pipeline`
+  without any installed bundle. Only `start_analysis` shells out to
+  the bundled binary.
+- The release pipeline produces two artifact families: `hamm0r` (the
+  core app) and `analyz0r-<os>-<arch>` bundles (a zip per platform
+  containing `bin/analyz0r[.exe]`, `runtime/`, and `models/`).
 
-When the user clicks **"Activate analyz0r"** in the UI:
+When the user clicks **"Download & Install"** in Settings:
 
-1. Backend checks `~/hamm0r/analyzer/` for an existing installation.
-2. If none, backend downloads the manifest from a fixed URL
-   (`https://hamm0r.example/analyzer/manifest.json` — to be finalized).
-   The manifest lists model variants by hardware class.
-3. Backend picks a default variant based on host detection (Apple
-   Silicon, x86-64 with AVX2, fallback). The user may override.
-4. Backend downloads the dynamic library and the model file to
-   `~/hamm0r/analyzer/`. Progress is streamed to the UI via `emit`.
-5. On next launch, the backend `dlopen`s the analyzer library if
-   present and the "Analyze" button becomes active. On failure, the
-   user gets a plain error and may retry.
+1. Backend fetches the manifest from a fixed URL
+   (`https://hamm0r.io/analyzer/manifest.json`) and falls back to a
+   bundled placeholder manifest when offline.
+2. Backend rejects the install up-front if the running app version is
+   older than the manifest's `minimum_hamm0r_version`, surfacing a
+   clear "upgrade hamm0r" message.
+3. Backend resolves the user-selected variant (host hardware detection
+   pre-selects a recommended one).
+4. Backend streams the bundle archive into `~/hamm0r/analyzer/.staging/`,
+   verifying SHA-256 as it goes. Progress events are emitted to the UI.
+5. Backend extracts the archive, atomically swaps the `analyzer/`
+   layout into place, and writes `analyzer/install.json` last.
+   The presence of a valid `install.json` plus an entrypoint binary
+   plus a model file is the "is installed?" signal.
 
-Once loaded, the analyzer is invoked in-process. It reads a specific
-run's JSONL, produces `<run>.verdicts.jsonl` alongside it, and
-optionally emits a report PDF.
+Install state is a five-state machine surfaced to the UI:
+`not_installed`, `downloading`, `installed`, `broken_install`,
+`incompatible_version`. A broken install offers a one-click *Repair*
+that re-downloads the variant recorded in `install.json`.
+
+When the user clicks **Analyze** on a run, core launches `analyz0r`
+as a subprocess with the engagement directory and run ID. Core reads
+NDJSON progress lines from stdout, re-emits them as `analysis-progress`
+events, and on completion calls the same binary's `generate-report`
+subcommand to write the HTML report.
 
 The analyzer never writes anywhere except:
 
@@ -221,10 +244,12 @@ Walking through the five-minute promise, step by step:
    analyzer is installed — click "Analyze."
 
 5. **Analyzer executes (optional).**
-   Reads `run-NNN.jsonl` and the corresponding response files. For
-   each response, asks the embedded LLM for a verdict against the
-   OWASP category the attack targets. Writes
-   `run-NNN.verdicts.jsonl`. When done, optionally renders a report.
+   Core launches the installed `analyz0r` binary as a subprocess. It
+   reads `run-NNN.jsonl` and the corresponding response files, asks
+   its local LLM for a verdict against the OWASP category each attack
+   targets, and writes `run-NNN.verdicts.jsonl`. Core then invokes
+   the binary's `generate-report` subcommand to render the HTML
+   report.
 
 6. **User reads the report.**
    The report is a single self-contained HTML file in
