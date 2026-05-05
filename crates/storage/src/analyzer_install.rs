@@ -36,6 +36,12 @@ pub struct AnalyzerInstall {
     pub platform: String,
     /// Path to the analyzer binary, relative to the install root.
     pub entrypoint: String,
+    /// Path to the model file the installer placed, relative to the install
+    /// root (e.g. `"models/qwen2.5-3b-q4.gguf"`). Optional for forward-
+    /// compatibility with v1 install.json files written before this field
+    /// was recorded; readers fall back to scanning `models/` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_file: Option<String>,
 }
 
 /// `~/hamm0r/analyzer/install.json`.
@@ -98,7 +104,25 @@ mod tests {
             model_id: "qwen-default".to_owned(),
             platform: "windows-x86_64".to_owned(),
             entrypoint: "bin/analyz0r.exe".to_owned(),
+            model_file: Some("models/qwen-default.gguf".to_owned()),
         }
+    }
+
+    #[test]
+    fn legacy_install_without_model_file_still_parses() {
+        // v1 install.json files written before model_file existed must
+        // still load — that's why the field is optional.
+        let tmp = TempDir::new().unwrap();
+        let paths = HammorPaths::with_root(tmp.path());
+        let path = install_path(&paths);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            br#"{"version":1,"bundle_version":"0.1.0","installed_at":"x","variant_id":"x","model_id":"x","platform":"x","entrypoint":"bin/x"}"#,
+        )
+        .unwrap();
+        let install = read(&paths).unwrap().expect("should parse");
+        assert!(install.model_file.is_none());
     }
 
     #[test]

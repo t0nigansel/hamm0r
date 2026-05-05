@@ -5,8 +5,8 @@ mod error;
 mod logger;
 
 use commands::{
-    ActiveRunsState, AnalyzerInstallTracker, AnalyzerLoggerState, AppConfigState, AppPaths,
-    LoggerState,
+    ActiveRunsState, AnalysisCancelTracker, AnalyzerInstallTracker, AnalyzerLoggerState,
+    AppConfigState, AppPaths, LoggerState,
 };
 use logger::{new_app_session_id, AppLogger};
 use storage::types::AppConfig;
@@ -41,6 +41,9 @@ fn main() {
             ))));
             app.manage(AnalyzerInstallTracker(std::sync::Arc::new(
                 std::sync::Mutex::new(None),
+            )));
+            app.manage(AnalysisCancelTracker(std::sync::Arc::new(
+                std::sync::Mutex::new(std::collections::HashMap::new()),
             )));
             Ok(())
         })
@@ -87,6 +90,7 @@ fn main() {
             commands::analysis::judge_result,
             commands::analysis::judge_all,
             commands::analysis::start_analysis,
+            commands::analysis::cancel_analysis,
             commands::analyzer_setup::get_analyzer_status,
             commands::analyzer_setup::fetch_analyzer_manifest,
             commands::analyzer_setup::download_and_install_analyzer,

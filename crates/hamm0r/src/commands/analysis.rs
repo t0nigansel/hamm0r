@@ -2,20 +2,23 @@
 //!
 //! Heuristic-only commands (`judge_result`, `judge_all`, …) call into
 //! `analyzer::pipeline` directly — runtime-free, always available in core.
-//! `start_analysis` is the only path that needs the LLM: it shells out to
-//! the standalone `analyz0r` binary when both the binary and a model are
-//! installed, and falls back to the in-process heuristic otherwise.
+//! `start_analysis` is the LLM-backed path: it shells out to the standalone
+//! `analyz0r` binary and requires the analyzer bundle to be installed.
+//! When the bundle is missing, the command returns an error rather than
+//! silently degrading to the heuristic — the UI already exposes the
+//! per-result Judge buttons for that case, and a hidden fallback would
+//! make "Analyze" mean two different things depending on install state.
 //!
 //! Binary discovery (in priority order):
 //!   1. `$HAMM0R_ANALYZOR_BIN` — explicit override (dev convenience).
 //!   2. `~/hamm0r/analyzer/bin/analyz0r[.exe]` — production install layout.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
 
-use analyzer::pipeline::{
-    self, JudgeOneOptions, JudgeOutcome, JudgeRunOptions, JudgeRunSummary, Progress,
-};
+use analyzer::pipeline::{self, JudgeOneOptions, JudgeOutcome, JudgeRunSummary};
 use serde::Serialize;
 use storage::verdicts::VerdictEntry;
 use storage::HammorPaths;
@@ -23,7 +26,7 @@ use tauri::{AppHandle, Emitter as _, State};
 use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
 use tokio::process::Command;
 
-use super::{report_user_relevant_error, AnalyzerLoggerState, AppPaths};
+use super::{report_user_relevant_error, AnalysisCancelTracker, AnalyzerLoggerState, AppPaths};
 use crate::error::CommandError;
 
 const ANALYZOR_BIN_ENV: &str = "HAMM0R_ANALYZOR_BIN";
@@ -301,6 +304,7 @@ pub async fn start_analysis(
     app: AppHandle,
     logger: State<'_, AnalyzerLoggerState>,
     paths: State<'_, AppPaths>,
+    cancel_tracker: State<'_, AnalysisCancelTracker>,
     engagement_slug: String,
     run_id: String,
     force: Option<bool>,
@@ -309,6 +313,7 @@ pub async fn start_analysis(
     let run_id_ret = run_id.clone();
     let force = force.unwrap_or(false);
     let logger = logger.0.clone();
+    let tracker = cancel_tracker.0.clone();
 
     tokio::spawn(async move {
         logger.info(
@@ -319,6 +324,7 @@ pub async fn start_analysis(
         if let Err(err) = analyze_run_and_emit(
             app.clone(),
             paths.clone(),
+            tracker.clone(),
             engagement_slug.clone(),
             run_id.clone(),
             force,
@@ -356,43 +362,38 @@ pub async fn start_analysis(
 
 // ── start_analysis implementation ─────────────────────────────────────────────
 
+type CancelMap = Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>;
+
 async fn analyze_run_and_emit(
     app: AppHandle,
     paths: HammorPaths,
+    cancel_tracker: CancelMap,
     engagement_slug: String,
     run_id: String,
     force: bool,
 ) -> anyhow::Result<()> {
-    let bin = resolve_analyzor_bin(&paths);
-    let model_path = pipeline::find_model_file(&paths.analyzer_models_dir());
+    let bin = resolve_analyzor_bin(&paths)
+        .ok_or_else(|| anyhow::anyhow!(
+            "analyzer is not installed (no analyz0r binary at expected layout); \
+             install it from Settings → Analyz0r before running an analysis"
+        ))?;
+    let model_path = pipeline::find_model_file(&paths.analyzer_models_dir())
+        .ok_or_else(|| anyhow::anyhow!(
+            "analyzer install is broken (no model file present); \
+             repair the install from Settings → Analyz0r"
+        ))?;
 
-    let summary = match (bin, &model_path) {
-        (Some(bin), Some(model)) => {
-            run_via_subprocess(
-                app.clone(),
-                bin,
-                paths.engagement_dir(&engagement_slug),
-                paths.prompts_dir(),
-                run_id.clone(),
-                model.clone(),
-                force,
-            )
-            .await?
-        }
-        _ => {
-            // Either the analyzer binary or the model is missing — judging
-            // happens in-process with the heuristic. The user's UI surfaces
-            // the install state separately (Settings → analyzer).
-            run_in_process_heuristic(
-                app.clone(),
-                paths.engagement_dir(&engagement_slug),
-                paths.prompts_dir(),
-                run_id.clone(),
-                force,
-            )
-            .await?
-        }
-    };
+    let summary = run_via_subprocess(
+        app.clone(),
+        bin,
+        paths.engagement_dir(&engagement_slug),
+        paths.prompts_dir(),
+        run_id.clone(),
+        model_path,
+        force,
+        cancel_tracker,
+    )
+    .await?;
 
     // Both paths leave verdict JSONL behind; rendering the report is a
     // pure reader, so we always do it here in the orchestrator.
@@ -414,48 +415,10 @@ async fn analyze_run_and_emit(
     Ok(())
 }
 
-async fn run_in_process_heuristic(
-    app: AppHandle,
-    engagement_dir: PathBuf,
-    prompts_dir: PathBuf,
-    run_id: String,
-    force: bool,
-) -> anyhow::Result<JudgeRunSummary> {
-    let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
-    let run_id_for_progress = run_id.clone();
-    let app_for_progress = app;
-
-    tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeRunSummary> {
-        let mut on_progress = |p: Progress| {
-            let _ = app_for_progress.emit(
-                "analysis-progress",
-                AnalysisProgressEvent {
-                    run_id: run_id_for_progress.clone(),
-                    processed: p.processed,
-                    total: p.total,
-                    judged: p.judged,
-                    skipped_existing: p.skipped_existing,
-                    finished: false,
-                    error: None,
-                },
-            );
-        };
-        pipeline::judge_run(
-            &JudgeRunOptions {
-                engagement_dir: &engagement_dir,
-                prompts_dir: &prompts_dir,
-                run_id: &run_id,
-                model_path: None,
-                analyzer_version: &analyzer_version,
-                force,
-            },
-            &mut on_progress,
-        )
-    })
-    .await
-    .map_err(|e| anyhow::anyhow!("analysis task join failure: {e}"))?
-}
-
+// Single call site; the params are all distinct concerns the orchestrator
+// holds locally, so wrapping in a struct would just trade arg-list noise
+// for boilerplate without making any of them group meaningfully.
+#[allow(clippy::too_many_arguments)]
 async fn run_via_subprocess(
     app: AppHandle,
     bin: PathBuf,
@@ -464,6 +427,7 @@ async fn run_via_subprocess(
     run_id: String,
     model_path: PathBuf,
     force: bool,
+    cancel_tracker: CancelMap,
 ) -> anyhow::Result<JudgeRunSummary> {
     let mut cmd = Command::new(&bin);
     cmd.arg("judge-run")
@@ -491,6 +455,33 @@ async fn run_via_subprocess(
         .stderr
         .take()
         .ok_or_else(|| anyhow::anyhow!("analyz0r stderr not captured"))?;
+
+    // Register a cancel channel so `cancel_analysis` can interrupt this
+    // subprocess. Drop guard removes the entry on every exit path so a
+    // crashed analysis doesn't leave a stale sender that blocks a
+    // re-run with the same run_id.
+    let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    {
+        let mut guard = cancel_tracker
+            .lock()
+            .map_err(|_| anyhow::anyhow!("analysis cancel tracker poisoned"))?;
+        guard.insert(run_id.clone(), cancel_tx);
+    }
+    struct CancelEntryGuard {
+        tracker: CancelMap,
+        run_id: String,
+    }
+    impl Drop for CancelEntryGuard {
+        fn drop(&mut self) {
+            if let Ok(mut g) = self.tracker.lock() {
+                g.remove(&self.run_id);
+            }
+        }
+    }
+    let _entry_guard = CancelEntryGuard {
+        tracker: cancel_tracker.clone(),
+        run_id: run_id.clone(),
+    };
 
     let app_clone = app.clone();
     let run_id_clone = run_id.clone();
@@ -543,14 +534,27 @@ async fn run_via_subprocess(
         buf
     });
 
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| anyhow::anyhow!("analyz0r wait: {e}"))?;
+    // Race the subprocess against the cancel channel. If cancel fires,
+    // signal the child and let `wait()` return; the bog-standard
+    // "exited with non-zero status" error path then surfaces it as a
+    // cancellation to the caller.
+    let mut cancelled = false;
+    let status = tokio::select! {
+        s = child.wait() => s.map_err(|e| anyhow::anyhow!("analyz0r wait: {e}"))?,
+        _ = &mut cancel_rx => {
+            cancelled = true;
+            let _ = child.start_kill();
+            child.wait().await.map_err(|e| anyhow::anyhow!("analyz0r wait after cancel: {e}"))?
+        }
+    };
     let (summary, error_message) = stdout_task
         .await
         .map_err(|e| anyhow::anyhow!("analyz0r stdout task: {e}"))?;
     let stderr_text = stderr_task.await.unwrap_or_default();
+
+    if cancelled {
+        return Err(anyhow::anyhow!("analysis cancelled by user"));
+    }
 
     if !status.success() {
         let detail = error_message
@@ -564,6 +568,38 @@ async fn run_via_subprocess(
     }
 
     summary.ok_or_else(|| anyhow::anyhow!("analyz0r finished without emitting a result event"))
+}
+
+#[tauri::command]
+pub fn cancel_analysis(
+    logger: State<'_, AnalyzerLoggerState>,
+    cancel_tracker: State<'_, AnalysisCancelTracker>,
+    run_id: String,
+) -> Result<bool, CommandError> {
+    let sender = cancel_tracker
+        .0
+        .lock()
+        .map_err(|_| anyhow::anyhow!("analysis cancel tracker poisoned"))?
+        .remove(&run_id);
+    match sender {
+        Some(tx) => {
+            // send returns Err only if the receiver was dropped, which
+            // means the orchestrator already exited — treat that as
+            // "nothing to cancel" rather than failing the command.
+            let delivered = tx.send(()).is_ok();
+            logger.0.info(
+                "analysis",
+                Some(&run_id),
+                if delivered {
+                    "cancel_analysis sent kill signal"
+                } else {
+                    "cancel_analysis: orchestrator already exited"
+                },
+            );
+            Ok(delivered)
+        }
+        None => Ok(false),
+    }
 }
 
 fn u32_field(value: &serde_json::Value, key: &str) -> u32 {

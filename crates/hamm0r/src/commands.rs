@@ -31,6 +31,16 @@ pub struct ActiveRunsState(pub Arc<Mutex<HashMap<String, RunCancellation>>>);
 /// `get_analyzer_status` to surface the `downloading` state.
 pub struct AnalyzerInstallTracker(pub Arc<Mutex<Option<String>>>);
 
+/// Tracks the in-flight `analyz0r` subprocess for each running analysis.
+/// We don't store the `Child` itself (the orchestrator needs `&mut`
+/// access to drive `wait()`) — instead we keep a oneshot sender that the
+/// orchestrator races against `wait()` via `tokio::select!`. Cancel pops
+/// the sender out and `send(())`s on it; the orchestrator wakes up and
+/// calls `start_kill()` on its locally-held child.
+pub struct AnalysisCancelTracker(
+    pub Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
+);
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UserRelevantErrorEvent {
     pub scope: String,
