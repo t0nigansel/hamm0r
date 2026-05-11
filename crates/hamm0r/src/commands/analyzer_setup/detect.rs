@@ -139,7 +139,11 @@ mod tests {
         let models_dir = analyzer.join("models");
         std::fs::create_dir_all(&bin_dir).unwrap();
         std::fs::create_dir_all(&models_dir).unwrap();
-        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        let bin_name = if cfg!(windows) {
+            "analyz0r.exe"
+        } else {
+            "analyz0r"
+        };
         std::fs::write(bin_dir.join(bin_name), b"#!/bin/sh\nexit 0\n").unwrap();
         std::fs::write(models_dir.join("test.gguf"), b"FAKE GGUF").unwrap();
         analyzer_install::write(paths, &sample_install()).unwrap();
@@ -184,7 +188,11 @@ mod tests {
         let paths = HammorPaths::with_root(tmp.path());
         let bin_dir = paths.analyzer_dir().join("bin");
         std::fs::create_dir_all(&bin_dir).unwrap();
-        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        let bin_name = if cfg!(windows) {
+            "analyz0r.exe"
+        } else {
+            "analyz0r"
+        };
         std::fs::write(bin_dir.join(bin_name), b"x").unwrap();
         analyzer_install::write(&paths, &sample_install()).unwrap();
 
@@ -232,7 +240,11 @@ mod tests {
         let models_dir = analyzer.join("models");
         std::fs::create_dir_all(&bin_dir).unwrap();
         std::fs::create_dir_all(&models_dir).unwrap();
-        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        let bin_name = if cfg!(windows) {
+            "analyz0r.exe"
+        } else {
+            "analyz0r"
+        };
         std::fs::write(bin_dir.join(bin_name), b"x").unwrap();
         std::fs::write(models_dir.join("stale.gguf"), b"x").unwrap();
 

@@ -1,15 +1,13 @@
 use runner::session::SessionStrategy;
-use runner::{
-    execute_run, execute_scenario_run, AttemptLog, Payload, RunConfig, ScenarioRunConfig,
-    ScenarioStep,
-};
+use runner::{execute_matrix_run, execute_run, AttemptLog, MatrixRunConfig, Payload, RunConfig};
+use storage::prompts;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use storage::runs::{read_all, RunRecord};
-use storage::types::{Request, SessionConfig, Target};
-use storage::{requests, scenarios, targets};
+use storage::runs::{self, read_all, RunRecord};
+use storage::types::Request;
+use storage::{requests, scenarios};
 use tauri::{AppHandle, Emitter as _, State};
 
 use super::{
@@ -225,201 +223,132 @@ pub async fn start_scenario_run(
         }
     };
 
-    if scenario.target_id.trim().is_empty() {
-        let message = "scenario has no target selected".to_owned();
+    // A Scenario is always a matrix: `request_ids` × library subset fired
+    // as a Cartesian product. The legacy step-based runner was retired in
+    // Phase 2 of `docs/RefactorPlan.md`.
+    if scenario.request_ids.is_empty() {
+        let message =
+            "scenario has no Requests configured — open it in the Scenarios view".to_owned();
         logger.0.error("runner", None, &message);
         return Err(anyhow::anyhow!(message).into());
     }
-    if scenario.steps.is_empty() {
-        let message = "scenario has no steps".to_owned();
+    if scenario.library.is_none() {
+        let message =
+            "scenario has no library subset configured — open it in the Scenarios view".to_owned();
         logger.0.error("runner", None, &message);
         return Err(anyhow::anyhow!(message).into());
     }
 
-    let (target, request, requests_by_id) =
-        load_target_and_request_bundle(&paths.0, &logger.0, &scenario.target_id)?;
-    let run_id = next_run_id(&paths.0.engagement_dir(&engagement_slug))?;
-    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
-    let session_strategy = session_strategy_from_target(&target.session_config);
-    for step in &scenario.steps {
-        if let Some(request_id) = &step.request_id {
-            if !request_id.trim().is_empty() && !requests_by_id.contains_key(request_id) {
-                let message = format!(
-                    "scenario step '{}' references unknown target request '{}'",
-                    step.id, request_id
-                );
-                logger.0.error("runner", None, &message);
-                return Err(anyhow::anyhow!(message).into());
-            }
-        }
-    }
-
-    let steps: Vec<ScenarioStep> = scenario
-        .steps
-        .iter()
-        .enumerate()
-        .map(|(idx, step)| ScenarioStep {
-            id: if step.id.trim().is_empty() {
-                format!("step-{:03}", idx + 1)
-            } else {
-                step.id.clone()
-            },
-            request_id: step.request_id.clone(),
-            prompt_id: step.prompt_id.clone(),
-            prompt_text: step.prompt_text.clone(),
-            session: if step.session.trim().is_empty() {
-                "A".to_owned()
-            } else {
-                step.session.clone()
-            },
-        })
-        .collect();
-
-    let cancellation = runner::run::RunCancellation::new();
-    let config = ScenarioRunConfig {
-        engagement_dir,
-        run_id: run_id.clone(),
-        request,
-        requests_by_id,
-        session_strategy,
-        steps,
-        repeat: scenario.repeat.max(1),
-        runner_version: env!("CARGO_PKG_VERSION").to_owned(),
-        body_logging_enabled: config_state.0.logging.body_logging_enabled,
-        cancellation: Some(cancellation.clone()),
-        on_attempt_log: Some(Arc::new({
-            let logger = logger.0.clone();
-            let app = app.clone();
-            let first_error_reported = Arc::new(AtomicBool::new(false));
-            move |attempt| {
-                log_attempt(&logger, attempt.clone());
-                if let Some(error) = &attempt.error {
-                    if !first_error_reported.swap(true, Ordering::SeqCst) {
-                        let (scope, message) = build_attempt_error_event(
-                            "scenario-run-attempt",
-                            "Scenario run",
-                            &attempt,
-                            error,
-                        );
-                        emit_user_relevant_error(&app, &scope, Some(&attempt.run_id), &message);
-                    }
-                }
-            }
-        })),
-    };
-    let request_url = config.request.url.clone();
-    let engagement_dir_for_error = paths.0.engagement_dir(&engagement_slug);
-
-    let run_id_ret = run_id.clone();
-    let logger = logger.0.clone();
-    let active_runs_map = active_runs.0.clone();
-    active_runs_map
-        .lock()
-        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
-        .insert(run_id.clone(), cancellation);
-    tokio::spawn(async move {
-        let app_for_progress = app.clone();
-        let app_for_error = app;
-        logger.info(
-            "runner",
-            Some(&run_id),
-            &format!("Scenario run task spawned for url={request_url}"),
-        );
-        let result = execute_scenario_run(config, move |progress| {
-            let event = RunProgressEvent {
-                run_id: progress.run_id,
-                seq: progress.seq,
-                total: progress.total,
-                status: progress.status,
-                error: progress.error,
-                finished: progress.finished,
-            };
-            let _ = app_for_progress.emit("run-progress", event);
-        })
-        .await;
-
-        if let Err(e) = result {
-            let startup_error = format!("scenario run execution failed (url: {request_url}): {e}");
-            report_user_relevant_error(
-                &app_for_error,
-                &logger,
-                "runner",
-                "scenario-run-execution",
-                Some(&run_id),
-                &startup_error,
-            );
-            let _ = write_run_startup_error(&engagement_dir_for_error, &run_id, &startup_error);
-            let _ = app_for_error.emit(
-                "run-progress",
-                RunProgressEvent {
-                    run_id: run_id.clone(),
-                    seq: 0,
-                    total: 0,
-                    status: 0,
-                    error: Some(startup_error),
-                    finished: true,
-                },
-            );
-        }
-        if let Ok(mut runs) = active_runs_map.lock() {
-            runs.remove(&run_id);
-        }
-    });
-
-    Ok(run_id_ret)
+    dispatch_matrix_scenario(
+        app,
+        active_runs,
+        config_state,
+        paths,
+        logger,
+        engagement_slug,
+        scenario,
+    )
+    .await
 }
 
-/// Start a transient one-step scenario (used by Quick Run / Workbench).
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub async fn start_transient_scenario_run(
+// ── Phase 2 matrix execution ──────────────────────────────────────────────────
+//
+// Dispatcher for matrix-mode scenarios (Phase 2 of `docs/RefactorPlan.md`).
+// Loads the global Request registry, resolves the Scenario's library subset
+// against `~/hamm0r/prompts/`, and fires `execute_matrix_run`. Called from
+// `start_scenario_run` when the Scenario has `request_ids` and `library`
+// populated.
+async fn dispatch_matrix_scenario(
     app: AppHandle,
     active_runs: State<'_, ActiveRunsState>,
     config_state: State<'_, AppConfigState>,
     paths: State<'_, AppPaths>,
     logger: State<'_, LoggerState>,
     engagement_slug: String,
-    target_id: String,
-    prompt_text: String,
-    prompt_id: Option<String>,
+    scenario: storage::types::Scenario,
 ) -> Result<String, CommandError> {
+    if scenario.request_ids.is_empty() {
+        return Err(anyhow::anyhow!("matrix scenario has no request_ids").into());
+    }
+    let library = scenario.library.clone().ok_or_else(|| {
+        anyhow::anyhow!("matrix scenario has no library subset configured")
+    })?;
+
+    // Build the registry from every Request on disk. The deps resolver
+    // walks only what's reachable, so loading the whole set is fine.
+    let registry: HashMap<String, Request> = requests::load_all(&paths.0.requests_dir())?;
+
+    // Validate every target Request id exists.
+    for id in &scenario.request_ids {
+        if !registry.contains_key(id) {
+            return Err(anyhow::anyhow!(
+                "matrix scenario references unknown Request '{id}'"
+            )
+            .into());
+        }
+    }
+
+    // Resolve the library subset to a list of payloads. A prompt entry
+    // matches if its category (filename stem) is listed OR its
+    // `owasp_ref` is in `owasp_refs`.
+    let prompt_map = prompts::load_all(&paths.0.prompts_dir())?;
+    let mut payloads: Vec<Payload> = Vec::new();
+    for (category, entries) in &prompt_map {
+        let category_match = library.categories.iter().any(|c| c == category);
+        for entry in entries {
+            let owasp_match = entry
+                .owasp_ref
+                .as_ref()
+                .map(|r| library.owasp_refs.iter().any(|w| w == r))
+                .unwrap_or(false);
+            if !(category_match || owasp_match) {
+                continue;
+            }
+            payloads.push(Payload {
+                prompt_id: entry.id.clone(),
+                payload_id: format!("{category}:{}", entry.id),
+                text: entry.text.clone(),
+                session: "default".to_owned(),
+            });
+        }
+    }
+    if payloads.is_empty() {
+        return Err(anyhow::anyhow!(
+            "library subset matched no prompts (categories={:?}, owasp_refs={:?})",
+            library.categories,
+            library.owasp_refs,
+        )
+        .into());
+    }
+
+    let run_id = next_run_id(&paths.0.engagement_dir(&engagement_slug))?;
+    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
+    // Matrix runs are stateless at the session-injection layer for now;
+    // bind sharing is the only inter-attempt state.
+    let session_strategy = SessionStrategy::None;
+
     logger.0.info(
         "runner",
-        None,
+        Some(&run_id),
         &format!(
-            "start_transient_scenario_run requested for engagement={} target_id={} prompt_id={}",
-            engagement_slug,
-            target_id,
-            prompt_id.clone().unwrap_or_else(|| "custom".to_owned())
+            "matrix scenario fired: scenario_id={} request_ids={} payload_count={} shared_session={}",
+            scenario.id,
+            scenario.request_ids.len(),
+            payloads.len(),
+            scenario.shared_session,
         ),
     );
 
-    if prompt_text.trim().is_empty() {
-        let message = "prompt text is empty".to_owned();
-        logger.0.error("runner", None, &message);
-        return Err(anyhow::anyhow!(message).into());
-    }
-
-    let (target, request) = load_target_and_request(&paths.0, &logger.0, &target_id)?;
-    let run_id = next_run_id(&paths.0.engagement_dir(&engagement_slug))?;
-    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
-    let session_strategy = session_strategy_from_target(&target.session_config);
-
     let cancellation = runner::run::RunCancellation::new();
-    let config = ScenarioRunConfig {
+    let config = MatrixRunConfig {
         engagement_dir,
         run_id: run_id.clone(),
-        request,
-        requests_by_id: HashMap::new(),
+        scenario_id: scenario.id.clone(),
+        registry,
+        request_ids: scenario.request_ids.clone(),
+        payloads,
+        shared_session: scenario.shared_session,
         session_strategy,
-        steps: vec![ScenarioStep {
-            id: "step-001".to_owned(),
-            request_id: None,
-            prompt_id,
-            prompt_text,
-            session: "A".to_owned(),
-        }],
-        repeat: 1,
         runner_version: env!("CARGO_PKG_VERSION").to_owned(),
         body_logging_enabled: config_state.0.logging.body_logging_enabled,
         cancellation: Some(cancellation.clone()),
@@ -432,8 +361,8 @@ pub async fn start_transient_scenario_run(
                 if let Some(error) = &attempt.error {
                     if !first_error_reported.swap(true, Ordering::SeqCst) {
                         let (scope, message) = build_attempt_error_event(
-                            "transient-run-attempt",
-                            "Transient run",
+                            "matrix-run-attempt",
+                            "Matrix run",
                             &attempt,
                             error,
                         );
@@ -443,8 +372,6 @@ pub async fn start_transient_scenario_run(
             }
         })),
     };
-    let request_url = config.request.url.clone();
-    let engagement_dir_for_error = paths.0.engagement_dir(&engagement_slug);
 
     let run_id_ret = run_id.clone();
     let logger = logger.0.clone();
@@ -453,15 +380,12 @@ pub async fn start_transient_scenario_run(
         .lock()
         .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
         .insert(run_id.clone(), cancellation);
+
+    let engagement_dir_for_error = paths.0.engagement_dir(&engagement_slug);
     tokio::spawn(async move {
         let app_for_progress = app.clone();
         let app_for_error = app;
-        logger.info(
-            "runner",
-            Some(&run_id),
-            &format!("Transient scenario run task spawned for url={request_url}"),
-        );
-        let result = execute_scenario_run(config, move |progress| {
+        let result = execute_matrix_run(config, move |progress| {
             let event = RunProgressEvent {
                 run_id: progress.run_id,
                 seq: progress.seq,
@@ -475,12 +399,12 @@ pub async fn start_transient_scenario_run(
         .await;
 
         if let Err(e) = result {
-            let startup_error = format!("transient run execution failed (url: {request_url}): {e}");
+            let startup_error = format!("matrix run execution failed: {e}");
             report_user_relevant_error(
                 &app_for_error,
                 &logger,
                 "runner",
-                "transient-run-execution",
+                "matrix-run-execution",
                 Some(&run_id),
                 &startup_error,
             );
@@ -539,6 +463,57 @@ pub fn stop_run(
         );
         Ok(StopRunResult { stopped: false })
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeleteRunResult {
+    pub deleted: bool,
+    /// Number of filesystem entries (files + responses dir) actually removed.
+    pub removed: usize,
+}
+
+/// Permanently delete a run's artifacts: run JSONL, verdicts JSONL, the
+/// responses directory, and any generated report HTML. Refuses if the run
+/// is currently active.
+#[tauri::command]
+pub fn delete_run(
+    logger: State<'_, LoggerState>,
+    paths: State<'_, AppPaths>,
+    active_runs: State<'_, ActiveRunsState>,
+    engagement_slug: String,
+    run_id: String,
+) -> Result<DeleteRunResult, CommandError> {
+    logger.0.info(
+        "runner",
+        Some(&run_id),
+        &format!("delete_run requested for engagement={engagement_slug}"),
+    );
+
+    {
+        let active = active_runs
+            .0
+            .lock()
+            .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?;
+        if active.contains_key(&run_id) {
+            return Err(
+                anyhow::anyhow!("Run is still active. Stop it first, then delete.").into(),
+            );
+        }
+    }
+
+    let engagement_dir = paths.0.engagement_dir(&engagement_slug);
+    let removed = runs::delete_run(&engagement_dir, &run_id)?;
+
+    logger.0.info(
+        "runner",
+        Some(&run_id),
+        &format!("delete_run removed {removed} entries"),
+    );
+
+    Ok(DeleteRunResult {
+        deleted: removed > 0,
+        removed,
+    })
 }
 
 /// Read attempt records from a run's JSONL file. Returns a JSON array of
@@ -654,7 +629,7 @@ pub fn get_run_diagnostics(
             request_url = Some(request.url.clone());
             match request.auth {
                 storage::types::AuthConfig::Bearer { token_env } => {
-                    if std::env::var(&token_env)
+                    if storage::secrets::resolve_token(&token_env)?
                         .map(|v| v.trim().is_empty())
                         .unwrap_or(true)
                     {
@@ -662,7 +637,7 @@ pub fn get_run_diagnostics(
                     }
                 }
                 storage::types::AuthConfig::CustomHeader { value_env, .. } => {
-                    if std::env::var(&value_env)
+                    if storage::secrets::resolve_token(&value_env)?
                         .map(|v| v.trim().is_empty())
                         .unwrap_or(true)
                     {
@@ -676,13 +651,13 @@ pub fn get_run_diagnostics(
                     user_env,
                     password_env,
                 } => {
-                    if std::env::var(&user_env)
+                    if storage::secrets::resolve_token(&user_env)?
                         .map(|v| v.trim().is_empty())
                         .unwrap_or(true)
                     {
                         notes.push(format!("Missing env var for basic auth user: {}", user_env));
                     }
-                    if std::env::var(&password_env)
+                    if storage::secrets::resolve_token(&password_env)?
                         .map(|v| v.trim().is_empty())
                         .unwrap_or(true)
                     {
@@ -743,74 +718,6 @@ pub fn get_run_diagnostics(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn load_target_and_request(
-    paths: &storage::HammorPaths,
-    logger: &crate::logger::AppLogger,
-    target_id: &str,
-) -> Result<(Target, Request), CommandError> {
-    let (target, request, _) = load_target_and_request_bundle(paths, logger, target_id)?;
-    Ok((target, request))
-}
-
-fn load_target_and_request_bundle(
-    paths: &storage::HammorPaths,
-    logger: &crate::logger::AppLogger,
-    target_id: &str,
-) -> Result<(Target, Request, HashMap<String, Request>), CommandError> {
-    let all_targets = targets::load_all(&paths.targets_dir())?;
-    let target = all_targets.get(target_id).cloned().ok_or_else(|| {
-        let message = format!("target '{}' not found", target_id);
-        logger.error("runner", None, &message);
-        anyhow::anyhow!(message)
-    })?;
-
-    let all_requests = requests::load_all(&paths.requests_dir())?;
-    let primary_request_id = target.primary_request_id().unwrap_or(target.id.as_str());
-    let request = all_requests
-        .get(primary_request_id)
-        .or_else(|| all_requests.get(&target.id))
-        .cloned()
-        .ok_or_else(|| {
-            let message = format!("request '{}' not found", primary_request_id);
-            logger.error("runner", None, &message);
-            anyhow::anyhow!(message)
-        })?;
-
-    let mut requests_by_id = HashMap::new();
-    requests_by_id.insert(request.id.clone(), request.clone());
-
-    for request_id in target
-        .request_ids
-        .iter()
-        .chain(std::iter::once(&target.request_id))
-    {
-        if request_id.trim().is_empty() || requests_by_id.contains_key(request_id) {
-            continue;
-        }
-        let Some(target_request) = all_requests.get(request_id).cloned() else {
-            let message = format!("request '{}' not found", request_id);
-            logger.error("runner", None, &message);
-            return Err(anyhow::anyhow!(message).into());
-        };
-        requests_by_id.insert(request_id.clone(), target_request);
-    }
-
-    Ok((target, request, requests_by_id))
-}
-
-fn session_strategy_from_target(config: &SessionConfig) -> SessionStrategy {
-    match config {
-        SessionConfig::None => SessionStrategy::None,
-        SessionConfig::Cookie => SessionStrategy::Cookie,
-        SessionConfig::Header { header_name } => SessionStrategy::Header {
-            header_name: header_name.clone(),
-        },
-        SessionConfig::BodyField { field_name } => SessionStrategy::BodyField {
-            field_name: field_name.clone(),
-        },
-    }
-}
 
 fn next_run_id(engagement_dir: &std::path::Path) -> anyhow::Result<String> {
     let runs_dir = engagement_dir.join("runs");

@@ -98,9 +98,9 @@ pub async fn fetch_analyzer_manifest(
     logger
         .0
         .info("analyzer-setup", None, "Fetching analyzer manifest");
-    let resp = reqwest::get(MANIFEST_URL).await.map_err(|e| {
-        anyhow::anyhow!("could not reach analyzer manifest at {MANIFEST_URL}: {e}")
-    })?;
+    let resp = reqwest::get(MANIFEST_URL)
+        .await
+        .map_err(|e| anyhow::anyhow!("could not reach analyzer manifest at {MANIFEST_URL}: {e}"))?;
     if !resp.status().is_success() {
         return Err(anyhow::anyhow!(
             "analyzer manifest fetch returned HTTP {} — try again later",

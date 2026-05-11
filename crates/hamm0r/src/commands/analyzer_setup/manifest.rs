@@ -63,7 +63,8 @@ pub const MANIFEST_URL: &str =
 /// Fetch the manifest for use inside a spawned task. The Tauri-facing
 /// version of the same logic with logger plumbing lives in `mod.rs`.
 pub async fn fetch_manifest_internal() -> anyhow::Result<AnalyzerManifest> {
-    let resp = reqwest::get(MANIFEST_URL).await
+    let resp = reqwest::get(MANIFEST_URL)
+        .await
         .map_err(|e| anyhow::anyhow!("could not reach analyzer manifest at {MANIFEST_URL}: {e}"))?;
     if !resp.status().is_success() {
         anyhow::bail!(
@@ -71,7 +72,8 @@ pub async fn fetch_manifest_internal() -> anyhow::Result<AnalyzerManifest> {
             resp.status()
         );
     }
-    resp.json::<AnalyzerManifest>().await
+    resp.json::<AnalyzerManifest>()
+        .await
         .map_err(|e| anyhow::anyhow!("analyzer manifest is not valid JSON: {e}"))
 }
 

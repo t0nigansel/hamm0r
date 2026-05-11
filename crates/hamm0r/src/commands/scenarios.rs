@@ -24,10 +24,11 @@ pub fn create_scenario(paths: State<'_, AppPaths>, name: String) -> Result<Scena
         } else {
             name
         },
-        target_id: String::new(),
-        steps: vec![],
         repeat: 1,
         description: None,
+        request_ids: Vec::new(),
+        library: None,
+        shared_session: false,
     };
     scenarios::save(&paths.0.scenarios_dir(), &scenario)?;
     Ok(scenario)

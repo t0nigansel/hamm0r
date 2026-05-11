@@ -52,8 +52,7 @@ pub(super) async fn do_install(
 
     // Wipe any half-baked previous attempt so we start from a clean slate.
     if staging.exists() {
-        std::fs::remove_dir_all(&staging)
-            .map_err(|e| anyhow::anyhow!("clean staging: {e}"))?;
+        std::fs::remove_dir_all(&staging).map_err(|e| anyhow::anyhow!("clean staging: {e}"))?;
     }
     std::fs::create_dir_all(&staging)?;
 
@@ -307,7 +306,11 @@ fn move_extracted_into_place(extract_dir: &Path, analyzer_dir: &Path) -> anyhow:
                     std::fs::remove_file(&target).ok();
                 }
                 std::fs::rename(entry.path(), &target).map_err(|e2| {
-                    anyhow::anyhow!("rename {} -> {}: {e2}", entry.path().display(), target.display())
+                    anyhow::anyhow!(
+                        "rename {} -> {}: {e2}",
+                        entry.path().display(),
+                        target.display()
+                    )
                 })?;
             } else {
                 return Err(anyhow::anyhow!(
@@ -361,8 +364,12 @@ pub(super) fn version_at_least(actual: &str, minimum: &str) -> bool {
     for i in 0..len {
         let av = *a.get(i).unwrap_or(&0);
         let mv = *m.get(i).unwrap_or(&0);
-        if av > mv { return true; }
-        if av < mv { return false; }
+        if av > mv {
+            return true;
+        }
+        if av < mv {
+            return false;
+        }
     }
     true
 }
@@ -539,10 +546,7 @@ mod tests {
 
         restore_backup(&backup, &analyzer).unwrap();
 
-        assert_eq!(
-            std::fs::read(analyzer.join("bin/old")).unwrap(),
-            b"old-bin"
-        );
+        assert_eq!(std::fs::read(analyzer.join("bin/old")).unwrap(), b"old-bin");
         assert_eq!(
             std::fs::read(analyzer.join("models/old.gguf")).unwrap(),
             b"old-model"

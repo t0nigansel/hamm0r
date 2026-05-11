@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use runner::adapter::execute_with_session;
 use runner::session::{SessionManager, SessionStrategy};
 use serde::{Deserialize, Serialize};
+use storage::requests::RequestReference;
 use storage::types::Request;
 use storage::{requests as request_store, targets};
 use tauri::State;
@@ -11,15 +12,21 @@ use super::{AppConfigState, AppPaths, LoggerState};
 use crate::error::CommandError;
 use storage::types::AppConfig;
 
+/// Returned to the UI when a delete is rejected because of references and
+/// `force` was not set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestRecordDto {
-    pub target_id: String,
-    pub primary: bool,
-    pub request: Request,
+#[serde(rename_all = "snake_case")]
+pub struct DeleteRequestBlockedDto {
+    pub blocked: bool,
+    pub references: Vec<RequestReference>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestRequestResultDto {
+    pub request_method: String,
+    pub request_url: String,
+    pub request_headers: HashMap<String, String>,
+    pub request_body: String,
     pub status: u16,
     pub response_headers: HashMap<String, String>,
     pub raw_response_body: String,
@@ -41,6 +48,7 @@ pub(crate) async fn run_test_request(
         .client_for_with_timeout("test", request.timeout_seconds)
         .map_err(anyhow::Error::from)?;
     let payload = prompt_text.unwrap_or_default();
+    let rendered_request = render_request_preview(&request, &strategy, "test", &payload)?;
 
     logger.info(
         "request-test",
@@ -72,12 +80,21 @@ pub(crate) async fn run_test_request(
     );
 
     Ok(TestRequestResultDto {
+        request_method: request.method.clone(),
+        request_url: request.url.clone(),
+        request_headers: rendered_request.headers,
+        request_body: rendered_request.body,
         status: result.status,
         response_headers: result.response_headers,
         raw_response_body,
         extracted_response_body: result.extracted,
         duration_ms: result.duration_ms,
     })
+}
+
+struct RenderedRequestPreview {
+    headers: HashMap<String, String>,
+    body: String,
 }
 
 #[tauri::command]
@@ -87,100 +104,6 @@ pub fn get_request(
 ) -> Result<Option<Request>, CommandError> {
     let all_requests = request_store::load_all(&paths.0.requests_dir())?;
     Ok(all_requests.get(&id).cloned())
-}
-
-#[tauri::command]
-pub fn list_target_requests(
-    paths: State<'_, AppPaths>,
-    target_id: String,
-) -> Result<Vec<RequestRecordDto>, CommandError> {
-    let all_targets = targets::load_all(&paths.0.targets_dir())?;
-    let target = all_targets
-        .get(&target_id)
-        .cloned()
-        .ok_or_else(|| anyhow::anyhow!("target '{}' not found", target_id))?;
-    let all_requests = request_store::load_all(&paths.0.requests_dir())?;
-
-    let primary_id = target.primary_request_id().map(str::to_owned);
-    let ids = normalized_request_ids(&target);
-    let records = ids
-        .into_iter()
-        .filter_map(|request_id| {
-            let request = all_requests.get(&request_id)?.clone();
-            Some(RequestRecordDto {
-                target_id: target.id.clone(),
-                primary: primary_id.as_deref() == Some(request_id.as_str()),
-                request,
-            })
-        })
-        .collect();
-
-    Ok(records)
-}
-
-#[tauri::command]
-pub fn save_request(
-    paths: State<'_, AppPaths>,
-    target_id: String,
-    mut request: Request,
-) -> Result<RequestRecordDto, CommandError> {
-    if request.version == 0 {
-        request.version = 1;
-    }
-    if request.id.trim().is_empty() {
-        return Err(anyhow::anyhow!("request id must not be empty").into());
-    }
-    if request.name.trim().is_empty() {
-        request.name = request.id.clone();
-    }
-
-    let mut all_targets = targets::load_all(&paths.0.targets_dir())?;
-    let mut target = all_targets
-        .remove(&target_id)
-        .ok_or_else(|| anyhow::anyhow!("target '{}' not found", target_id))?;
-
-    let mut request_ids = normalized_request_ids(&target);
-    if !request_ids.iter().any(|id| id == &request.id) {
-        request_ids.push(request.id.clone());
-    }
-    if target.request_id.trim().is_empty() {
-        target.request_id = request.id.clone();
-    }
-    target.request_ids = request_ids;
-
-    request_store::save(&paths.0.requests_dir(), &request)?;
-    targets::save(&paths.0.targets_dir(), &target)?;
-
-    let is_primary = target.primary_request_id() == Some(request.id.as_str());
-    Ok(RequestRecordDto {
-        target_id: target.id,
-        primary: is_primary,
-        request,
-    })
-}
-
-#[tauri::command]
-pub fn delete_request(
-    paths: State<'_, AppPaths>,
-    target_id: String,
-    id: String,
-) -> Result<(), CommandError> {
-    let mut all_targets = targets::load_all(&paths.0.targets_dir())?;
-    let mut target = all_targets
-        .remove(&target_id)
-        .ok_or_else(|| anyhow::anyhow!("target '{}' not found", target_id))?;
-
-    let mut request_ids = normalized_request_ids(&target);
-    request_ids.retain(|request_id| request_id != &id);
-    target.request_ids = request_ids;
-
-    if target.request_id == id {
-        target.request_id = target.request_ids.first().cloned().unwrap_or_default();
-    }
-
-    request_store::delete(&paths.0.requests_dir(), &id)?;
-    targets::save(&paths.0.targets_dir(), &target)?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -201,25 +124,6 @@ pub async fn test_request(
         prompt_text,
     )
     .await
-}
-
-fn normalized_request_ids(target: &storage::types::Target) -> Vec<String> {
-    let mut ids = Vec::new();
-
-    if !target.request_id.trim().is_empty() {
-        ids.push(target.request_id.clone());
-    }
-    for request_id in &target.request_ids {
-        if request_id.trim().is_empty() {
-            continue;
-        }
-        if ids.iter().any(|existing| existing == request_id) {
-            continue;
-        }
-        ids.push(request_id.clone());
-    }
-
-    ids
 }
 
 pub(crate) fn parse_session_strategy(strategy: &str, field: Option<String>) -> SessionStrategy {
@@ -291,6 +195,86 @@ fn request_headers_for_log(request: &Request) -> HashMap<String, String> {
     headers
 }
 
+fn render_request_preview(
+    request: &Request,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
+    prompt: &str,
+) -> Result<RenderedRequestPreview, CommandError> {
+    let mut headers = request_headers_for_log(request);
+    if let SessionStrategy::Header { header_name } = session_strategy {
+        headers.insert(header_name.clone(), session_value.to_owned());
+    }
+    let headers = runner::template::render_headers(&headers, prompt).map_err(anyhow::Error::from)?;
+
+    let body = match request.adapter {
+        storage::types::AdapterType::CustomRest => match request.body.format {
+            storage::types::BodyFormat::Json => {
+                let body = inject_session_body_field(
+                    request.body.content.clone(),
+                    session_strategy,
+                    session_value,
+                );
+                let body_str = serde_json::to_string(&body).map_err(anyhow::Error::from)?;
+                let rendered = runner::template::render(&body_str, prompt).map_err(anyhow::Error::from)?;
+                let json: serde_json::Value =
+                    serde_json::from_str(&rendered).map_err(anyhow::Error::from)?;
+                serde_json::to_string_pretty(&json).map_err(anyhow::Error::from)?
+            }
+            storage::types::BodyFormat::Form => {
+                let body_str =
+                    serde_json::to_string(&request.body.content).map_err(anyhow::Error::from)?;
+                runner::template::render(&body_str, prompt).map_err(anyhow::Error::from)?
+            }
+            storage::types::BodyFormat::Text | storage::types::BodyFormat::Raw => {
+                let text = request.body.content.as_str().unwrap_or_default().to_owned();
+                runner::template::render(&text, prompt).map_err(anyhow::Error::from)?
+            }
+        },
+        storage::types::AdapterType::OpenAiCompat => {
+            let mut body = request.body.content.clone();
+            if let Some(messages) = body.get_mut("messages") {
+                let msgs_str = serde_json::to_string(messages).map_err(anyhow::Error::from)?;
+                let rendered = runner::template::render(&msgs_str, prompt).map_err(anyhow::Error::from)?;
+                *messages = serde_json::from_str(&rendered).map_err(anyhow::Error::from)?;
+            } else {
+                body["messages"] = serde_json::json!([{"role": "user", "content": prompt}]);
+            }
+            let body = inject_session_body_field(body, session_strategy, session_value);
+            serde_json::to_string_pretty(&body).map_err(anyhow::Error::from)?
+        }
+        storage::types::AdapterType::RawHttp => match &request.body.content {
+            serde_json::Value::String(s) => {
+                runner::template::render(s, prompt).map_err(anyhow::Error::from)?
+            }
+            other => runner::template::render(&other.to_string(), prompt).map_err(anyhow::Error::from)?,
+        },
+    };
+
+    Ok(RenderedRequestPreview { headers, body })
+}
+
+fn inject_session_body_field(
+    body: serde_json::Value,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
+) -> serde_json::Value {
+    if let SessionStrategy::BodyField { field_name } = session_strategy {
+        match body {
+            serde_json::Value::Object(mut map) => {
+                map.insert(
+                    field_name.clone(),
+                    serde_json::Value::String(session_value.to_owned()),
+                );
+                serde_json::Value::Object(map)
+            }
+            other => other,
+        }
+    } else {
+        body
+    }
+}
+
 fn redact_known_secret_headers(headers: &mut HashMap<String, String>) {
     const SECRET_HEADERS: &[&str] = &[
         "authorization",
@@ -343,52 +327,96 @@ fn limit_body_for_log(body: &str) -> String {
     )
 }
 
+// ── Top-level Request CRUD (independent of Target) ────────────────────────────
+// These commands back the new "Requests" menu item. The Target-scoped
+// `save_request` / `delete_request` above are retained for the Target editor
+// flow.
+
+#[tauri::command]
+pub fn list_request_references(
+    paths: State<'_, AppPaths>,
+    id: String,
+) -> Result<Vec<RequestReference>, CommandError> {
+    request_store::references(&paths.0.targets_dir(), &paths.0.scenarios_dir(), &id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn save_request_global(
+    paths: State<'_, AppPaths>,
+    mut request: Request,
+) -> Result<Request, CommandError> {
+    if request.version == 0 {
+        request.version = 1;
+    }
+    if request.id.trim().is_empty() {
+        return Err(anyhow::anyhow!("request id must not be empty").into());
+    }
+    if request.name.trim().is_empty() {
+        request.name = request.id.clone();
+    }
+    request_store::save(&paths.0.requests_dir(), &request)?;
+    Ok(request)
+}
+
+/// Delete a Request file. When `force` is false and references exist, the
+/// command returns a `DeleteRequestBlockedDto` describing the blocking
+/// references — the UI surfaces a confirmation dialog and re-invokes with
+/// `force = true`. With `force = true`, referencing Targets are cleaned up
+/// (the id is removed from `request_ids`, primary is reset if needed).
+/// Scenario steps are intentionally not modified — the UI surfaces a
+/// "missing request" warning on affected scenarios at edit/run time.
+#[tauri::command]
+pub fn delete_request_global(
+    paths: State<'_, AppPaths>,
+    id: String,
+    force: bool,
+) -> Result<DeleteRequestBlockedDto, CommandError> {
+    let refs = request_store::references(&paths.0.targets_dir(), &paths.0.scenarios_dir(), &id)?;
+
+    if !refs.is_empty() && !force {
+        return Ok(DeleteRequestBlockedDto {
+            blocked: true,
+            references: refs,
+        });
+    }
+
+    // Clean references in Targets when the user has confirmed.
+    if force {
+        let all_targets = targets::load_all(&paths.0.targets_dir())?;
+        for (_, mut target) in all_targets {
+            let mut changed = false;
+            if target.request_ids.iter().any(|r| r == &id) {
+                target.request_ids.retain(|r| r != &id);
+                changed = true;
+            }
+            if target.request_id == id {
+                target.request_id = target.request_ids.first().cloned().unwrap_or_default();
+                changed = true;
+            }
+            if changed {
+                targets::save(&paths.0.targets_dir(), &target)?;
+            }
+        }
+    }
+
+    request_store::delete(&paths.0.requests_dir(), &id)?;
+    Ok(DeleteRequestBlockedDto {
+        blocked: false,
+        references: Vec::new(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{normalized_request_ids, parse_session_strategy, request_headers_for_log};
+    use super::{
+        parse_session_strategy, render_request_preview, request_headers_for_log,
+    };
     use runner::session::SessionStrategy;
     use std::collections::HashMap;
     use storage::types::{
-        AuthConfig, BodyConfig, BodyFormat, ExtractConfig, Request, ResponseConfig, Target,
+        AuthConfig, BodyConfig, BodyFormat, ExtractConfig, Request, ResponseConfig,
     };
-
-    #[test]
-    fn normalized_request_ids_prefers_primary_and_deduplicates() {
-        let target = Target {
-            version: 1,
-            id: "acme".into(),
-            name: "Acme".into(),
-            request_ids: vec!["secondary".into(), "primary".into(), "secondary".into()],
-            request_id: "primary".into(),
-            session_config: Default::default(),
-            auth_acquisition: Default::default(),
-            notes: None,
-        };
-
-        assert_eq!(
-            normalized_request_ids(&target),
-            vec!["primary".to_owned(), "secondary".to_owned(),]
-        );
-    }
-
-    #[test]
-    fn normalized_request_ids_falls_back_to_request_ids_for_legacy_empty_primary() {
-        let target = Target {
-            version: 1,
-            id: "acme".into(),
-            name: "Acme".into(),
-            request_ids: vec!["secondary".into()],
-            request_id: String::new(),
-            session_config: Default::default(),
-            auth_acquisition: Default::default(),
-            notes: None,
-        };
-
-        assert_eq!(
-            normalized_request_ids(&target),
-            vec!["secondary".to_owned()]
-        );
-    }
 
     #[test]
     fn parse_session_strategy_maps_header_mode() {
@@ -419,9 +447,11 @@ mod tests {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                bind: None,
             },
-            timeout_seconds: 30,
+            timeout_seconds: 50,
             adapter: Default::default(),
+            tag: None,
         };
 
         let headers = request_headers_for_log(&request);
@@ -429,5 +459,40 @@ mod tests {
             headers.get("Authorization"),
             Some(&"Bearer <redacted>".to_owned())
         );
+    }
+
+    #[test]
+    fn render_request_preview_masks_bearer_and_substitutes_prompt() {
+        let request = Request {
+            version: 1,
+            id: "req".into(),
+            name: "Req".into(),
+            method: "POST".into(),
+            url: "https://example.test".into(),
+            auth: AuthConfig::Bearer {
+                token_env: "TOKEN".into(),
+            },
+            headers: HashMap::from([("Content-Type".into(), "application/json".into())]),
+            body: BodyConfig {
+                format: BodyFormat::Json,
+                content: serde_json::json!({"message":"{{prompt}}"}),
+            },
+            response: ResponseConfig {
+                extract: ExtractConfig::Raw,
+                bind: None,
+            },
+            timeout_seconds: 50,
+            adapter: Default::default(),
+            tag: None,
+        };
+
+        let preview = render_request_preview(&request, &SessionStrategy::None, "test", "hello")
+            .expect("preview should render");
+
+        assert_eq!(
+            preview.headers.get("Authorization"),
+            Some(&"Bearer <redacted>".to_owned())
+        );
+        assert!(preview.body.contains("\"hello\""));
     }
 }

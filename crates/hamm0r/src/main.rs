@@ -54,18 +54,16 @@ fn main() {
             commands::list_prompts,
             commands::list_requests,
             commands::requests::get_request,
-            commands::requests::list_target_requests,
-            commands::requests::save_request,
-            commands::requests::delete_request,
             commands::requests::test_request,
+            commands::requests::save_request_global,
+            commands::requests::delete_request_global,
+            commands::requests::list_request_references,
             commands::library::seed_library,
+            commands::library::get_prompt,
+            commands::library::create_prompt,
+            commands::library::update_prompt,
+            commands::library::delete_prompt,
             commands::targets::list_targets,
-            commands::targets::get_target_meta,
-            commands::targets::save_target_meta,
-            commands::targets::save_target,
-            commands::targets::test_target_connection,
-            commands::targets::acquire_target_auth,
-            commands::targets::delete_target,
             commands::scenarios::list_scenarios,
             commands::scenarios::create_scenario,
             commands::scenarios::get_scenario,
@@ -73,14 +71,15 @@ fn main() {
             commands::scenarios::delete_scenario,
             commands::engagements::list_engagements,
             commands::engagements::create_engagement,
+            commands::engagements::delete_engagement,
             commands::engagements::list_runs,
             commands::engagements::get_run_progress,
             commands::engagements::save_markdown_export,
             commands::engagements::open_export_path,
             commands::runs::start_run,
             commands::runs::start_scenario_run,
-            commands::runs::start_transient_scenario_run,
             commands::runs::stop_run,
+            commands::runs::delete_run,
             commands::runs::read_run_attempts,
             commands::runs::read_response_body,
             commands::runs::get_run_diagnostics,
@@ -90,14 +89,18 @@ fn main() {
             commands::analysis::judge_result,
             commands::analysis::judge_all,
             commands::analysis::start_analysis,
+            commands::analysis::test_hosted_judge,
             commands::analysis::cancel_analysis,
             commands::analyzer_setup::get_analyzer_status,
             commands::analyzer_setup::fetch_analyzer_manifest,
             commands::analyzer_setup::download_and_install_analyzer,
             commands::analyzer_setup::uninstall_analyzer,
             commands::secrets::set_bearer_token,
+            commands::secrets::set_secret_ref,
             commands::secrets::forget_bearer_token,
+            commands::secrets::forget_secret_ref,
             commands::secrets::bearer_token_status,
+            commands::secrets::secret_ref_status,
         ])
         .build(tauri::generate_context!())
         .expect("error building hamm0r");
@@ -141,9 +144,59 @@ fn first_launch_hook() -> anyhow::Result<(HammorPaths, AppConfig)> {
         paths.root().to_string_lossy().into_owned(),
     )?;
 
-    // Seed bundled prompt library into ~/hamm0r/prompts/ on first run.
-    // update=false: skips files that already exist, so user edits are preserved.
+    // Seed bundled prompt library into ~/hamm0r/prompts/ on startup.
+    // Missing files are copied in; existing user-edited files are preserved.
     commands::library::seed_on_first_launch(&paths.prompts_dir())?;
+    // Seed bundled starter requests into ~/hamm0r/requests/ using the same
+    // "missing only" rule so newly introduced templates appear automatically
+    // without overwriting user customizations.
+    commands::starter_requests::seed_on_startup(&paths.requests_dir())?;
+
+    // Phase 2D of docs/RefactorPlan.md: copy each Target's `name` into the
+    // `tag` field of every Request the Target references. Idempotent — runs
+    // every startup, only writes Requests whose tag is currently None.
+    // Logged but never fatal: a migration failure shouldn't block launch.
+    match storage::migrations::v2::tag_requests_from_targets(
+        &paths.targets_dir(),
+        &paths.requests_dir(),
+    ) {
+        Ok(report) if report.tagged > 0 => {
+            eprintln!(
+                "[migrate:v2:tag] tagged {} request(s) from {} target name(s); orphan refs: {}",
+                report.tagged, report.already_tagged + report.tagged, report.orphan_target_refs,
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!("[migrate:v2:tag] migration error (non-fatal): {err:#}");
+        }
+    }
+
+    // Phase 2D of docs/RefactorPlan.md (Q-H resolved per-run): translate each
+    // Target's `auth_acquisition.http_login` into a real Request bound to
+    // `bearer_token`, and wire the chat Requests' Authorization headers to
+    // reference it. Idempotent. Existing manual Authorization headers are
+    // preserved. Non-fatal on error.
+    match storage::migrations::v2::synthesize_auth_chain_requests(
+        &paths.targets_dir(),
+        &paths.requests_dir(),
+    ) {
+        Ok(report)
+            if report.login_requests_synthesized > 0 || report.chat_requests_wired > 0 =>
+        {
+            eprintln!(
+                "[migrate:v2:auth-chain] synthesized {} login request(s); wired {} chat request(s); kept {} existing auth header(s); skipped {} target(s)",
+                report.login_requests_synthesized,
+                report.chat_requests_wired,
+                report.chat_requests_already_wired,
+                report.targets_skipped,
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            eprintln!("[migrate:v2:auth-chain] migration error (non-fatal): {err:#}");
+        }
+    }
 
     Ok((paths, config))
 }

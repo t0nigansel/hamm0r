@@ -4,7 +4,7 @@ use storage::runs::{read_all, RunRecord, RunStatus};
 use storage::types::{EngagementMeta, EngagementScope, EngagementTarget};
 use tauri::State;
 
-use super::AppPaths;
+use super::{ActiveRunsState, AppPaths};
 use crate::error::CommandError;
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,6 +15,9 @@ pub struct RunSummary {
     pub total_prompts: u32,
     pub errors: u32,
     pub started_at: String,
+    /// Scenario this run came from. `None` for ad-hoc runs (rerun path).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenario_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -52,8 +55,49 @@ pub fn create_engagement(
     Ok(meta)
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DeleteEngagementResult {
+    pub deleted: bool,
+}
+
+/// Permanently remove an engagement folder (runs, verdicts, responses,
+/// reports, metadata). Refuses if any run inside the engagement is still
+/// active — the user must stop it first. Idempotent: deleting an
+/// already-gone slug returns `deleted: false` without error.
+#[tauri::command]
+pub fn delete_engagement(
+    paths: State<'_, AppPaths>,
+    active_runs: State<'_, ActiveRunsState>,
+    slug: String,
+) -> Result<DeleteEngagementResult, CommandError> {
+    // Refuse while a run inside this engagement is active. We don't
+    // track engagement-slug → run-id, so the safe play is to refuse if
+    // ANY active run sits in the matching engagement folder.
+    let active = active_runs
+        .0
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?;
+    if !active.is_empty() {
+        let runs_dir = paths.0.engagement_dir(&slug).join("runs");
+        for run_id in active.keys() {
+            let run_path = runs_dir.join(format!("{run_id}.jsonl"));
+            if run_path.exists() {
+                return Err(anyhow::anyhow!(
+                    "Run '{run_id}' is still active in this engagement. Stop it first, then delete."
+                )
+                .into());
+            }
+        }
+    }
+    drop(active);
+
+    let removed = engagements::delete(&paths.0.engagements_dir(), &slug)?;
+    Ok(DeleteEngagementResult { deleted: removed })
+}
+
 #[tauri::command]
 pub fn list_runs(
+    active_runs: State<'_, ActiveRunsState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
 ) -> Result<Vec<RunSummary>, CommandError> {
@@ -63,6 +107,13 @@ pub fn list_runs(
     }
 
     let mut summaries = vec![];
+    let active_run_ids = active_runs
+        .0
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
+        .keys()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
     for entry in std::fs::read_dir(&runs_dir).map_err(|e| anyhow::anyhow!(e))? {
         let entry = entry.map_err(|e| anyhow::anyhow!(e))?;
         let path = entry.path();
@@ -85,7 +136,11 @@ pub fn list_runs(
             continue;
         }
         let records = read_all(&path)?;
-        summaries.push(summarize_run(&run_id, &records));
+        summaries.push(summarize_run(
+            &run_id,
+            &records,
+            active_run_ids.contains(&run_id),
+        ));
     }
 
     summaries.sort_by(|a, b| b.id.cmp(&a.id));
@@ -94,6 +149,7 @@ pub fn list_runs(
 
 #[tauri::command]
 pub fn get_run_progress(
+    active_runs: State<'_, ActiveRunsState>,
     paths: State<'_, AppPaths>,
     engagement_slug: String,
     run_id: String,
@@ -109,7 +165,12 @@ pub fn get_run_progress(
     }
 
     let records = read_all(&run_path)?;
-    Ok(Some(summarize_run(&run_id, &records)))
+    let is_active = active_runs
+        .0
+        .lock()
+        .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
+        .contains_key(&run_id);
+    Ok(Some(summarize_run(&run_id, &records, is_active)))
 }
 
 #[tauri::command]
@@ -177,16 +238,24 @@ fn make_slug(name: &str) -> String {
     format!("{today}-{slug_part}")
 }
 
-fn summarize_run(run_id: &str, records: &[RunRecord]) -> RunSummary {
+fn summarize_run(run_id: &str, records: &[RunRecord], is_active: bool) -> RunSummary {
     let mut started_at = String::new();
     let mut completed = 0u32;
     let mut total_prompts = 0u32;
     let mut errors = 0u32;
-    let mut status = "running".to_owned();
+    let mut scenario_id: Option<String> = None;
+    let mut status = if is_active {
+        "running".to_owned()
+    } else {
+        "aborted".to_owned()
+    };
 
     for record in records {
         match record {
-            RunRecord::Header(h) => started_at = h.started_at.clone(),
+            RunRecord::Header(h) => {
+                started_at = h.started_at.clone();
+                scenario_id = h.scenario_id.clone();
+            }
             RunRecord::Attempt(a) => {
                 completed += 1;
                 if a.response.status == 0 || a.response.error.is_some() {
@@ -217,5 +286,6 @@ fn summarize_run(run_id: &str, records: &[RunRecord]) -> RunSummary {
         total_prompts,
         errors,
         started_at,
+        scenario_id,
     }
 }

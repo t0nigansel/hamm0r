@@ -7,6 +7,7 @@ pub mod requests;
 pub mod runs;
 pub mod scenarios;
 pub mod secrets;
+pub mod starter_requests;
 pub mod targets;
 
 use std::collections::HashMap;
@@ -37,9 +38,7 @@ pub struct AnalyzerInstallTracker(pub Arc<Mutex<Option<String>>>);
 /// orchestrator races against `wait()` via `tokio::select!`. Cancel pops
 /// the sender out and `send(())`s on it; the orchestrator wakes up and
 /// calls `start_kill()` on its locally-held child.
-pub struct AnalysisCancelTracker(
-    pub Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
-);
+pub struct AnalysisCancelTracker(pub Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct UserRelevantErrorEvent {

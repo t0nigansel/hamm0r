@@ -18,7 +18,9 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
-use analyzer::pipeline::{self, JudgeOneOptions, JudgeOutcome, JudgeRunSummary};
+use analyzer::hosted::{build_hosted_config, judge_with_hosted, HostedJudgeConfigInput};
+use analyzer::pipeline::{self, HostedJudgeConfig, JudgeOneOptions, JudgeOutcome, JudgeRunSummary};
+use analyzer::JudgeInput;
 use serde::Serialize;
 use storage::verdicts::VerdictEntry;
 use storage::HammorPaths;
@@ -30,6 +32,7 @@ use super::{report_user_relevant_error, AnalysisCancelTracker, AnalyzerLoggerSta
 use crate::error::CommandError;
 
 const ANALYZOR_BIN_ENV: &str = "HAMM0R_ANALYZOR_BIN";
+const ANALYZOR_JUDGE_PROMPT_TEMPLATE_ENV: &str = "HAMM0R_ANALYZOR_JUDGE_PROMPT_TEMPLATE";
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -73,6 +76,36 @@ pub struct AnalysisProgressEvent {
     pub skipped_existing: u32,
     pub finished: bool,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HostedJudgeTestDto {
+    pub ok: bool,
+    pub judge_mode: String,
+    pub model_used: String,
+    pub verdict: String,
+    pub confidence: f32,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone)]
+enum ResolvedJudgeSettings {
+    Local {
+        judge_prompt_template: Option<String>,
+    },
+    Hosted {
+        judge_prompt_template: Option<String>,
+        provider: String,
+        endpoint: String,
+        deployment: String,
+        api_style: String,
+        api_version: Option<String>,
+        api_key: String,
+        max_input_chars: u32,
+        max_output_tokens: u32,
+        request_timeout_seconds: u32,
+        max_retries: u32,
+    },
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -183,22 +216,67 @@ pub async fn judge_result(
     let engagement_dir = paths.0.engagement_dir(&engagement_slug);
     let prompts_dir = paths.0.prompts_dir();
     let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
+    let judge_settings = load_resolved_judge_settings(&paths.0)?;
     let run_id_for_blocking = run_id.clone();
 
     let outcome = tokio::task::spawn_blocking(move || -> anyhow::Result<JudgeOutcome> {
-        pipeline::judge_one_heuristic(&JudgeOneOptions {
-            engagement_dir: &engagement_dir,
-            prompts_dir: &prompts_dir,
-            run_id: &run_id_for_blocking,
-            seq,
-            analyzer_version: &analyzer_version,
-            force,
-        })
+        match &judge_settings {
+            ResolvedJudgeSettings::Local {
+                judge_prompt_template,
+            } => pipeline::judge_one_heuristic(&JudgeOneOptions {
+                engagement_dir: &engagement_dir,
+                prompts_dir: &prompts_dir,
+                run_id: &run_id_for_blocking,
+                seq,
+                judge_prompt_template: judge_prompt_template.as_deref(),
+                analyzer_version: &analyzer_version,
+                force,
+            }),
+            ResolvedJudgeSettings::Hosted {
+                judge_prompt_template,
+                provider,
+                endpoint,
+                deployment,
+                api_style,
+                api_version,
+                api_key,
+                max_input_chars,
+                max_output_tokens,
+                request_timeout_seconds,
+                max_retries,
+            } => pipeline::judge_one_hosted(
+                &JudgeOneOptions {
+                    engagement_dir: &engagement_dir,
+                    prompts_dir: &prompts_dir,
+                    run_id: &run_id_for_blocking,
+                    seq,
+                    judge_prompt_template: judge_prompt_template.as_deref(),
+                    analyzer_version: &analyzer_version,
+                    force,
+                },
+                &HostedJudgeConfig {
+                    provider,
+                    endpoint,
+                    deployment,
+                    api_style,
+                    api_version: api_version.as_deref(),
+                    api_key,
+                    max_input_chars: *max_input_chars,
+                    max_output_tokens: *max_output_tokens,
+                    request_timeout_seconds: *request_timeout_seconds,
+                    max_retries: *max_retries,
+                },
+            ),
+        }
     })
     .await
     .map_err(|e| anyhow::anyhow!("judge task join failure: {e}"))??;
 
-    let status = if outcome.was_judged() { "judged" } else { "skipped" };
+    let status = if outcome.was_judged() {
+        "judged"
+    } else {
+        "skipped"
+    };
     logger.0.info(
         "analysis",
         Some(&run_id),
@@ -231,6 +309,7 @@ pub async fn judge_all(
     let engagement_dir = paths.0.engagement_dir(&engagement_slug);
     let prompts_dir = paths.0.prompts_dir();
     let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
+    let judge_settings = load_resolved_judge_settings(&paths.0)?;
 
     // Resolve target (run_id, seq) pairs synchronously up front so the
     // blocking task only does the judging work.
@@ -240,7 +319,10 @@ pub async fn judge_all(
             .ok_or_else(|| anyhow::anyhow!("run_id is required when result_ids is empty"))?;
         let run_path = pipeline::run_path_for(&engagement_dir, rid);
         let attempts = pipeline::load_attempts(&run_path)?;
-        attempts.into_iter().map(|a| (rid.to_owned(), a.seq)).collect()
+        attempts
+            .into_iter()
+            .map(|a| (rid.to_owned(), a.seq))
+            .collect()
     } else {
         result_ids
             .iter()
@@ -260,14 +342,54 @@ pub async fn judge_all(
         let mut results = Vec::new();
 
         for (rid, seq) in targets {
-            let outcome = pipeline::judge_one_heuristic(&JudgeOneOptions {
-                engagement_dir: &engagement_dir,
-                prompts_dir: &prompts_dir,
-                run_id: &rid,
-                seq,
-                analyzer_version: &analyzer_version,
-                force,
-            })?;
+            let outcome = match &judge_settings {
+                ResolvedJudgeSettings::Local {
+                    judge_prompt_template,
+                } => pipeline::judge_one_heuristic(&JudgeOneOptions {
+                    engagement_dir: &engagement_dir,
+                    prompts_dir: &prompts_dir,
+                    run_id: &rid,
+                    seq,
+                    judge_prompt_template: judge_prompt_template.as_deref(),
+                    analyzer_version: &analyzer_version,
+                    force,
+                })?,
+                ResolvedJudgeSettings::Hosted {
+                    judge_prompt_template,
+                    provider,
+                    endpoint,
+                    deployment,
+                    api_style,
+                    api_version,
+                    api_key,
+                    max_input_chars,
+                    max_output_tokens,
+                    request_timeout_seconds,
+                    max_retries,
+                } => pipeline::judge_one_hosted(
+                    &JudgeOneOptions {
+                        engagement_dir: &engagement_dir,
+                        prompts_dir: &prompts_dir,
+                        run_id: &rid,
+                        seq,
+                        judge_prompt_template: judge_prompt_template.as_deref(),
+                        analyzer_version: &analyzer_version,
+                        force,
+                    },
+                    &HostedJudgeConfig {
+                        provider,
+                        endpoint,
+                        deployment,
+                        api_style,
+                        api_version: api_version.as_deref(),
+                        api_key,
+                        max_input_chars: *max_input_chars,
+                        max_output_tokens: *max_output_tokens,
+                        request_timeout_seconds: *request_timeout_seconds,
+                        max_retries: *max_retries,
+                    },
+                )?,
+            };
             let status = if outcome.was_judged() {
                 judged += 1;
                 "judged"
@@ -314,6 +436,7 @@ pub async fn start_analysis(
     let force = force.unwrap_or(false);
     let logger = logger.0.clone();
     let tracker = cancel_tracker.0.clone();
+    let judge_settings = load_resolved_judge_settings(&paths)?;
 
     tokio::spawn(async move {
         logger.info(
@@ -328,6 +451,7 @@ pub async fn start_analysis(
             engagement_slug.clone(),
             run_id.clone(),
             force,
+            judge_settings.clone(),
         )
         .await
         {
@@ -360,6 +484,83 @@ pub async fn start_analysis(
     Ok(run_id_ret)
 }
 
+#[tauri::command]
+pub fn test_hosted_judge(
+    logger: State<'_, AnalyzerLoggerState>,
+    paths: State<'_, AppPaths>,
+) -> Result<HostedJudgeTestDto, CommandError> {
+    let settings = load_resolved_judge_settings(&paths.0)?;
+    let hosted = match settings {
+        ResolvedJudgeSettings::Hosted {
+            provider,
+            endpoint,
+            deployment,
+            api_style,
+            api_version,
+            api_key,
+            max_input_chars,
+            max_output_tokens,
+            request_timeout_seconds,
+            max_retries,
+            ..
+        } => build_hosted_config(HostedJudgeConfigInput {
+            provider: &provider,
+            endpoint: &endpoint,
+            deployment: &deployment,
+            api_style: &api_style,
+            api_version: api_version.as_deref(),
+            api_key: &api_key,
+            max_input_chars,
+            max_output_tokens,
+            request_timeout_seconds,
+            max_retries,
+        })?,
+        ResolvedJudgeSettings::Local { .. } => {
+            return Err(anyhow::anyhow!(
+                "Hosted Judge test is only available when judge mode is set to hosted."
+            )
+            .into())
+        }
+    };
+
+    let input = JudgeInput {
+        prompt_text: "Summarize the candidate profile in one short sentence.".to_owned(),
+        response_text:
+            "The candidate appears to be an experienced SAP-focused test manager with strong communication skills."
+                .to_owned(),
+        category: "hosted-judge-test".to_owned(),
+        tags: vec!["test".to_owned(), "benign".to_owned()],
+        owasp_ref: None,
+        severity: Some("info".to_owned()),
+        request_failed: false,
+        judge_prompt_template: Some(analyzer::default_judge_prompt_template().to_owned()),
+    };
+    let output = judge_with_hosted(&input, &hosted)
+        .map_err(|err| anyhow::anyhow!("Hosted Judge test failed: {err}"))?;
+    let verdict_label = match output.verdict {
+        storage::verdicts::JudgeVerdict::Success => "SUCCESS",
+        storage::verdicts::JudgeVerdict::Fail => "FAIL",
+        storage::verdicts::JudgeVerdict::Partial => "PARTIAL",
+        storage::verdicts::JudgeVerdict::Unclear => "UNCLEAR",
+    };
+    logger.0.info(
+        "analysis",
+        None,
+        &format!(
+            "Hosted Judge connectivity test completed model={} verdict={}",
+            output.model_used, verdict_label
+        ),
+    );
+    Ok(HostedJudgeTestDto {
+        ok: true,
+        judge_mode: "hosted".to_owned(),
+        model_used: output.model_used,
+        verdict: verdict_label.to_owned(),
+        confidence: output.confidence,
+        reason: output.reason,
+    })
+}
+
 // ── start_analysis implementation ─────────────────────────────────────────────
 
 type CancelMap = Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>;
@@ -371,29 +572,76 @@ async fn analyze_run_and_emit(
     engagement_slug: String,
     run_id: String,
     force: bool,
+    judge_settings: ResolvedJudgeSettings,
 ) -> anyhow::Result<()> {
-    let bin = resolve_analyzor_bin(&paths)
-        .ok_or_else(|| anyhow::anyhow!(
-            "analyzer is not installed (no analyz0r binary at expected layout); \
-             install it from Settings → Analyz0r before running an analysis"
-        ))?;
-    let model_path = pipeline::find_model_file(&paths.analyzer_models_dir())
-        .ok_or_else(|| anyhow::anyhow!(
-            "analyzer install is broken (no model file present); \
-             repair the install from Settings → Analyz0r"
-        ))?;
+    let summary = match judge_settings {
+        ResolvedJudgeSettings::Hosted {
+            judge_prompt_template,
+            provider,
+            endpoint,
+            deployment,
+            api_style,
+            api_version,
+            api_key,
+            max_input_chars,
+            max_output_tokens,
+            request_timeout_seconds,
+            max_retries,
+        } => run_hosted_analysis(
+            app.clone(),
+            paths.clone(),
+            engagement_slug.clone(),
+            run_id.clone(),
+            force,
+            judge_prompt_template,
+            provider,
+            endpoint,
+            deployment,
+            api_style,
+            api_version,
+            api_key,
+            max_input_chars,
+            max_output_tokens,
+            request_timeout_seconds,
+            max_retries,
+        )
+        .await?,
+        ResolvedJudgeSettings::Local {
+            judge_prompt_template,
+        } => {
+            let bin = resolve_analyzor_bin(&paths).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "analyzer is not installed (no analyz0r binary at expected layout); \
+                     install it from Settings → Analyz0r before running an analysis"
+                )
+            })?;
+            let ollama_dev_path = std::env::var("HAMM0R_ANALYZOR_OLLAMA_URL").is_ok()
+                && std::env::var("HAMM0R_ANALYZOR_OLLAMA_MODEL").is_ok();
+            let model_path = if ollama_dev_path {
+                PathBuf::new()
+            } else {
+                pipeline::find_model_file(&paths.analyzer_models_dir()).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "analyzer install is broken (no model file present); \
+                         repair the install from Settings → Analyz0r"
+                    )
+                })?
+            };
 
-    let summary = run_via_subprocess(
-        app.clone(),
-        bin,
-        paths.engagement_dir(&engagement_slug),
-        paths.prompts_dir(),
-        run_id.clone(),
-        model_path,
-        force,
-        cancel_tracker,
-    )
-    .await?;
+            run_via_subprocess(
+                app.clone(),
+                bin,
+                paths.engagement_dir(&engagement_slug),
+                paths.prompts_dir(),
+                run_id.clone(),
+                model_path,
+                force,
+                judge_prompt_template,
+                cancel_tracker,
+            )
+            .await?
+        }
+    };
 
     // Both paths leave verdict JSONL behind; rendering the report is a
     // pure reader, so we always do it here in the orchestrator.
@@ -427,6 +675,7 @@ async fn run_via_subprocess(
     run_id: String,
     model_path: PathBuf,
     force: bool,
+    judge_prompt_template: Option<String>,
     cancel_tracker: CancelMap,
 ) -> anyhow::Result<JudgeRunSummary> {
     let mut cmd = Command::new(&bin);
@@ -436,11 +685,30 @@ async fn run_via_subprocess(
         .arg("--prompts-dir")
         .arg(&prompts_dir)
         .arg("--run")
-        .arg(&run_id)
-        .arg("--model")
-        .arg(&model_path);
+        .arg(&run_id);
+
+    // Dev-only escape hatch: if both env vars are set, route the run
+    // through Ollama instead of the in-process llama-cpp model. Lets a
+    // developer validate the end-to-end flow without the C++ toolchain
+    // needed to compile `llama-cpp-2`. Production builds leave these
+    // unset and use --model. See docs/analyzorPlan.md.
+    let ollama_url = std::env::var("HAMM0R_ANALYZOR_OLLAMA_URL").ok();
+    let ollama_model = std::env::var("HAMM0R_ANALYZOR_OLLAMA_MODEL").ok();
+    match (ollama_url, ollama_model) {
+        (Some(url), Some(model)) => {
+            cmd.arg("--ollama-url").arg(url);
+            cmd.arg("--ollama-model").arg(model);
+        }
+        _ => {
+            cmd.arg("--model").arg(&model_path);
+        }
+    }
+
     if force {
         cmd.arg("--force");
+    }
+    if let Some(template) = judge_prompt_template {
+        cmd.env(ANALYZOR_JUDGE_PROMPT_TEMPLATE_ENV, template);
     }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -610,6 +878,128 @@ fn u32_field(value: &serde_json::Value, key: &str) -> u32 {
         .unwrap_or(0)
 }
 
+fn load_resolved_judge_settings(paths: &HammorPaths) -> anyhow::Result<ResolvedJudgeSettings> {
+    let root = paths.root().to_string_lossy().into_owned();
+    let config = storage::settings::load_or_default(&paths.config_path(), root)?;
+    let judge_prompt_template = config
+        .analyzer
+        .judge_prompt_template
+        .filter(|s| !s.trim().is_empty());
+    match config.analyzer.judge_mode {
+        storage::types::AnalyzerJudgeMode::Local => Ok(ResolvedJudgeSettings::Local {
+            judge_prompt_template,
+        }),
+        storage::types::AnalyzerJudgeMode::Hosted => {
+            let endpoint = config.analyzer.hosted_judge.endpoint.trim().to_owned();
+            if endpoint.is_empty() {
+                anyhow::bail!("Hosted Judge is selected, but no endpoint is configured.");
+            }
+            let deployment = config.analyzer.hosted_judge.deployment.trim().to_owned();
+            if deployment.is_empty() {
+                anyhow::bail!("Hosted Judge is selected, but no deployment/model is configured.");
+            }
+            let secret_ref = config.analyzer.hosted_judge.secret_ref.trim().to_owned();
+            let api_key = storage::secrets::resolve_token(&secret_ref)?
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Hosted Judge is selected, but no API key is stored for {}.",
+                        secret_ref
+                    )
+                })?;
+
+            Ok(ResolvedJudgeSettings::Hosted {
+                judge_prompt_template,
+                provider: match config.analyzer.hosted_judge.provider {
+                    storage::types::HostedJudgeProvider::AzureOpenai => "azure_openai".to_owned(),
+                },
+                endpoint,
+                deployment,
+                api_style: match config.analyzer.hosted_judge.api_style {
+                    storage::types::HostedJudgeApiStyle::Auto => "auto".to_owned(),
+                    storage::types::HostedJudgeApiStyle::ChatCompletions => {
+                        "chat_completions".to_owned()
+                    }
+                    storage::types::HostedJudgeApiStyle::Responses => "responses".to_owned(),
+                },
+                api_version: config.analyzer.hosted_judge.api_version.clone(),
+                api_key,
+                max_input_chars: config.analyzer.hosted_judge.max_input_chars,
+                max_output_tokens: config.analyzer.hosted_judge.max_output_tokens,
+                request_timeout_seconds: config.analyzer.hosted_judge.request_timeout_seconds,
+                max_retries: config.analyzer.hosted_judge.max_retries,
+            })
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_hosted_analysis(
+    app: AppHandle,
+    paths: HammorPaths,
+    engagement_slug: String,
+    run_id: String,
+    force: bool,
+    judge_prompt_template: Option<String>,
+    provider: String,
+    endpoint: String,
+    deployment: String,
+    api_style: String,
+    api_version: Option<String>,
+    api_key: String,
+    max_input_chars: u32,
+    max_output_tokens: u32,
+    request_timeout_seconds: u32,
+    max_retries: u32,
+) -> anyhow::Result<JudgeRunSummary> {
+    let engagement_dir = paths.engagement_dir(&engagement_slug);
+    let prompts_dir = paths.prompts_dir();
+    let analyzer_version = env!("CARGO_PKG_VERSION").to_owned();
+    tokio::task::spawn_blocking(move || {
+        let mut emit_progress = |progress: analyzer::pipeline::Progress| {
+            let _ = app.emit(
+                "analysis-progress",
+                AnalysisProgressEvent {
+                    run_id: run_id.clone(),
+                    processed: progress.processed,
+                    total: progress.total,
+                    judged: progress.judged,
+                    skipped_existing: progress.skipped_existing,
+                    finished: false,
+                    error: None,
+                },
+            );
+        };
+        pipeline::judge_run(
+            &pipeline::JudgeRunOptions {
+                engagement_dir: &engagement_dir,
+                prompts_dir: &prompts_dir,
+                run_id: &run_id,
+                judge_prompt_template: judge_prompt_template.as_deref(),
+                model_path: None,
+                ollama: None,
+                hosted: Some(HostedJudgeConfig {
+                    provider: &provider,
+                    endpoint: &endpoint,
+                    deployment: &deployment,
+                    api_style: &api_style,
+                    api_version: api_version.as_deref(),
+                    api_key: &api_key,
+                    max_input_chars,
+                    max_output_tokens,
+                    request_timeout_seconds,
+                    max_retries,
+                }),
+                analyzer_version: &analyzer_version,
+                force,
+            },
+            &mut emit_progress,
+        )
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("hosted analysis task join failure: {e}"))?
+}
+
 fn resolve_analyzor_bin(paths: &HammorPaths) -> Option<PathBuf> {
     if let Ok(env_path) = std::env::var(ANALYZOR_BIN_ENV) {
         let p = PathBuf::from(env_path);
@@ -617,10 +1007,11 @@ fn resolve_analyzor_bin(paths: &HammorPaths) -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let bundled = paths
-        .analyzer_dir()
-        .join("bin")
-        .join(if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" });
+    let bundled = paths.analyzer_dir().join("bin").join(if cfg!(windows) {
+        "analyz0r.exe"
+    } else {
+        "analyz0r"
+    });
     bundled.exists().then_some(bundled)
 }
 
@@ -698,7 +1089,11 @@ mod tests {
         // Create the bundled-install layout and check it gets picked up.
         let bin_dir = paths.analyzer_dir().join("bin");
         fs::create_dir_all(&bin_dir).unwrap();
-        let bin_name = if cfg!(windows) { "analyz0r.exe" } else { "analyz0r" };
+        let bin_name = if cfg!(windows) {
+            "analyz0r.exe"
+        } else {
+            "analyz0r"
+        };
         let bundled = bin_dir.join(bin_name);
         fs::write(&bundled, b"#!/bin/sh\nexit 0\n").unwrap();
         assert_eq!(resolve_analyzor_bin(&paths), Some(bundled.clone()));
