@@ -206,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let engagementProgressPollTimer = null;
   let engagementResultsPollTimer = null;
   const engagementRunActivity = new Map();
+  const expectedRunTotals = new Map();
   let lastEngagementEventRefreshAt = 0;
   const ARCHIVED_ENGAGEMENTS_KEY = 'hamm0r.archivedEngagements.v1';
 
@@ -2413,10 +2414,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ev || !ev.run_id) return;
     const runId = ev.run_id;
     const statusText = ev.error ? 'error' : (ev.finished ? 'completed' : 'running');
+    const eventTotal = Number(ev.total);
+    if (Number.isFinite(eventTotal) && eventTotal > 0) {
+      expectedRunTotals.set(runId, eventTotal);
+    }
+    const displayTotal = expectedRunTotals.get(runId) || (Number.isFinite(eventTotal) ? eventTotal : null);
 
     setLiveActivityState(runId, {
       seq: Number.isFinite(Number(ev.seq)) ? Number(ev.seq) : null,
-      total: Number.isFinite(Number(ev.total)) ? Number(ev.total) : null,
+      total: displayTotal,
       status: statusText,
       response: ev.status != null ? String(ev.status) : null,
       error: ev.error || null,
@@ -2433,7 +2439,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statusEl.textContent = cssState;
       }
       if (progressEl) {
-        progressEl.textContent = `${ev.seq || 0}/${ev.total || '?'}`;
+        progressEl.textContent = `${ev.seq || 0}/${displayTotal || '?'}`;
       }
       if (errorsEl && ev.error) {
         const nextErr = Number(errorsEl.textContent || '0') + 1;
@@ -2592,10 +2598,17 @@ document.addEventListener('DOMContentLoaded', () => {
         let terminalReached = false;
         for (const run of runningRuns) {
           const p = await API.call('get_run_progress', { engagement_slug: engagementSlug, run_id: run.id });
+          const knownTotal = expectedRunTotals.get(run.id);
+          const pollTotal = Number(p?.total_prompts);
+          const displayTotal = knownTotal || (Number.isFinite(pollTotal) && pollTotal > 0 ? pollTotal : null);
 
           const idx = engagementDetail.runs.findIndex((r) => r.id === run.id);
           if (idx >= 0 && p) {
-            engagementDetail.runs[idx] = { ...engagementDetail.runs[idx], ...p };
+            engagementDetail.runs[idx] = {
+              ...engagementDetail.runs[idx],
+              ...p,
+              total_prompts: displayTotal || p.total_prompts,
+            };
           }
 
           const row = [...$$('#runs-tbody tr')].find((tr) => tr.dataset.runId === run.id);
@@ -2611,7 +2624,7 @@ document.addEventListener('DOMContentLoaded', () => {
               setLiveActivityState(run.id, { status: nextStatus });
             }
             if (progressEl) {
-              progressEl.textContent = `${p.completed}/${p.total_prompts || '?'}`;
+              progressEl.textContent = `${p.completed}/${displayTotal || '?'}`;
             }
             if (errorsEl) {
               errorsEl.textContent = String(p.errors ?? 0);
@@ -2713,7 +2726,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!btn) return;
       btn.dataset.analyzing = 'false';
       btn.disabled = false;
-      btn.textContent = 'Analyze';
+      btn.innerHTML = ICONS.analyze;
+      btn.setAttribute('aria-label', 'Analyze');
       btn.title = analyzerAvailability.judge_mode === 'hosted'
         ? 'Run Hosted Judge on this run'
         : 'Run local analyzer on this run';
@@ -2725,6 +2739,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.dataset.analyzing = 'true';
       btn.disabled = false;
       btn.textContent = 'Cancel';
+      btn.setAttribute('aria-label', 'Cancel analysis');
       btn.title = 'Cancel this analysis';
     }
 
@@ -2736,6 +2751,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Inline progress on the row's button: "Cancel · 3/12".
         if (btn && !p.finished && Number.isFinite(p.total) && p.total > 0) {
           btn.textContent = `Cancel · ${p.processed || 0}/${p.total}`;
+          btn.setAttribute('aria-label', `Cancel analysis, ${p.processed || 0} of ${p.total}`);
         }
         if (p.error) {
           toast(`Analysis failed: ${p.error}`, 'error');
@@ -2790,7 +2806,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setLiveActivityState(r.id, {
           status: String(r.status || '').toLowerCase(),
           seq: Number.isFinite(Number(r.completed)) ? Number(r.completed) : null,
-          total: Number.isFinite(Number(r.total_prompts)) ? Number(r.total_prompts) : null,
+          total: expectedRunTotals.get(r.id) || (Number.isFinite(Number(r.total_prompts)) ? Number(r.total_prompts) : null),
         });
         const tr = document.createElement('tr');
         tr.className = 'clickable';
@@ -2803,7 +2819,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tr.innerHTML = `
           <td style="font-family:var(--mono);font-size:11px;">${esc(r.id.substring(0, 8))}</td>
           <td><span class="run-status-badge ${esc(r.status)}">${esc(r.status)}</span></td>
-          <td class="run-progress-value" style="font-family:var(--mono);font-size:11px;">${r.completed}/${r.total_prompts || '?'}</td>
+          <td class="run-progress-value" style="font-family:var(--mono);font-size:11px;">${r.completed}/${expectedRunTotals.get(r.id) || r.total_prompts || '?'}</td>
           <td class="run-errors-value" style="font-family:var(--mono);font-size:11px;color:${r.errors > 0 ? 'var(--critical)' : 'var(--text-2)'};">${r.errors}</td>
           <td style="font-family:var(--mono);font-size:11px;">${esc(formatRunStarted(r.started_at))}</td>
           <td class="run-actions-cell">
@@ -3241,6 +3257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         payloads,
         parallelism: 4,
       });
+      expectedRunTotals.set(newRunId, payloads.length);
       toast(`Re-run started: ${newRunId}`, 'success');
       await loadRuns({
         engagementSlug: engagementDetail.slug,
