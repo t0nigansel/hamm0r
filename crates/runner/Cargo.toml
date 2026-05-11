@@ -1,0 +1,31 @@
+[package]
+name = "runner"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+storage = { path = "../storage" }
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# HTTP client — rustls only, no OpenSSL (Stack.md)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "cookies"] }
+# Template substitution: sandboxed, auto-escape off (Stack.md)
+minijinja = "2"
+# JSONPath extraction for response.extract (Datamodel.md)
+serde_json_path = "0.7"
+# SHA-256 for headers_hash (Datamodel.md invariant 10)
+sha2 = "0.10"
+# Byte buffer type returned by reqwest::Response::bytes()
+bytes = "1"
+# Regex extraction for response.extract
+regex = "1"
+
+[dev-dependencies]
+wiremock = "0.6"
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
