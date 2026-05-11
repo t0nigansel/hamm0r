@@ -1,0 +1,42 @@
+[package]
+name = "analyzer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+# The analyzer crate's default build is runtime-free (heuristic judge +
+# report rendering). It is pulled in by the `hamm0r` core binary as a
+# regular dependency.
+#
+# Pulling in the LLM runtime (llama-cpp-2) requires `--features runtime`,
+# which only the standalone `analyz0r` CLI bundle turns on. Core never
+# enables it.
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+storage = { path = "../storage" }
+sha2 = "0.10"
+minijinja = "2"
+# Blocking HTTP for the Ollama dev backend. Pipeline is sync, so we use
+# reqwest::blocking rather than the async client core uses elsewhere.
+# rustls-tls because Ollama is plaintext on localhost but we may also
+# point at remote endpoints during development.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1", features = ["metal", "sampler"], optional = true }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+llama-cpp-2 = { version = "0.1", features = ["sampler"], optional = true }
+
+[features]
+# Pulls in llama-cpp-2 + the `llm` module. Off by default so the analyzer
+# crate compiles on hosts without libclang.
+runtime = ["dep:llama-cpp-2"]
+
+[dev-dependencies]
+insta = "1"
