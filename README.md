@@ -76,7 +76,7 @@ sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchel
 ### Build & run (development)
 
 ```bash
-git clone https://github.com/t0nigansel/hamm0r.git
+git clone https://github.com/SpiritTesting/hamm0r.git
 cd hamm0r
 cd crates/hamm0r
 PATH=~/.cargo/bin:$PATH cargo tauri dev
@@ -102,6 +102,44 @@ cargo tauri dev
 
 This app is not meant to be opened directly in a browser. The frontend expects
 to run inside Tauri and uses the Rust command layer exposed there.
+
+### Tester setup with analyz0r (temporary)
+
+The packaged one-click local analyz0r download is not published yet. For the
+current tester setup, run analyz0r through a local Ollama model.
+
+Install Ollama first:
+
+```text
+https://ollama.com/download
+```
+
+Then in Git Bash:
+
+```bash
+git clone https://github.com/SpiritTesting/hamm0r.git
+cd hamm0r
+
+ollama pull qwen2.5:3b
+cargo build -p analyzor-cli
+
+export HAMM0R_ANALYZOR_BIN="$PWD/target/debug/analyz0r.exe"
+export HAMM0R_ANALYZOR_OLLAMA_URL="http://localhost:11434"
+export HAMM0R_ANALYZOR_OLLAMA_MODEL="qwen2.5:3b"
+
+cd crates/hamm0r
+cargo tauri dev
+```
+
+If Ollama is not already running, open a second terminal and run:
+
+```bash
+ollama serve
+```
+
+Keep the terminal with the `export ...` commands open while hamm0r is running.
+The app inherits those environment variables only when it is started from that
+same terminal.
 
 ### WSL troubleshooting (Linux graphics / EGL)
 
