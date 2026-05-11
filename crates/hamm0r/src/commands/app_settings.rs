@@ -12,6 +12,20 @@ pub struct LoggingSettingsDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UiSettingsDto {
+    #[serde(default = "default_theme")]
+    pub theme: String,
+}
+
+impl Default for UiSettingsDto {
+    fn default() -> Self {
+        Self {
+            theme: default_theme(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalyzerSettingsDto {
     #[serde(default = "default_judge_mode")]
     pub judge_mode: String,
@@ -90,6 +104,8 @@ pub struct AppSettingsDto {
     #[serde(default)]
     pub app_version: String,
     #[serde(default)]
+    pub ui: UiSettingsDto,
+    #[serde(default)]
     pub analyzer: AnalyzerSettingsDto,
     #[serde(default)]
     pub logging: LoggingSettingsDto,
@@ -97,6 +113,10 @@ pub struct AppSettingsDto {
 
 fn default_judge_mode() -> String {
     "local".to_owned()
+}
+
+fn default_theme() -> String {
+    "default".to_owned()
 }
 
 fn default_uses_default_judge_prompt() -> bool {
@@ -149,16 +169,19 @@ pub fn get_app_settings(
         .judge_prompt_template
         .clone()
         .filter(|s| !s.trim().is_empty());
-    let hosted_secret_status =
-        storage::secrets::token_status(&config.analyzer.hosted_judge.secret_ref).unwrap_or(
-            storage::secrets::TokenStatus {
-                stored_in_keychain: false,
-                env_var_set: false,
-                keychain_available: false,
-            },
-        );
+    let hosted_secret_status = storage::secrets::token_status(
+        &config.analyzer.hosted_judge.secret_ref,
+    )
+    .unwrap_or(storage::secrets::TokenStatus {
+        stored_in_keychain: false,
+        env_var_set: false,
+        keychain_available: false,
+    });
     let dto = AppSettingsDto {
         app_version: "0.4".to_owned(),
+        ui: UiSettingsDto {
+            theme: theme_label(&config.ui.theme).to_owned(),
+        },
         analyzer: AnalyzerSettingsDto {
             judge_mode: judge_mode_label(&config.analyzer.judge_mode).to_owned(),
             judge_prompt_template: configured_prompt
@@ -220,7 +243,8 @@ pub fn save_app_settings(
         };
     config.analyzer.hosted_judge.provider =
         parse_hosted_provider(&settings.analyzer.hosted_judge.provider)?;
-    config.analyzer.hosted_judge.endpoint = settings.analyzer.hosted_judge.endpoint.trim().to_owned();
+    config.analyzer.hosted_judge.endpoint =
+        settings.analyzer.hosted_judge.endpoint.trim().to_owned();
     config.analyzer.hosted_judge.deployment =
         settings.analyzer.hosted_judge.deployment.trim().to_owned();
     config.analyzer.hosted_judge.api_style =
@@ -233,22 +257,23 @@ pub fn save_app_settings(
         settings.analyzer.hosted_judge.max_input_chars.max(1_000);
     config.analyzer.hosted_judge.max_output_tokens =
         settings.analyzer.hosted_judge.max_output_tokens.max(1);
-    config.analyzer.hosted_judge.request_timeout_seconds =
-        settings.analyzer.hosted_judge.request_timeout_seconds.max(1);
+    config.analyzer.hosted_judge.request_timeout_seconds = settings
+        .analyzer
+        .hosted_judge
+        .request_timeout_seconds
+        .max(1);
     config.analyzer.hosted_judge.max_retries = settings.analyzer.hosted_judge.max_retries;
     if matches!(
         config.analyzer.judge_mode,
         storage::types::AnalyzerJudgeMode::Hosted
     ) && config.analyzer.hosted_judge.secret_ref.trim().is_empty()
     {
-        return Err(anyhow::anyhow!(
-            "Hosted Judge requires a non-empty API key reference."
-        )
-        .into());
+        return Err(anyhow::anyhow!("Hosted Judge requires a non-empty API key reference.").into());
     }
     config.logging.enabled = settings.logging.enabled;
     config.logging.level = parse_log_level(&settings.logging.level)?;
     config.logging.body_logging_enabled = settings.logging.body_logging_enabled;
+    config.ui.theme = parse_theme(&settings.ui.theme)?;
 
     storage::settings::save(&paths.0.config_path(), &config)?;
 
@@ -257,16 +282,19 @@ pub fn save_app_settings(
         .judge_prompt_template
         .clone()
         .unwrap_or_else(|| default_prompt.to_owned());
-    let hosted_secret_status =
-        storage::secrets::token_status(&config.analyzer.hosted_judge.secret_ref).unwrap_or(
-            storage::secrets::TokenStatus {
-                stored_in_keychain: false,
-                env_var_set: false,
-                keychain_available: false,
-            },
-        );
+    let hosted_secret_status = storage::secrets::token_status(
+        &config.analyzer.hosted_judge.secret_ref,
+    )
+    .unwrap_or(storage::secrets::TokenStatus {
+        stored_in_keychain: false,
+        env_var_set: false,
+        keychain_available: false,
+    });
     let dto = AppSettingsDto {
         app_version: "0.4".to_owned(),
+        ui: UiSettingsDto {
+            theme: theme_label(&config.ui.theme).to_owned(),
+        },
         analyzer: AnalyzerSettingsDto {
             judge_mode: judge_mode_label(&config.analyzer.judge_mode).to_owned(),
             judge_prompt_template: effective_prompt,
@@ -319,6 +347,27 @@ fn log_level_label(level: &storage::types::LogLevel) -> &'static str {
         storage::types::LogLevel::Error => "error",
         storage::types::LogLevel::Info => "info",
         storage::types::LogLevel::Debug => "debug",
+    }
+}
+
+fn theme_label(theme: &storage::types::Theme) -> &'static str {
+    match theme {
+        storage::types::Theme::SpiritTesting => "spirit_testing",
+        storage::types::Theme::Testsolutions => "testsolutions",
+        storage::types::Theme::System
+        | storage::types::Theme::Light
+        | storage::types::Theme::Dark => "default",
+    }
+}
+
+fn parse_theme(theme: &str) -> Result<storage::types::Theme, CommandError> {
+    match theme.trim().to_ascii_lowercase().as_str() {
+        "" | "default" | "system" | "light" | "dark" => Ok(storage::types::Theme::System),
+        "spirit" | "spirit_testing" | "spirit-testing" => Ok(storage::types::Theme::SpiritTesting),
+        "testsolutions" | "test_solutions" | "test-solutions" => {
+            Ok(storage::types::Theme::Testsolutions)
+        }
+        other => Err(anyhow::anyhow!("unsupported theme '{}'", other).into()),
     }
 }
 
@@ -392,6 +441,9 @@ mod tests {
     #[test]
     fn save_payload_deserializes_without_read_only_settings_fields() {
         let payload = serde_json::json!({
+            "ui": {
+                "theme": "spirit_testing"
+            },
             "logging": {
                 "enabled": true,
                 "level": "info",
@@ -417,10 +469,44 @@ mod tests {
 
         let dto: AppSettingsDto =
             serde_json::from_value(payload).expect("frontend save payload should deserialize");
+        assert_eq!(dto.ui.theme, "spirit_testing");
         assert_eq!(dto.analyzer.judge_mode, "hosted");
         assert_eq!(dto.analyzer.default_judge_prompt_template, "");
         assert!(dto.analyzer.uses_default_judge_prompt);
         assert!(!dto.analyzer.hosted_judge.secret_stored);
         assert!(dto.analyzer.hosted_judge.keychain_available);
+    }
+
+    #[test]
+    fn save_payload_defaults_ui_theme() {
+        let payload = serde_json::json!({
+            "logging": {
+                "enabled": true,
+                "level": "info",
+                "body_logging_enabled": false
+            }
+        });
+
+        let dto: AppSettingsDto =
+            serde_json::from_value(payload).expect("frontend save payload should deserialize");
+        assert_eq!(dto.ui.theme, "default");
+    }
+
+    #[test]
+    fn save_payload_deserializes_testsolutions_theme() {
+        let payload = serde_json::json!({
+            "ui": {
+                "theme": "testsolutions"
+            },
+            "logging": {
+                "enabled": true,
+                "level": "info",
+                "body_logging_enabled": false
+            }
+        });
+
+        let dto: AppSettingsDto =
+            serde_json::from_value(payload).expect("frontend save payload should deserialize");
+        assert_eq!(dto.ui.theme, "testsolutions");
     }
 }

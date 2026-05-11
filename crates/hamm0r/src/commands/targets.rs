@@ -79,11 +79,9 @@ pub struct TargetDto {
     pub notes: Option<String>,
 }
 
-
 fn default_auth_source() -> String {
     "manual".to_owned()
 }
-
 
 fn auth_config_to_source(config: &AuthAcquisitionConfig) -> AuthSourceFields {
     match config.mode {
@@ -143,7 +141,6 @@ impl AuthSourceFields {
         }
     }
 }
-
 
 fn pair_to_dto(target: &Target, request: &Request) -> TargetDto {
     let endpoint_type = match request.adapter {
@@ -221,7 +218,6 @@ fn pair_to_dto(target: &Target, request: &Request) -> TargetDto {
     }
 }
 
-
 /// Return all targets as flat DTOs, combining Target + Request data.
 #[tauri::command]
 pub fn list_targets(paths: State<'_, AppPaths>) -> Result<Vec<TargetDto>, CommandError> {
@@ -239,4 +235,3 @@ pub fn list_targets(paths: State<'_, AppPaths>) -> Result<Vec<TargetDto>, Comman
         .collect();
     Ok(dtos)
 }
-

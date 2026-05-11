@@ -205,7 +205,8 @@ fn render_request_preview(
     if let SessionStrategy::Header { header_name } = session_strategy {
         headers.insert(header_name.clone(), session_value.to_owned());
     }
-    let headers = runner::template::render_headers(&headers, prompt).map_err(anyhow::Error::from)?;
+    let headers =
+        runner::template::render_headers(&headers, prompt).map_err(anyhow::Error::from)?;
 
     let body = match request.adapter {
         storage::types::AdapterType::CustomRest => match request.body.format {
@@ -216,7 +217,8 @@ fn render_request_preview(
                     session_value,
                 );
                 let body_str = serde_json::to_string(&body).map_err(anyhow::Error::from)?;
-                let rendered = runner::template::render(&body_str, prompt).map_err(anyhow::Error::from)?;
+                let rendered =
+                    runner::template::render(&body_str, prompt).map_err(anyhow::Error::from)?;
                 let json: serde_json::Value =
                     serde_json::from_str(&rendered).map_err(anyhow::Error::from)?;
                 serde_json::to_string_pretty(&json).map_err(anyhow::Error::from)?
@@ -235,7 +237,8 @@ fn render_request_preview(
             let mut body = request.body.content.clone();
             if let Some(messages) = body.get_mut("messages") {
                 let msgs_str = serde_json::to_string(messages).map_err(anyhow::Error::from)?;
-                let rendered = runner::template::render(&msgs_str, prompt).map_err(anyhow::Error::from)?;
+                let rendered =
+                    runner::template::render(&msgs_str, prompt).map_err(anyhow::Error::from)?;
                 *messages = serde_json::from_str(&rendered).map_err(anyhow::Error::from)?;
             } else {
                 body["messages"] = serde_json::json!([{"role": "user", "content": prompt}]);
@@ -247,7 +250,9 @@ fn render_request_preview(
             serde_json::Value::String(s) => {
                 runner::template::render(s, prompt).map_err(anyhow::Error::from)?
             }
-            other => runner::template::render(&other.to_string(), prompt).map_err(anyhow::Error::from)?,
+            other => {
+                runner::template::render(&other.to_string(), prompt).map_err(anyhow::Error::from)?
+            }
         },
     };
 
@@ -409,9 +414,7 @@ pub fn delete_request_global(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        parse_session_strategy, render_request_preview, request_headers_for_log,
-    };
+    use super::{parse_session_strategy, render_request_preview, request_headers_for_log};
     use runner::session::SessionStrategy;
     use std::collections::HashMap;
     use storage::types::{

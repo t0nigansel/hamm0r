@@ -331,7 +331,10 @@ mod tests {
 
     #[test]
     fn normalize_owasp_ref_uppercases_and_trims() {
-        assert_eq!(normalize_owasp_ref(Some(" a01 ".into())).as_deref(), Some("A01"));
+        assert_eq!(
+            normalize_owasp_ref(Some(" a01 ".into())).as_deref(),
+            Some("A01")
+        );
         assert_eq!(normalize_owasp_ref(Some("".into())), None);
         assert_eq!(normalize_owasp_ref(None), None);
     }

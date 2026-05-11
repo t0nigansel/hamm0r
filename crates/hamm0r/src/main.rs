@@ -163,7 +163,9 @@ fn first_launch_hook() -> anyhow::Result<(HammorPaths, AppConfig)> {
         Ok(report) if report.tagged > 0 => {
             eprintln!(
                 "[migrate:v2:tag] tagged {} request(s) from {} target name(s); orphan refs: {}",
-                report.tagged, report.already_tagged + report.tagged, report.orphan_target_refs,
+                report.tagged,
+                report.already_tagged + report.tagged,
+                report.orphan_target_refs,
             );
         }
         Ok(_) => {}
@@ -181,9 +183,7 @@ fn first_launch_hook() -> anyhow::Result<(HammorPaths, AppConfig)> {
         &paths.targets_dir(),
         &paths.requests_dir(),
     ) {
-        Ok(report)
-            if report.login_requests_synthesized > 0 || report.chat_requests_wired > 0 =>
-        {
+        Ok(report) if report.login_requests_synthesized > 0 || report.chat_requests_wired > 0 => {
             eprintln!(
                 "[migrate:v2:auth-chain] synthesized {} login request(s); wired {} chat request(s); kept {} existing auth header(s); skipped {} target(s)",
                 report.login_requests_synthesized,

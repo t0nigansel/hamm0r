@@ -1,10 +1,10 @@
 use runner::session::SessionStrategy;
 use runner::{execute_matrix_run, execute_run, AttemptLog, MatrixRunConfig, Payload, RunConfig};
-use storage::prompts;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use storage::prompts;
 use storage::runs::{self, read_all, RunRecord};
 use storage::types::Request;
 use storage::{requests, scenarios};
@@ -270,9 +270,10 @@ async fn dispatch_matrix_scenario(
     if scenario.request_ids.is_empty() {
         return Err(anyhow::anyhow!("matrix scenario has no request_ids").into());
     }
-    let library = scenario.library.clone().ok_or_else(|| {
-        anyhow::anyhow!("matrix scenario has no library subset configured")
-    })?;
+    let library = scenario
+        .library
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("matrix scenario has no library subset configured"))?;
 
     // Build the registry from every Request on disk. The deps resolver
     // walks only what's reachable, so loading the whole set is fine.
@@ -281,10 +282,9 @@ async fn dispatch_matrix_scenario(
     // Validate every target Request id exists.
     for id in &scenario.request_ids {
         if !registry.contains_key(id) {
-            return Err(anyhow::anyhow!(
-                "matrix scenario references unknown Request '{id}'"
-            )
-            .into());
+            return Err(
+                anyhow::anyhow!("matrix scenario references unknown Request '{id}'").into(),
+            );
         }
     }
 
@@ -495,9 +495,7 @@ pub fn delete_run(
             .lock()
             .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?;
         if active.contains_key(&run_id) {
-            return Err(
-                anyhow::anyhow!("Run is still active. Stop it first, then delete.").into(),
-            );
+            return Err(anyhow::anyhow!("Run is still active. Stop it first, then delete.").into());
         }
     }
 

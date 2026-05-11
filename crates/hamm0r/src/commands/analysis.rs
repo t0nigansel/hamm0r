@@ -587,25 +587,27 @@ async fn analyze_run_and_emit(
             max_output_tokens,
             request_timeout_seconds,
             max_retries,
-        } => run_hosted_analysis(
-            app.clone(),
-            paths.clone(),
-            engagement_slug.clone(),
-            run_id.clone(),
-            force,
-            judge_prompt_template,
-            provider,
-            endpoint,
-            deployment,
-            api_style,
-            api_version,
-            api_key,
-            max_input_chars,
-            max_output_tokens,
-            request_timeout_seconds,
-            max_retries,
-        )
-        .await?,
+        } => {
+            run_hosted_analysis(
+                app.clone(),
+                paths.clone(),
+                engagement_slug.clone(),
+                run_id.clone(),
+                force,
+                judge_prompt_template,
+                provider,
+                endpoint,
+                deployment,
+                api_style,
+                api_version,
+                api_key,
+                max_input_chars,
+                max_output_tokens,
+                request_timeout_seconds,
+                max_retries,
+            )
+            .await?
+        }
         ResolvedJudgeSettings::Local {
             judge_prompt_template,
         } => {
