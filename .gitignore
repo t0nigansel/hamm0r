@@ -13,4 +13,10 @@ artifacts/
 node_modules/
 playwright-report/
 test-results/
-analyzer
+
+# analyz0r source and manifest folders are part of this repo:
+# - analyzer/
+# - crates/analyzer/
+#
+# Installed analyzer bundles belong in the user data directory
+# (~/hamm0r/analyzer), not inside the repo.
