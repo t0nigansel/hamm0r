@@ -1,0 +1,37 @@
+[package]
+name = "hamm0r"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hamm0r"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio = { workspace = true }
+storage = { path = "../storage" }
+runner = { path = "../runner" }
+# HTTP client for manifest fetch + model download (no OpenSSL, same choice as runner)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+serde_json_path = "0.7"
+sha2 = "0.10"
+# Heuristic-judge + report pipeline. Runtime-free: the LLM runtime
+# (llama-cpp-2) lives behind `analyzer/runtime`, which only the
+# standalone `analyz0r` CLI bundle enables. Core never compiles it in.
+analyzer = { path = "../analyzer" }
+# Zip extractor for the analyzer bundle install flow. Default features
+# pull in `flate2` (deflate) which is the only compression we need; the
+# other backends (bzip2, zstd, lzma) stay off to keep the dep tree small.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile.workspace = true
