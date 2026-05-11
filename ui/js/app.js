@@ -5,15 +5,202 @@
  * All backend communication goes through API.call() (see api.js).
  */
 
+// Module-scope DOM helpers so functions defined outside the
+// DOMContentLoaded handler (like initAnalyzerUI) can reach them. The
+// handler below redeclares them inside its own scope; that shadowing
+// is intentional and harmless — both lookups still go to the same
+// `document.querySelector`.
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+// Top-level "always-on" handlers. Registered immediately on script
+// load (not inside DOMContentLoaded) so they survive any synchronous
+// failure that aborts DCL setup. Covers the Settings modal, the
+// Requests view's primary buttons, and per-row request clicks.
+// Functions that need closure access (startNewRequest, openRequestEditor)
+// are exposed on window.__hamm0r once DCL has defined them.
+window.__hamm0r = window.__hamm0r || {};
+
+const THEME_CACHE_KEY = 'hamm0r.ui.theme.v1';
+
+function normalizeTheme(theme) {
+  const value = String(theme || '').trim().toLowerCase();
+  if (value === 'spirit' || value === 'spirit-testing') return 'spirit_testing';
+  if (value === 'spirit_testing') return 'spirit_testing';
+  if (value === 'testsolutions' || value === 'test-solutions' || value === 'test_solutions') {
+    return 'testsolutions';
+  }
+  return 'default';
+}
+
+function applyTheme(theme) {
+  const normalized = normalizeTheme(theme);
+  document.documentElement.dataset.theme = normalized;
+  try {
+    localStorage.setItem(THEME_CACHE_KEY, normalized);
+  } catch (_) {
+    // ignore storage errors
+  }
+}
+
+try {
+  applyTheme(localStorage.getItem(THEME_CACHE_KEY) || 'default');
+} catch (_) {
+  applyTheme('default');
+}
+
+// One global error handler so silent throws inside DCL or any later
+// async path become visible. Keeps the toast non-fatal.
+window.addEventListener('error', (e) => {
+  try {
+    console.error('[hamm0r] uncaught error:', e.error || e.message, e.filename, e.lineno);
+    if (typeof toast === 'function') {
+      toast(`JS error: ${e.message || 'unknown'}`, 'error');
+    }
+  } catch (_) { /* ignore */ }
+});
+document.addEventListener('click', (e) => {
+  const target = e.target;
+  if (!target) return;
+
+  // Open: clicking the sidebar Settings button.
+  const settingsBtn = target.closest?.('[data-nav="settings"]');
+  if (settingsBtn) {
+    const modal = document.querySelector('#settings-modal');
+    if (modal) {
+      modal.style.display = 'flex';
+      window.dispatchEvent(new CustomEvent('settings-modal-opened'));
+    }
+    return;
+  }
+
+  // Close: X button, Cancel button, or backdrop click.
+  if (target.closest?.('#settings-modal-close, #settings-modal-cancel')) {
+    const modal = document.querySelector('#settings-modal');
+    if (modal) modal.style.display = 'none';
+    return;
+  }
+  if (target.id === 'settings-modal') {
+    target.style.display = 'none';
+    return;
+  }
+
+  // General/Logging/Analyz0r section switch.
+  const navItem = target.closest?.('.settings-nav-item');
+  if (navItem && document.querySelector('#settings-modal')?.contains(navItem)) {
+    const view = navItem.dataset.settingsView;
+    if (view) {
+      document.querySelectorAll('.settings-nav-item').forEach((b) => {
+        const isActive = b.dataset.settingsView === view;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-current', isActive ? 'page' : 'false');
+      });
+      document.querySelectorAll('.settings-view').forEach((p) => {
+        p.classList.toggle('active', p.dataset.settingsView === view);
+      });
+    }
+    return;
+  }
+
+  // Analyz0r subnav: Prompt / Local Judge / Hosted Judge.
+  const subnavItem = target.closest?.('.settings-subnav-item');
+  if (subnavItem) {
+    const view = subnavItem.dataset.analyzerView;
+    if (view) {
+      document.querySelectorAll('.settings-subnav-item').forEach((b) => {
+        b.classList.toggle('active', b.dataset.analyzerView === view);
+      });
+      document.querySelectorAll('.settings-subview').forEach((p) => {
+        p.classList.toggle('active', p.dataset.analyzerView === view);
+      });
+    }
+    return;
+  }
+
+  // Requests view: "+" button and "Create your first request" CTA.
+  if (target.closest?.('#btn-new-request, #btn-request-get-started')) {
+    if (typeof window.__hamm0r.startNewRequest === 'function') {
+      window.__hamm0r.startNewRequest();
+    } else {
+      console.error('[hamm0r] startNewRequest not yet exposed; DCL setup likely failed');
+    }
+    return;
+  }
+
+  // Requests view: clicking a row in the list.
+  const requestRow = target.closest?.('#request-list li[data-id]');
+  if (requestRow) {
+    const id = requestRow.dataset.id;
+    if (id && typeof window.__hamm0r.openRequestEditor === 'function') {
+      window.__hamm0r.openRequestEditor(id);
+    } else if (id) {
+      console.error('[hamm0r] openRequestEditor not yet exposed; DCL setup likely failed');
+    }
+    return;
+  }
+});
+
+function esc(str) {
+  if (str == null) return '';
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
+function toast(message, type = 'info') {
+  const container = $('#toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function toastAction(message, actionLabel, onAction, type = 'info') {
+  const container = $('#toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = `toast toast-${type} toast-action`;
+
+  const text = document.createElement('span');
+  text.className = 'toast-message';
+  text.textContent = message;
+  el.appendChild(text);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'toast-link';
+  btn.textContent = actionLabel;
+  btn.addEventListener('click', async () => {
+    try {
+      await onAction();
+    } catch (err) {
+      toast(err.message || String(err), 'error');
+    }
+  });
+  el.appendChild(btn);
+
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 7000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // ── State ──────────────────────────────────────────────────────────
   let dbOpen = false;
   let activeEngagementSlug = null;
   let editingPromptId = null;
   let currentScenarioId = null;
-  let currentScenarioSteps = []; // local step buffer
-  let currentScenarioRequestOptions = [];
-  let editingStepIndex = -1; // -1 = add, >= 0 = edit
+  // Matrix-mode editor state. A Scenario fires every selected Request
+  // against every prompt resolved from the library subset.
+  let currentScenarioMatrix = {
+    request_ids: [],            // selected Request ids
+    owasp_refs: [],             // e.g. ["A01", "A03"]
+    categories: [],             // prompt-file stems
+    shared_session: false,
+  };
+  let currentScenarioMatrixGlobalRequests = [];   // cache of list_requests
+  let currentScenarioMatrixPromptIndex = null;    // cache of list_prompts
   let currentRunId = null;
   let progressPollTimer = null;
   let engagementProgressPollTimer = null;
@@ -21,6 +208,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const engagementRunActivity = new Map();
   let lastEngagementEventRefreshAt = 0;
   const ARCHIVED_ENGAGEMENTS_KEY = 'hamm0r.archivedEngagements.v1';
+
+  // Per-row action glyphs.
+  // Using unicode characters (always render, no namespace pitfalls). The
+  // `.btn-icon-glyph` wrapper styles them to a consistent box.
+  function glyph(ch, extraClass = '') {
+    return `<span class="btn-icon-glyph ${extraClass}" aria-hidden="true">${ch}</span>`;
+  }
+  const ICONS = {
+    rerun:     glyph('↻'),                    // U+21BB clockwise open circle arrow
+    stop:      glyph('■'),                    // U+25A0 black square
+    analyze:   glyph('🔍'),                   // U+1F50D magnifying glass
+    exportMd:  glyph('MD', 'btn-icon-text'),  // textual badge
+    exportPdf: glyph('PDF', 'btn-icon-text'), // textual badge
+    archive:   glyph('🗑'),                   // U+1F5D1 wastebasket
+  };
 
   const engagementDetail = {
     slug: null,
@@ -31,79 +233,15 @@ document.addEventListener('DOMContentLoaded', () => {
     targets: [],
     scenarios: [],
     targetMatch: null,
+    renderedReportSlug: null,
+    renderedReportRunId: null,
+    renderedReportHtml: null,
     scenarioName: '—',
   };
 
   // ── DOM refs ───────────────────────────────────────────────────────
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
-
-  document.addEventListener('click', (event) => {
-    if (event.target.closest('#btn-add-header-row')) {
-      event.preventDefault();
-      addStructuredHeaderRow();
-    }
-  }, true);
-
-  document.addEventListener('submit', (event) => {
-    if (event.target && event.target.id === 'target-form') {
-      void handleTargetFormSubmit(event);
-    }
-  }, true);
-
-  function updateTargetEditorDebugStatus(message) {
-    const box = $('#target-editor-debug');
-    const status = $('#target-editor-debug-status');
-    if (!box || !status) return;
-    box.style.display = '';
-    status.textContent = message;
-  }
-
-  function describeElementForDebug(element) {
-    if (!element) return '(none)';
-    const id = element.id ? `#${element.id}` : '';
-    const classNames = typeof element.className === 'string'
-      ? element.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).map((name) => `.${name}`).join('')
-      : '';
-    return `${element.tagName?.toLowerCase() || 'unknown'}${id}${classNames}`;
-  }
-
-  function publishTargetInteractionDebug(source, event) {
-    const target = event?.target || null;
-    const button = target?.closest?.('button') || null;
-    const rectSource = button || target;
-    let pointInfo = '(unavailable)';
-    if (rectSource?.getBoundingClientRect) {
-      const rect = rectSource.getBoundingClientRect();
-      const cx = Math.max(0, Math.floor(rect.left + Math.min(rect.width / 2, Math.max(rect.width - 1, 0))));
-      const cy = Math.max(0, Math.floor(rect.top + Math.min(rect.height / 2, Math.max(rect.height - 1, 0))));
-      pointInfo = describeElementForDebug(document.elementFromPoint(cx, cy));
-    }
-
-    const visibleModals = [...$$('.modal')]
-      .filter((modal) => {
-        const style = getComputedStyle(modal);
-        return style.display !== 'none' && style.visibility !== 'hidden' && style.pointerEvents !== 'none';
-      })
-      .map((modal) => modal.id || '(anonymous modal)');
-
-    updateTargetEditorDebugStatus(
-      [
-        `Source: ${source}`,
-        `Target: ${describeElementForDebug(target)}`,
-        `Closest button: ${describeElementForDebug(button)}`,
-        `elementFromPoint: ${pointInfo}`,
-        `Visible modals: ${visibleModals.length ? visibleModals.join(', ') : '(none)'}`,
-      ].join('\n'),
-    );
-  }
-
-  function esc(str) {
-    if (str == null) return '';
-    const div = document.createElement('div');
-    div.textContent = String(str);
-    return div.innerHTML;
-  }
 
   function renderInlineMarkdown(text) {
     let safe = esc(text || '');
@@ -115,6 +253,37 @@ document.addEventListener('DOMContentLoaded', () => {
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
     );
     return safe;
+  }
+
+  function parseJudgeIdentity(modelUsed) {
+    const raw = String(modelUsed || '').trim();
+    if (!raw) return { mode: '—', provider: '—', model: '—' };
+    if (raw.startsWith('azure_openai:')) {
+      return {
+        mode: 'Hosted',
+        provider: 'Azure OpenAI',
+        model: raw.slice('azure_openai:'.length) || raw,
+      };
+    }
+    if (raw.startsWith('ollama:')) {
+      return {
+        mode: 'Local',
+        provider: 'Ollama',
+        model: raw.slice('ollama:'.length) || raw,
+      };
+    }
+    if (raw.startsWith('heuristic-')) {
+      return {
+        mode: 'Local',
+        provider: 'Heuristic',
+        model: raw,
+      };
+    }
+    return {
+      mode: 'Local',
+      provider: 'Local Model',
+      model: raw,
+    };
   }
 
   function splitTableRow(line) {
@@ -253,278 +422,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Toast ──────────────────────────────────────────────────────────
-  function toast(message, type = 'info') {
-    const el = document.createElement('div');
-    el.className = `toast toast-${type}`;
-    el.textContent = message;
-    $('#toast-container').appendChild(el);
-    setTimeout(() => el.remove(), 4000);
-  }
-
-  function toastAction(message, actionLabel, onAction, type = 'info') {
-    const el = document.createElement('div');
-    el.className = `toast toast-${type} toast-action`;
-
-    const text = document.createElement('span');
-    text.className = 'toast-message';
-    text.textContent = message;
-    el.appendChild(text);
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'toast-link';
-    btn.textContent = actionLabel;
-    btn.addEventListener('click', async () => {
-      try {
-        await onAction();
-      } catch (err) {
-        toast(err.message || String(err), 'error');
-      }
-    });
-    el.appendChild(btn);
-
-    $('#toast-container').appendChild(el);
-    setTimeout(() => el.remove(), 7000);
-  }
-
-  // ── Workbench state ────────────────────────────────────────────────
-  const wb = {
-    activeTargetId: null,
-    activeTarget: null,
-    availableTargets: [],
-    selectedPromptId: null,
-    selectedPrompt: null,
-    activeCardEl: null,
-    baselineCardEl: null,
-    baselineResultId: null,
-    findings: [],
-    allPrompts: [],       // full unfiltered prompt list for coverage grid
-  };
-
-  function getBaselineCard() {
-    if (wb.baselineResultId) {
-      const byId = [...$$('.response-card')].find(c => c.dataset.resultId === wb.baselineResultId);
-      if (byId) {
-        wb.baselineCardEl = byId;
-        return byId;
-      }
-    }
-    if (wb.baselineCardEl && document.body.contains(wb.baselineCardEl)) return wb.baselineCardEl;
-    return null;
-  }
-
-  function renderDiffEmpty(message) {
-    const diffEl = $('#detail-diff');
-    diffEl.innerHTML = `<div class="diff-empty">${esc(message)}</div>`;
-  }
-
-  function updateBaselineIndicators() {
-    const baselineCard = getBaselineCard();
-    $$('.response-card').forEach(card => {
-      const marker = card.querySelector('[data-baseline-marker]');
-      const isBaseline = baselineCard === card;
-      card.classList.toggle('baseline', isBaseline);
-      if (marker) marker.classList.toggle('hidden', !isBaseline);
-    });
-  }
-
-  function setBaselineCard(cardEl, notify = true) {
-    if (!cardEl) {
-      if (notify) toast('Select a response card first', 'info');
-      return false;
-    }
-    const responseText = (cardEl.dataset.responseText || '').trim();
-    if (!responseText) {
-      if (notify) toast('Selected response has no text to use as baseline', 'error');
-      return false;
-    }
-
-    wb.baselineCardEl = cardEl;
-    wb.baselineResultId = cardEl.dataset.resultId || null;
-    updateBaselineIndicators();
-    if (notify) toast('Baseline set', 'success');
-    return true;
-  }
-
-  function setVerdictBadge(verdictEl, verdict) {
-    if (!verdictEl) return;
-    const normalized = String(verdict || '').toUpperCase();
-    if (normalized === 'SUCCESS') {
-      verdictEl.textContent = 'success';
-      verdictEl.className = 'verdict-badge verdict-success';
-    } else if (normalized === 'FAIL') {
-      verdictEl.textContent = 'fail';
-      verdictEl.className = 'verdict-badge verdict-fail';
-    } else if (normalized === 'PARTIAL') {
-      verdictEl.textContent = 'partial';
-      verdictEl.className = 'verdict-badge verdict-partial';
-    } else if (normalized === 'UNCLEAR') {
-      verdictEl.textContent = 'unclear';
-      verdictEl.className = 'verdict-badge verdict-pending';
-    } else {
-      verdictEl.textContent = 'pending';
-      verdictEl.className = 'verdict-badge verdict-pending';
-    }
-  }
-
-  function applyJudgeToCard(cardEl, judgeData) {
-    if (!cardEl || !judgeData || !judgeData.judge_verdict) return;
-    cardEl.dataset.judgeVerdict = judgeData.judge_verdict || '';
-    cardEl.dataset.judgeConfidence = judgeData.judge_confidence != null ? String(judgeData.judge_confidence) : '';
-    cardEl.dataset.judgeReason = judgeData.judge_reason || '';
-    cardEl.dataset.judgeModelUsed = judgeData.judge_model_used || '';
-    cardEl.dataset.judgeEvaluatedAt = judgeData.judge_evaluated_at || '';
-
-    setVerdictBadge(cardEl.querySelector('[data-verdict]'), judgeData.judge_verdict);
-  }
-
-  async function judgeCard(cardEl, { force = false, switchToJudge = true } = {}) {
-    if (!cardEl) {
-      toast('Select a response first', 'info');
-      return null;
-    }
-    const resultId = cardEl.dataset.resultId;
-    if (!resultId) {
-      toast('Selected card has no result ID', 'error');
-      return null;
-    }
-
-    const payload = { result_id: resultId };
-    if (force) payload.force = true;
-
-    const res = await API.call('judge_result', payload);
-    applyJudgeToCard(cardEl, res);
-
-    if (wb.activeCardEl === cardEl) {
-      const signals = JSON.parse(cardEl.dataset.signals || '[]');
-      renderJudgePanel(cardEl, signals);
-      if (switchToJudge) switchDetailTab('judge');
-    }
-
-    if (res.status === 'skipped') toast('Already judged (use re-judge to refresh)', 'info');
-    else toast(`Judge verdict: ${res.judge_verdict || 'UNCLEAR'}`, 'success');
-
-    return res;
-  }
-
-  function renderJudgePanel(cardEl, signals) {
-    const judgeContent = $('#judge-content');
-    if (!cardEl) {
-      judgeContent.textContent = 'select a response to inspect';
-      return;
-    }
-
-    const resultId = cardEl.dataset.resultId || '—';
-    const judgedVerdict = cardEl.dataset.judgeVerdict || '';
-    const judgedReason = cardEl.dataset.judgeReason || '';
-    const judgedModel = cardEl.dataset.judgeModelUsed || '';
-    const judgedAt = cardEl.dataset.judgeEvaluatedAt || '';
-    const confidenceRaw = Number(cardEl.dataset.judgeConfidence || '');
-    const confidence = Number.isFinite(confidenceRaw) ? `${Math.round(confidenceRaw * 100)}%` : 'n/a';
-
-    if (!judgedVerdict) {
-      const signalSummary = signals.length
-        ? `${signals.length} signal${signals.length === 1 ? '' : 's'} detected`
-        : 'No signals detected';
-      judgeContent.innerHTML = `<div class="judge-block">
-        <div class="judge-header">model judge</div>
-        <div class="judge-verdict">Result ${esc(resultId)} has not been judged yet.</div>
-        <div class="judge-reason">${esc(signalSummary)}</div>
-        <div class="response-actions" style="margin-top:10px;">
-          <button class="ra-btn ra-promote" id="judge-run-btn">Run Judge</button>
-        </div>
-      </div>`;
-      $('#judge-run-btn')?.addEventListener('click', async () => {
-        const btn = $('#judge-run-btn');
-        if (btn) btn.disabled = true;
-        try {
-          await judgeCard(cardEl, { force: false, switchToJudge: true });
-        } catch (err) {
-          toast(`Judge failed: ${err.message}`, 'error');
-        } finally {
-          if (btn) btn.disabled = false;
-        }
-      });
-      return;
-    }
-
-    judgeContent.innerHTML = `<div class="judge-block">
-      <div class="judge-header">model judge</div>
-      <div class="judge-verdict">Verdict: ${esc(judgedVerdict)} · confidence: ${esc(confidence)}</div>
-      <div class="judge-reason">${esc(judgedReason || 'No reason provided')}</div>
-      <div class="detail-meta" style="margin-top:8px;">model: ${esc(judgedModel || 'heuristic')} · evaluated: ${esc(judgedAt || '—')}</div>
-      <div class="response-actions" style="margin-top:10px;">
-        <button class="ra-btn" id="judge-rerun-btn">Re-judge</button>
-      </div>
-    </div>`;
-    $('#judge-rerun-btn')?.addEventListener('click', async () => {
-      const btn = $('#judge-rerun-btn');
-      if (btn) btn.disabled = true;
-      try {
-        await judgeCard(cardEl, { force: true, switchToJudge: true });
-      } catch (err) {
-        toast(`Re-judge failed: ${err.message}`, 'error');
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    });
-  }
-
-  function resetDetailPane() {
-    renderDiffEmpty('select a response card to compare with baseline');
-    $('#signals-list').innerHTML = '<div style="color:var(--text-3);font-family:var(--mono);font-size:11px;text-align:center;padding:40px 20px;">no signals detected</div>';
-    $('#signals-badge').textContent = '0';
-    $('#detail-raw-pre').textContent = '—';
-    renderJudgePanel(null, []);
-    switchDetailTab('diff');
-  }
-
-  function setWorkbenchInteractivity(enabled) {
-    $('#btn-wb-fire').disabled = !enabled;
-    $('#btn-wb-baseline').disabled = !enabled;
-    $('#btn-wb-judge-all').disabled = !enabled;
-    $('#wb-prompt-textarea').disabled = !enabled;
-    $('#wb-prompt-textarea').placeholder = enabled
-      ? 'select a prompt from the library or type an attack prompt…'
-      : 'pick a target first…';
-  }
-
-  function renderWorkbenchEmptyState() {
-    const stream = $('#wb-response-stream');
-    let empty = $('#wb-response-empty');
-    if (!empty) {
-      empty = document.createElement('div');
-      empty.id = 'wb-response-empty';
-      empty.className = 'response-empty';
-      stream.appendChild(empty);
-    }
-
-    if (!wb.activeTargetId) {
-      empty.innerHTML = `
-        <div class="response-empty-title">Pick Target</div>
-        <div class="response-empty-subtitle">Select a target to start working in Workbench.</div>
-        <div class="response-empty-actions">
-          <button class="btn btn-primary" id="wb-empty-pick-target">Pick Target</button>
-          <a href="#" class="response-empty-banner" id="wb-empty-start-engagement">Looking for guided testing? Start an Engagement →</a>
-        </div>`;
-      $('#wb-empty-pick-target')?.addEventListener('click', () => openWorkbenchTargetDialog());
-      $('#wb-empty-start-engagement')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        openEngagementWizard();
-      });
-      return;
-    }
-
-    empty.innerHTML = `<div class="response-empty-title">Ready</div><div class="response-empty-subtitle">fire a prompt to begin</div>`;
-  }
-
-  function resetResponseStream() {
-    const stream = $('#wb-response-stream');
-    stream.querySelectorAll('.response-card').forEach(el => el.remove());
-    renderWorkbenchEmptyState();
-  }
-  setWorkbenchInteractivity(false);
-  renderWorkbenchEmptyState();
 
   // ── Check if DB is open on page load ────────────────────────────────
   async function checkDatabaseStatus() {
@@ -538,9 +435,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       // Not running inside Tauri yet — ok in dev
     } finally {
-      // Always load global data (targets + prompts live outside engagements)
-      loadWorkbenchTargets();
-      loadPickerPrompts();
       loadHomeRecentEngagements();
     }
   }
@@ -550,20 +444,9 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#db-label').textContent = name;
     $('#breadcrumb-engagement').textContent = name;
     $('#engagement-dot').classList.add('active');
-    wb.activeCardEl = null;
-    wb.baselineCardEl = null;
-    wb.baselineResultId = null;
-    updateBaselineIndicators();
-    resetResponseStream();
-    resetDetailPane();
-    loadTargetList();
-    loadWorkbenchTargets();
-    loadPickerPrompts();   // also updates coverage grid client-side
-    loadFindings();
     if ($('#view-home').classList.contains('active')) {
       loadHomeRecentEngagements();
     }
-    // refresh engagement list if runs view is visible
     if ($('#view-runs').classList.contains('active')) loadEngagementList({ autoOpen: false });
   }
 
@@ -572,8 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── T-05 · Sidebar navigation ──────────────────────────────────────
   const VIEW_LABELS = {
     'view-home': 'home',
-    'view-workbench': 'workbench',
-    'view-targets': 'targets',
+    'view-requests': 'requests',
     'view-library': 'library',
     'view-scenarios': 'scenarios',
     'view-runs': 'runs',
@@ -593,8 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (viewId === 'view-home') loadHomeRecentEngagements();
     if (viewId === 'view-library') loadPrompts();
-    if (viewId === 'view-targets') loadTargetList();
-    if (viewId === 'view-workbench') { loadWorkbenchTargets(); loadPickerPrompts(); if (dbOpen) loadFindings(); }
+    if (viewId === 'view-requests') loadRequestList();
     if (viewId === 'view-runs') loadEngagementList();
     if (viewId !== 'view-runs') {
       stopEngagementProgressPoll();
@@ -612,781 +493,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Settings nav item (no view yet)
   // ── Engagement management ──────────────────────────────────────────
-  const WIZARD_STORAGE_KEY = 'hamm0r.engagementWizard.v1';
-  const WIZARD_SCENARIOS = [
-    {
-      id: 'quick_scan',
-      name: 'Quick Scan',
-      description: 'Small OWASP sample, single-shot, optimized for first signal.',
-      estimatedPrompts: 20,
-      estimatedRuntime: '~3m',
-      coverage: ['A01', 'A02', 'A03', 'A06'],
-      defaultOwaspRefs: ['A01', 'A02', 'A03', 'A06'],
-      defaultCustomLibraries: [],
-    },
-    {
-      id: 'owasp_full',
-      name: 'OWASP LLM Top 10 Full',
-      description: 'Complete A01–A10 coverage for broader baseline validation.',
-      estimatedPrompts: 120,
-      estimatedRuntime: '~18m',
-      coverage: ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'],
-      defaultOwaspRefs: ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'],
-      defaultCustomLibraries: [],
-    },
-    {
-      id: 'injection_deep_dive',
-      name: 'Prompt Injection Deep Dive',
-      description: 'A01-focused run with higher depth and mutation-like pressure.',
-      estimatedPrompts: 48,
-      estimatedRuntime: '~9m',
-      coverage: ['A01'],
-      defaultOwaspRefs: ['A01'],
-      defaultCustomLibraries: ['injection-classics'],
-    },
-    {
-      id: 'jailbreak_battery',
-      name: 'Jailbreak Battery',
-      description: 'Curated jailbreak-focused prompts for refusal and bypass checks.',
-      estimatedPrompts: 36,
-      estimatedRuntime: '~7m',
-      coverage: ['A01', 'A07'],
-      defaultOwaspRefs: ['A01', 'A07'],
-      defaultCustomLibraries: [],
-    },
-    {
-      id: 'custom',
-      name: 'Custom',
-      description: 'Pick everything manually.',
-      estimatedPrompts: 0,
-      estimatedRuntime: 'custom',
-      coverage: [],
-      defaultOwaspRefs: [],
-      defaultCustomLibraries: [],
-    },
-  ];
-
-  function defaultWizardState() {
-    return {
-      step: 1,
-      targetMode: 'existing',
-      existingTargetId: '',
-      newTarget: {
-        name: '',
-        baseUrl: '',
-        protocol: 'openai_compat',
-        auth: 'none',
-        authEnv: '',
-        authHeader: '',
-        sessionHandling: 'none',
-        sessionField: '',
-        timeoutSeconds: 30,
-      },
-      tested: {
-        ok: false,
-        message: 'Run a target check before continuing.',
-      },
-      scenarioId: 'quick_scan',
-      selectedOwaspRefs: ['A01', 'A02', 'A03', 'A06'],
-      selectedCustomLibraries: [],
-      engagementName: '',
-      saveAsTemplate: false,
-    };
-  }
-
-  function loadWizardState() {
-    try {
-      const raw = localStorage.getItem(WIZARD_STORAGE_KEY);
-      if (!raw) return defaultWizardState();
-      const parsed = JSON.parse(raw);
-      return {
-        ...defaultWizardState(),
-        ...parsed,
-        newTarget: {
-          ...defaultWizardState().newTarget,
-          ...(parsed.newTarget || {}),
-        },
-        tested: {
-          ...defaultWizardState().tested,
-          ...(parsed.tested || {}),
-        },
-      };
-    } catch (_err) {
-      return defaultWizardState();
-    }
-  }
-
-  let wizardState = loadWizardState();
-  const wizardCatalog = {
-    targets: [],
-    prompts: [],
-    customLibraries: [],
-  };
-  let wizardOpenInFlight = false;
-
-  function reportWizardStageError(stage, err) {
-    const message = err?.message || String(err);
-    console.error(`[wizard:${stage}]`, err);
-    toast(`Wizard ${stage} failed: ${message}`, 'error');
-  }
-
-  function persistWizardState() {
-    try {
-      localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(wizardState));
-    } catch (_err) {
-      // ignore persistence failures silently
-    }
-  }
-
-  function resetWizardState() {
-    wizardState = defaultWizardState();
-    try {
-      localStorage.removeItem(WIZARD_STORAGE_KEY);
-    } catch (_err) {
-      // ignore
-    }
-  }
-
-  function wizardScenarioById(id) {
-    return WIZARD_SCENARIOS.find(s => s.id === id) || WIZARD_SCENARIOS[0];
-  }
-
-  function clearWizardTestStatus() {
-    wizardState.tested = {
-      ok: false,
-      message: 'Run a target check before continuing.',
-    };
-  }
-
-  function applyWizardScenarioDefaults(scenarioId, force = false) {
-    const scenario = wizardScenarioById(scenarioId);
-    if (!scenario) return;
-
-    if (force || (wizardState.selectedOwaspRefs.length === 0 && wizardState.selectedCustomLibraries.length === 0)) {
-      wizardState.selectedOwaspRefs = [...scenario.defaultOwaspRefs];
-      wizardState.selectedCustomLibraries = [...scenario.defaultCustomLibraries];
-    }
-  }
-
-  function wizardPromptIdentity(prompt) {
-    const category = String(prompt?.category || '');
-    const id = String(prompt?.id || '');
-    const text = String(prompt?.text || '');
-    return `${category}\u0000${id}\u0000${text}`;
-  }
-
-  function wizardPromptsForSelection(selectedRefs = [], selectedCustomLibraries = []) {
-    const selected = [];
-    const seen = new Set();
-
-    wizardCatalog.prompts.forEach((prompt) => {
-      const inOwasp = selectedRefs.includes(prompt.owasp_ref);
-      const inCustom = selectedCustomLibraries.includes(prompt.category || '');
-      if (!inOwasp && !inCustom) return;
-
-      const key = wizardPromptIdentity(prompt);
-      if (seen.has(key)) return;
-      seen.add(key);
-      selected.push(prompt);
-    });
-
-    return selected;
-  }
-
-  function wizardSelectedPrompts() {
-    return wizardPromptsForSelection(
-      wizardState.selectedOwaspRefs,
-      wizardState.selectedCustomLibraries,
-    );
-  }
-
-  function wizardScenarioPromptCount(scenarioId) {
-    const scenario = wizardScenarioById(scenarioId);
-    if (!scenario) return 0;
-    return wizardPromptsForSelection(
-      scenario.defaultOwaspRefs,
-      scenario.defaultCustomLibraries,
-    ).length;
-  }
-
-  function wizardTargetDisplayName() {
-    if (wizardState.targetMode === 'existing') {
-      const t = wizardCatalog.targets.find(x => x.id === wizardState.existingTargetId);
-      return t?.name || 'not selected';
-    }
-    return wizardState.newTarget.name || 'new target';
-  }
-
-  function wizardEstimatedRuntime(promptCount) {
-    const minutes = Math.max(1, Math.ceil(promptCount / 7));
-    return `~${minutes}m`;
-  }
-
-  function wizardEstimatedCost(promptCount) {
-    // rough UX estimate only (input/output + judge combined)
-    const low = (promptCount * 0.002).toFixed(2);
-    const high = (promptCount * 0.008).toFixed(2);
-    return `~$${low} - $${high}`;
-  }
-
-  function wizardSetStep(step) {
-    wizardState.step = Math.max(1, Math.min(4, Number(step) || 1));
-    persistWizardState();
-    renderWizard();
-  }
-
-  function wizardProtocolToEndpoint(protocol) {
-    if (protocol === 'openai_compat') return 'openai_compat';
-    return 'custom_rest';
-  }
-
-  function wizardAuthToApi(auth) {
-    if (auth === 'custom_header') return 'api_key';
-    return auth;
-  }
-
-  function wizardSuggestEngagementName() {
-    const scenario = wizardScenarioById(wizardState.scenarioId);
-    return `${wizardTargetDisplayName()} · ${scenario.name}`;
-  }
-
-  function wizardBuildTargetDtoForTest() {
-    if (wizardState.targetMode === 'existing') {
-      return wizardCatalog.targets.find((target) => target.id === wizardState.existingTargetId) || null;
-    }
-
-    const nt = wizardState.newTarget;
-    return {
-      id: 'wizard-connection-test',
-      name: nt.name.trim() || 'Wizard Connection Test',
-      request_ids: ['wizard-connection-test'],
-      url: nt.baseUrl.trim(),
-      endpoint_type: wizardProtocolToEndpoint(nt.protocol),
-      auth_type: wizardAuthToApi(nt.auth),
-      auth_env: nt.authEnv.trim() || null,
-      auth_header: nt.authHeader.trim() || null,
-      session_strategy: nt.sessionHandling,
-      session_field: nt.sessionField.trim() || null,
-      request_field: nt.protocol === 'openai_compat' ? null : 'prompt',
-      response_field: nt.protocol === 'openai_compat' ? null : 'response',
-      timeout_seconds: nt.timeoutSeconds || 30,
-      notes: nt.protocol === 'anthropic'
-        ? 'Wizard protocol anthropic mapped to custom_rest adapter.'
-        : null,
-    };
-  }
-
-  async function loadWizardCatalog() {
-    const [targetsRes, promptsRes] = await Promise.allSettled([
-      API.call('list_targets', {}),
-      API.call('list_prompts', {}),
-    ]);
-
-    const targets = targetsRes.status === 'fulfilled' ? (targetsRes.value || []) : [];
-    const prompts = promptsRes.status === 'fulfilled' ? (promptsRes.value || []) : [];
-    if (targetsRes.status === 'rejected') {
-      console.error('[wizard:catalog:list_targets]', targetsRes.reason);
-    }
-    if (promptsRes.status === 'rejected') {
-      console.error('[wizard:catalog:list_prompts]', promptsRes.reason);
-    }
-
-    wizardCatalog.targets = targets;
-    wizardCatalog.prompts = prompts;
-    wizardCatalog.customLibraries = [...new Set((prompts || []).map(p => String(p.category || '')).filter(Boolean))].sort();
-
-    if (wizardState.targetMode === 'existing' && !wizardState.existingTargetId && wizardCatalog.targets.length > 0) {
-      wizardState.existingTargetId = wizardCatalog.targets[0].id;
-    }
-
-    if (!wizardState.engagementName) {
-      wizardState.engagementName = wizardSuggestEngagementName();
-    }
-    persistWizardState();
-  }
-
-  function renderWizardStep1() {
-    function safeSetInputValue(selector, value, fallback = '') {
-      const el = $(selector);
-      if (!el) return;
-      try {
-        el.value = value ?? fallback;
-      } catch (_err) {
-        el.value = fallback;
-      }
-    }
-
-    const existingBtn = $('#wizard-target-mode-existing');
-    const newBtn = $('#wizard-target-mode-new');
-    const existingRow = $('#wizard-existing-row');
-    const newRow = $('#wizard-new-row');
-    const existingSelect = $('#wizard-existing-target');
-
-    existingBtn.classList.toggle('active', wizardState.targetMode === 'existing');
-    newBtn.classList.toggle('active', wizardState.targetMode === 'new');
-    existingRow.style.display = wizardState.targetMode === 'existing' ? '' : 'none';
-    newRow.style.display = wizardState.targetMode === 'new' ? '' : 'none';
-
-    existingSelect.innerHTML = '';
-    if (wizardCatalog.targets.length === 0) {
-      existingSelect.innerHTML = '<option value="">No targets saved yet</option>';
-    } else {
-      wizardCatalog.targets.forEach((t) => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.name;
-        existingSelect.appendChild(opt);
-      });
-    }
-    existingSelect.value = wizardState.existingTargetId || existingSelect.value || '';
-
-    safeSetInputValue('#wizard-new-target-name', wizardState.newTarget.name, '');
-    // URL inputs can throw in some WebKit stacks when the value is malformed.
-    safeSetInputValue('#wizard-new-base-url', wizardState.newTarget.baseUrl, '');
-    safeSetInputValue('#wizard-new-protocol', wizardState.newTarget.protocol, 'custom_rest');
-    safeSetInputValue('#wizard-new-auth', wizardState.newTarget.auth, 'none');
-    safeSetInputValue('#wizard-new-auth-env', wizardState.newTarget.authEnv, '');
-    safeSetInputValue('#wizard-new-auth-header', wizardState.newTarget.authHeader, 'Authorization');
-    safeSetInputValue('#wizard-new-session', wizardState.newTarget.sessionHandling, 'none');
-    safeSetInputValue('#wizard-new-session-field', wizardState.newTarget.sessionField, '');
-    safeSetInputValue('#wizard-new-timeout', wizardState.newTarget.timeoutSeconds, 30);
-
-    const auth = wizardState.newTarget.auth;
-    $('#wizard-new-auth-env-row').style.display = auth === 'none' ? 'none' : '';
-    $('#wizard-new-auth-header-row').style.display = auth === 'custom_header' ? '' : 'none';
-
-    const sessionHandling = wizardState.newTarget.sessionHandling;
-    $('#wizard-new-session-row').style.display = sessionHandling === 'none' ? 'none' : '';
-
-    const note = $('#wizard-test-status');
-    note.textContent = wizardState.tested.message;
-    note.classList.remove('ok', 'error');
-    const noteStateClass = wizardState.tested.ok
-      ? 'ok'
-      : (wizardState.tested.message.includes('failed') ? 'error' : null);
-    if (noteStateClass) {
-      note.classList.add(noteStateClass);
-    }
-  }
-
-  function renderWizardStep2() {
-    const grid = $('#wizard-scenario-cards');
-    grid.innerHTML = '';
-    WIZARD_SCENARIOS.forEach((scenario) => {
-      const promptCount = wizardScenarioPromptCount(scenario.id);
-      const runtime = wizardEstimatedRuntime(promptCount);
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = `wizard-scenario-card${wizardState.scenarioId === scenario.id ? ' active' : ''}`;
-      const badges = scenario.coverage.length
-        ? scenario.coverage.map(c => `<span class="wizard-badge">${esc(c)}</span>`).join('')
-        : '<span class="wizard-badge">manual</span>';
-      card.innerHTML = `
-        <h4>${esc(scenario.name)}</h4>
-        <p>${esc(scenario.description)}</p>
-        <div class="wizard-scenario-meta">
-          <span>${promptCount > 0 ? `${promptCount} prompts` : 'custom size'}</span>
-          <span>${esc(promptCount > 0 ? runtime : scenario.estimatedRuntime)}</span>
-        </div>
-        <div class="wizard-scenario-badges">${badges}</div>
-      `;
-      card.addEventListener('click', () => {
-        wizardState.scenarioId = scenario.id;
-        applyWizardScenarioDefaults(scenario.id, true);
-        clearWizardTestStatus();
-        if (!wizardState.engagementName || wizardState.engagementName === wizardSuggestEngagementName()) {
-          wizardState.engagementName = wizardSuggestEngagementName();
-        }
-        persistWizardState();
-        renderWizard();
-      });
-      grid.appendChild(card);
-    });
-  }
-
-  function renderWizardStep3() {
-    const owaspWrap = $('#wizard-lib-owasp');
-    const customWrap = $('#wizard-lib-custom');
-    const refs = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'];
-
-    owaspWrap.innerHTML = '';
-    refs.forEach((ref) => {
-      const label = document.createElement('label');
-      label.className = 'wizard-check';
-      label.innerHTML = `<input type="checkbox" value="${ref}" ${wizardState.selectedOwaspRefs.includes(ref) ? 'checked' : ''}><span>${ref}</span>`;
-      label.querySelector('input').addEventListener('change', (e) => {
-        if (e.target.checked) wizardState.selectedOwaspRefs.push(ref);
-        else wizardState.selectedOwaspRefs = wizardState.selectedOwaspRefs.filter(x => x !== ref);
-        wizardState.selectedOwaspRefs = [...new Set(wizardState.selectedOwaspRefs)];
-        persistWizardState();
-        updateWizardLibraryCounter();
-      });
-      owaspWrap.appendChild(label);
-    });
-
-    customWrap.innerHTML = '';
-    if (wizardCatalog.customLibraries.length === 0) {
-      customWrap.innerHTML = '<span class="wizard-inline-note">No custom libraries found.</span>';
-    } else {
-      wizardCatalog.customLibraries.forEach((lib) => {
-        const label = document.createElement('label');
-        label.className = 'wizard-check';
-        label.innerHTML = `<input type="checkbox" value="${esc(lib)}" ${wizardState.selectedCustomLibraries.includes(lib) ? 'checked' : ''}><span>${esc(lib)}</span>`;
-        label.querySelector('input').addEventListener('change', (e) => {
-          if (e.target.checked) wizardState.selectedCustomLibraries.push(lib);
-          else wizardState.selectedCustomLibraries = wizardState.selectedCustomLibraries.filter(x => x !== lib);
-          wizardState.selectedCustomLibraries = [...new Set(wizardState.selectedCustomLibraries)];
-          persistWizardState();
-          updateWizardLibraryCounter();
-        });
-        customWrap.appendChild(label);
-      });
-    }
-
-    updateWizardLibraryCounter();
-  }
-
-  function updateWizardLibraryCounter() {
-    const selected = wizardSelectedPrompts();
-    $('#wizard-lib-counter').textContent = `${selected.length} prompts selected, ${selected.length} judged`;
-    renderWizardLibraryPreview();
-  }
-
-  function renderWizardLibraryPreview() {
-    const preview = $('#wizard-lib-preview');
-    const selectedRefs = wizardState.selectedOwaspRefs || [];
-    const selectedCustom = wizardState.selectedCustomLibraries || [];
-    const groups = [];
-    const seenPromptKeys = new Set();
-
-    selectedRefs.forEach((ref) => {
-      const prompts = wizardCatalog.prompts.filter((p) => p.owasp_ref === ref);
-      const uniquePrompts = prompts.filter((prompt) => {
-        const key = wizardPromptIdentity(prompt);
-        if (seenPromptKeys.has(key)) return false;
-        seenPromptKeys.add(key);
-        return true;
-      });
-      groups.push({ label: `OWASP ${ref}`, prompts, uniquePrompts });
-    });
-
-    selectedCustom.forEach((lib) => {
-      const prompts = wizardCatalog.prompts.filter((p) => (p.category || '') === lib);
-      const uniquePrompts = prompts.filter((prompt) => {
-        const key = wizardPromptIdentity(prompt);
-        if (seenPromptKeys.has(key)) return false;
-        seenPromptKeys.add(key);
-        return true;
-      });
-      groups.push({ label: lib, prompts, uniquePrompts });
-    });
-
-    if (groups.length === 0) {
-      preview.innerHTML = '<div class="wizard-lib-preview-empty">Select one or more libraries to preview their prompts here.</div>';
-      return;
-    }
-
-    preview.innerHTML = groups.map((group) => {
-      const promptRows = group.uniquePrompts.length > 0
-        ? group.uniquePrompts.map((prompt) => `
-            <div class="wizard-lib-prompt">
-              <div class="wizard-lib-prompt-meta">
-                <span class="wizard-lib-prompt-id">${esc(prompt.id || 'custom')}</span>
-                <span class="wizard-lib-prompt-ref">${esc(prompt.owasp_ref || prompt.category || '')}</span>
-              </div>
-              <div class="wizard-lib-prompt-text">${esc(prompt.text || '')}</div>
-            </div>
-          `).join('')
-        : group.prompts.length > 0
-          ? '<div class="wizard-lib-prompt"><div class="wizard-lib-prompt-text">All prompts in this group are already included above.</div></div>'
-          : '<div class="wizard-lib-prompt"><div class="wizard-lib-prompt-text">No prompts found in this library.</div></div>';
-
-      const countLabel = group.prompts.length === group.uniquePrompts.length
-        ? `${group.prompts.length} prompts`
-        : `${group.uniquePrompts.length} shown of ${group.prompts.length} prompts`;
-
-      return `
-        <div class="wizard-lib-group">
-          <div class="wizard-lib-group-header">
-            <span class="wizard-lib-group-name">${esc(group.label)}</span>
-            <span class="wizard-lib-group-count">${countLabel}</span>
-          </div>
-          <div class="wizard-lib-prompt-list">${promptRows}</div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  function renderWizardStep4() {
-    const selectedPrompts = wizardSelectedPrompts();
-    const review = $('#wizard-review-list');
-    const scenario = wizardScenarioById(wizardState.scenarioId);
-    const refs = wizardState.selectedOwaspRefs.join(', ') || 'none';
-    const custom = wizardState.selectedCustomLibraries.join(', ') || 'none';
-    const estRuntime = wizardEstimatedRuntime(selectedPrompts.length);
-    const estCost = wizardEstimatedCost(selectedPrompts.length);
-
-    review.innerHTML = `
-      <div class="wizard-review-row"><span class="k">Target</span><span class="v">${esc(wizardTargetDisplayName())}</span></div>
-      <div class="wizard-review-row"><span class="k">Scenario</span><span class="v">${esc(scenario.name)}</span></div>
-      <div class="wizard-review-row"><span class="k">Libraries</span><span class="v">${esc(`${refs} · ${custom}`)}</span></div>
-      <div class="wizard-review-row"><span class="k">Prompts</span><span class="v">${selectedPrompts.length}</span></div>
-      <div class="wizard-review-row"><span class="k">Estimated Runtime</span><span class="v">${esc(estRuntime)}</span></div>
-      <div class="wizard-review-row"><span class="k">Estimated Cost</span><span class="v">${esc(estCost)}</span></div>
-    `;
-    $('#wizard-engagement-name').value = wizardState.engagementName || wizardSuggestEngagementName();
-    $('#wizard-save-template').checked = !!wizardState.saveAsTemplate;
-  }
-
-  function renderWizard() {
-    const step = wizardState.step;
-    $$('.wizard-step').forEach((el, idx) => el.classList.toggle('active', idx + 1 === step));
-    $$('.wizard-progress-item').forEach((el, idx) => el.classList.toggle('active', idx + 1 === step));
-
-    $('#wizard-prev').style.visibility = step === 1 ? 'hidden' : 'visible';
-    $('#wizard-next').style.display = step === 4 ? 'none' : '';
-    $('#wizard-fire').style.display = step === 4 ? '' : 'none';
-
-    if (step === 1) {
-      try { renderWizardStep1(); } catch (err) { reportWizardStageError('step-1-render', err); }
-    }
-    if (step === 2) {
-      try { renderWizardStep2(); } catch (err) { reportWizardStageError('step-2-render', err); }
-    }
-    if (step === 3) {
-      try { renderWizardStep3(); } catch (err) { reportWizardStageError('step-3-render', err); }
-    }
-    if (step === 4) {
-      try { renderWizardStep4(); } catch (err) { reportWizardStageError('step-4-render', err); }
-    }
-  }
-
-  async function openEngagementWizard() {
-    if (wizardOpenInFlight) return;
-    wizardOpenInFlight = true;
-    $('#wizard-modal').style.display = 'flex';
-    try {
-      await loadWizardCatalog();
-      applyWizardScenarioDefaults(wizardState.scenarioId, false);
-      renderWizard();
-    } catch (err) {
-      // Safety net: reset potentially corrupted wizard state and render a clean wizard.
-      console.error('[wizard:open:first-attempt]', err);
-      resetWizardState();
-      try {
-        await loadWizardCatalog();
-        applyWizardScenarioDefaults(wizardState.scenarioId, false);
-        renderWizard();
-      } catch (innerErr) {
-        console.error('[wizard:open:recovery-failed]', innerErr);
-        toast(`Wizard load failed: ${innerErr.message || err.message}`, 'error');
-      }
-    } finally {
-      wizardOpenInFlight = false;
-    }
-  }
-
-  function closeEngagementWizard() {
-    $('#wizard-modal').style.display = 'none';
-    persistWizardState();
-  }
-
-  async function validateWizardTargetStep() {
-    const testButton = $('#wizard-test-connection');
-
-    if (wizardState.targetMode === 'existing') {
-      if (!wizardState.existingTargetId) {
-        wizardState.tested = { ok: false, message: 'Connection test failed: pick an existing target first.' };
-        persistWizardState();
-        renderWizard();
-        return false;
-      }
-    }
-
-    const target = wizardState.newTarget;
-    if (wizardState.targetMode === 'new' && !target.name.trim()) {
-      wizardState.tested = { ok: false, message: 'Connection test failed: target name is required.' };
-      persistWizardState();
-      renderWizard();
-      return false;
-    }
-    if (wizardState.targetMode === 'new') {
-      try {
-        // eslint-disable-next-line no-new
-        new URL(target.baseUrl);
-      } catch (_err) {
-        wizardState.tested = { ok: false, message: 'Connection test failed: base URL is invalid.' };
-        persistWizardState();
-        renderWizard();
-        return false;
-      }
-      if (target.auth !== 'none' && !target.authEnv.trim()) {
-        wizardState.tested = { ok: false, message: 'Connection test failed: auth env var is required.' };
-        persistWizardState();
-        renderWizard();
-        return false;
-      }
-      if (target.auth === 'custom_header' && !target.authHeader.trim()) {
-        wizardState.tested = { ok: false, message: 'Connection test failed: custom header name is required.' };
-        persistWizardState();
-        renderWizard();
-        return false;
-      }
-    }
-
-    const dto = wizardBuildTargetDtoForTest();
-    if (!dto) {
-      wizardState.tested = { ok: false, message: 'Connection test failed: target configuration could not be built.' };
-      persistWizardState();
-      renderWizard();
-      return false;
-    }
-
-    wizardState.tested = { ok: false, message: 'Running connection test…' };
-    persistWizardState();
-    renderWizard();
-
-    if (testButton) testButton.disabled = true;
-    try {
-      const result = await API.call('test_target_connection', {
-        dto,
-        prompt_text: 'connection test',
-      });
-      wizardState.tested = {
-        ok: !!result?.ok,
-        message: result?.message || 'Connection test finished.',
-      };
-      persistWizardState();
-      renderWizard();
-      return !!result?.ok;
-    } catch (err) {
-      wizardState.tested = {
-        ok: false,
-        message: `Connection test failed: ${err.message}`,
-      };
-      persistWizardState();
-      renderWizard();
-      return false;
-    } finally {
-      if (testButton) testButton.disabled = false;
-    }
-  }
-
-  function wizardCanContinueFromStep() {
-    if (wizardState.step === 1) {
-      if (!wizardState.tested.ok) {
-        toast('Run "Test connection" before continuing', 'info');
-        return false;
-      }
-    }
-    if (wizardState.step === 3) {
-      if (wizardSelectedPrompts().length === 0) {
-        toast('Select at least one library before continuing', 'info');
-        return false;
-      }
-    }
-    return true;
-  }
-
-  async function fireWizardEngagement() {
-    const fireBtn = $('#wizard-fire');
-    const originalText = fireBtn.textContent;
-    fireBtn.disabled = true;
-    fireBtn.textContent = 'Starting…';
-
-    try {
-      const selectedPrompts = wizardSelectedPrompts();
-      if (selectedPrompts.length === 0) {
-        throw new Error('No prompts selected for this engagement.');
-      }
-
-      let target = null;
-      if (wizardState.targetMode === 'existing') {
-        target = wizardCatalog.targets.find(t => t.id === wizardState.existingTargetId) || null;
-        if (!target) throw new Error('Selected target was not found.');
-      } else {
-        const nt = wizardState.newTarget;
-        const targetId = `target-${Date.now().toString(36)}`;
-        target = await API.call('save_target', {
-          id: targetId,
-          name: nt.name.trim(),
-          url: nt.baseUrl.trim(),
-          endpoint_type: wizardProtocolToEndpoint(nt.protocol),
-          auth_type: wizardAuthToApi(nt.auth),
-          auth_env: nt.authEnv.trim() || null,
-          auth_header: nt.authHeader.trim() || null,
-          session_strategy: nt.sessionHandling,
-          session_field: nt.sessionField.trim() || null,
-          request_field: nt.protocol === 'openai_compat' ? null : 'prompt',
-          response_field: nt.protocol === 'openai_compat' ? null : 'response',
-          timeout_seconds: nt.timeoutSeconds || 30,
-          notes: nt.protocol === 'anthropic'
-            ? 'Wizard protocol anthropic mapped to custom_rest adapter.'
-            : null,
-        });
-        wizardCatalog.targets = [target, ...wizardCatalog.targets.filter(t => t.id !== target.id)];
-      }
-
-      const scenario = wizardScenarioById(wizardState.scenarioId);
-      const engagementName = (wizardState.engagementName || '').trim() || `${target.name} · ${scenario.name}`;
-      const created = await API.call('create_engagement', { name: engagementName });
-      unarchiveEngagementSlug(created.slug);
-      await API.call('open_db', { path: created.slug });
-      dbOpen = true;
-      onDbOpen(created.name || engagementName, created.slug);
-
-      if (wizardState.saveAsTemplate) {
-        try {
-          const templateScenario = await API.call('create_scenario', { name: `${scenario.name} Template` });
-          await API.call('update_scenario', {
-            id: templateScenario.id,
-            name: `${scenario.name} Template`,
-            target_id: target.id,
-            repeat_count: 1,
-          });
-          await API.call('save_steps', {
-            scenario_id: templateScenario.id,
-            steps: selectedPrompts.map((p) => ({
-              session: 'A',
-              prompt_id: p.id,
-              prompt_text: p.text,
-              delay_ms: 0,
-            })),
-          });
-        } catch (_err) {
-          toast('Engagement started, but template save failed.', 'info');
-        }
-      }
-
-      const payloads = selectedPrompts.map((p, idx) => ({
-        prompt_id: p.id,
-        payload_id: `wizard-${String(idx + 1).padStart(3, '0')}`,
-        text: p.text,
-      }));
-
-      const runId = await API.call('start_run', {
-        request_id: target.id,
-        payloads,
-        parallelism: 4,
-      });
-
-      closeEngagementWizard();
-      resetWizardState();
-      showView('view-runs');
-      $('#runs-section-title').textContent = created.name || engagementName;
-      $('#runs-section').style.display = '';
-      $('#runs-empty').style.display = 'none';
-      $('#run-results-section').style.display = 'none';
-      loadEngagementList();
-      loadRuns();
-      toast(`Engagement started (${runId})`, 'success');
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      fireBtn.disabled = false;
-      fireBtn.textContent = originalText;
-    }
-  }
 
   async function openEngagementDialog() {
     $('#engagement-dialog').style.display = 'flex';
@@ -1462,6 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
     archivedEngagementSlugs.delete(slug);
     saveArchivedEngagementSlugs();
   }
+
 
   function getEngagementSlugFromRoute() {
     const path = window.location.pathname || '/';
@@ -1568,10 +675,85 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  $('#btn-new-engagement').addEventListener('click', openEngagementWizard);
+  $('#btn-new-engagement').addEventListener('click', openEngagementDialog);
   $('#btn-open-engagement').addEventListener('click', openEngagementDialog);
-  $('#btn-home-start-engagement')?.addEventListener('click', openEngagementWizard);
-  $('#btn-home-open-workbench')?.addEventListener('click', () => showView('view-workbench'));
+  // Phase 2 of docs/RefactorPlan.md: wizard removed. Home CTAs route to
+  // Scenarios; "+" buttons open the lightweight engagement-dialog directly.
+  function closeRunScenarioPicker() {
+    $('#run-scenario-picker').style.display = 'none';
+  }
+
+  async function runPickedScenario(scenario) {
+    closeRunScenarioPicker();
+    try {
+      const eng = await API.call('create_engagement', {
+        name: `${scenario.name || scenario.id} · run`,
+      });
+      await API.call('open_db', { path: eng.slug });
+      const result = await API.call('start_scenario', { scenario_id: scenario.id });
+      toast(`Run started (${result.run_id || result.id})`, 'success');
+      showView('view-runs');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function describeScenarioForPicker(s) {
+    const reqCount = (s.request_ids || []).length;
+    const owasp = (s.library?.owasp_refs || []).join(', ');
+    const cats = (s.library?.categories || []).join(', ');
+    const libBits = [];
+    if (owasp) libBits.push(`OWASP: ${owasp}`);
+    if (cats) libBits.push(`categories: ${cats}`);
+    const libSummary = libBits.length ? libBits.join(' · ') : 'no library subset';
+    const reqSummary = `${reqCount} request${reqCount === 1 ? '' : 's'}`;
+    const sharedBit = s.shared_session ? ' · shared session' : '';
+    return `${reqSummary} · ${libSummary}${sharedBit}`;
+  }
+
+  function isScenarioRunnable(s) {
+    const hasRequests = Array.isArray(s.request_ids) && s.request_ids.length > 0;
+    const lib = s.library || {};
+    const hasLibrary = (Array.isArray(lib.owasp_refs) && lib.owasp_refs.length > 0)
+      || (Array.isArray(lib.categories) && lib.categories.length > 0);
+    return hasRequests && hasLibrary;
+  }
+
+  $('#btn-home-run-scenario')?.addEventListener('click', async () => {
+    const list = $('#run-scenario-picker-list');
+    $('#run-scenario-picker').style.display = 'flex';
+    list.innerHTML = '<div class="eng-list-empty">loading…</div>';
+    try {
+      const scenarios = await API.call('list_scenarios', {});
+      if (scenarios.length === 0) {
+        closeRunScenarioPicker();
+        toast('No saved Scenarios yet. Build one in the Scenarios view.', 'info');
+        showView('view-scenarios');
+        return;
+      }
+      list.innerHTML = '';
+      scenarios.forEach((s) => {
+        const card = document.createElement('div');
+        const runnable = isScenarioRunnable(s);
+        card.className = 'engagement-card' + (runnable ? '' : ' disabled');
+        card.innerHTML = `
+          <span class="eng-name">${esc(s.name || s.id)}</span>
+          <span class="eng-meta">${esc(describeScenarioForPicker(s))}</span>`;
+        if (runnable) {
+          card.addEventListener('click', () => runPickedScenario(s));
+        } else {
+          card.title = 'Scenario has no Requests or no library subset — open it in the Scenarios view to finish setup.';
+        }
+        list.appendChild(card);
+      });
+    } catch (err) {
+      closeRunScenarioPicker();
+      toast(err.message, 'error');
+    }
+  });
+  $('#run-scenario-picker-close')?.addEventListener('click', closeRunScenarioPicker);
+  $('#run-scenario-picker-cancel')?.addEventListener('click', closeRunScenarioPicker);
+  $('#btn-home-open-scenarios')?.addEventListener('click', () => showView('view-scenarios'));
   $('#btn-home-refresh-recents')?.addEventListener('click', () => {
     loadHomeRecentEngagements();
   });
@@ -1605,2196 +787,629 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { toast(err.message, 'error'); }
   });
 
-  // ── Wizard bindings ────────────────────────────────────────────────
-  $('#wizard-close').addEventListener('click', closeEngagementWizard);
-  $('#wizard-cancel').addEventListener('click', closeEngagementWizard);
-  $('#wizard-prev').addEventListener('click', () => wizardSetStep(wizardState.step - 1));
-  $('#wizard-next').addEventListener('click', () => {
-    if (!wizardCanContinueFromStep()) return;
-    wizardSetStep(wizardState.step + 1);
-  });
-  $('#wizard-fire').addEventListener('click', fireWizardEngagement);
-  $('#wizard-test-connection').addEventListener('click', validateWizardTargetStep);
 
-  $('#wizard-target-mode-existing').addEventListener('click', () => {
-    wizardState.targetMode = 'existing';
-    clearWizardTestStatus();
-    persistWizardState();
-    renderWizard();
-  });
-  $('#wizard-target-mode-new').addEventListener('click', () => {
-    wizardState.targetMode = 'new';
-    clearWizardTestStatus();
-    persistWizardState();
-    renderWizard();
-  });
-  $('#wizard-existing-target').addEventListener('change', (e) => {
-    wizardState.existingTargetId = e.target.value;
-    clearWizardTestStatus();
-    persistWizardState();
-  });
 
-  const wizardInputBindings = [
-    ['wizard-new-target-name', 'name'],
-    ['wizard-new-base-url', 'baseUrl'],
-    ['wizard-new-protocol', 'protocol'],
-    ['wizard-new-auth', 'auth'],
-    ['wizard-new-auth-env', 'authEnv'],
-    ['wizard-new-auth-header', 'authHeader'],
-    ['wizard-new-session', 'sessionHandling'],
-    ['wizard-new-session-field', 'sessionField'],
-    ['wizard-new-timeout', 'timeoutSeconds'],
-  ];
-  wizardInputBindings.forEach(([id, key]) => {
-    const el = $(`#${id}`);
-    const update = () => {
-      let value = el.value;
-      if (key === 'timeoutSeconds') {
-        const n = parseInt(value, 10);
-        value = Number.isFinite(n) && n > 0 ? n : 30;
-      }
-      wizardState.newTarget[key] = value;
-      clearWizardTestStatus();
-      persistWizardState();
-      if (id === 'wizard-new-auth' || id === 'wizard-new-session') renderWizardStep1();
-    };
-    el.addEventListener('input', update);
-    el.addEventListener('change', update);
-  });
 
-  $('#wizard-engagement-name').addEventListener('input', (e) => {
-    wizardState.engagementName = e.target.value;
-    persistWizardState();
-  });
-  $('#wizard-save-template').addEventListener('change', (e) => {
-    wizardState.saveAsTemplate = !!e.target.checked;
-    persistWizardState();
-  });
+  // ── Requests view (top-level) ──────────────────────────────────────
+  // Independent of any Target. Backed by the *_global Tauri commands.
+  // Editing a Request here updates the same files the Target editor reads,
+  // so a Request created here is available in any Target's request list.
 
-  // ── Workbench: target selector ─────────────────────────────────────
-  async function loadWorkbenchTargets() {
-    try {
-      const targets = await API.call('list_targets', {});
-      wb.availableTargets = targets;
-      renderWorkbenchTargetDialogList();
-
-      if (targets.length === 0) {
-        clearWorkbenchTarget(true);
-        return;
-      }
-
-      if (wb.activeTargetId) {
-        const active = targets.find(t => t.id === wb.activeTargetId);
-        if (active) {
-          setWorkbenchTarget(active);
-          return;
-        }
-      }
-
-      clearWorkbenchTarget(true);
-    } catch (err) { toast(`Failed to load targets: ${err.message}`, 'error'); }
-  }
-
-  function renderWorkbenchTargetDialogList() {
-    const list = $('#wb-target-dialog-list');
-    if (!list) return;
-
-    list.innerHTML = '';
-    if (wb.availableTargets.length === 0) {
-      list.innerHTML = '<div class="eng-list-empty">No targets yet. Create one in Targets.</div>';
-      return;
-    }
-
-    wb.availableTargets.forEach((t) => {
-      const row = document.createElement('div');
-      row.className = 'engagement-card';
-      row.innerHTML = `
-        <span class="eng-name">${esc(t.name)}</span>
-        <span class="eng-meta">${esc((t.url || '').replace(/^https?:\/\//, ''))}</span>`;
-      row.addEventListener('click', () => {
-        setWorkbenchTarget(t);
-        closeWorkbenchTargetDialog();
-      });
-      list.appendChild(row);
-    });
-  }
-
-  function openWorkbenchTargetDialog() {
-    renderWorkbenchTargetDialogList();
-    $('#wb-target-dialog').style.display = 'flex';
-  }
-
-  function closeWorkbenchTargetDialog() {
-    $('#wb-target-dialog').style.display = 'none';
-  }
-
-  function clearWorkbenchTarget(resetCards = true) {
-    wb.activeTargetId = null;
-    wb.activeTarget = null;
-    $('#wb-target-name').textContent = 'Pick Target';
-    $('#wb-target-url').textContent = '';
-    $('#wb-target-selector').title = 'Pick target';
-    $('#wb-target-selector').classList.remove('has-target');
-    $('#wb-status-dot').classList.remove('online');
-    $('#wb-meta-endpoint').innerHTML = '<strong>—</strong>';
-    $('#wb-meta-auth').textContent = '—';
-    $('#wb-meta-session').textContent = '—';
-    $('#btn-wb-promote').style.display = 'none';
-    setWorkbenchInteractivity(false);
-
-    if (resetCards) {
-      wb.activeCardEl = null;
-      wb.baselineCardEl = null;
-      wb.baselineResultId = null;
-      updateBaselineIndicators();
-      resetResponseStream();
-      resetDetailPane();
-    } else {
-      renderWorkbenchEmptyState();
-    }
-  }
-
-  function setWorkbenchTarget(t) {
-    const targetChanged = wb.activeTargetId && wb.activeTargetId !== t.id;
-    wb.activeTargetId = t.id;
-    wb.activeTarget = t;
-    $('#wb-target-name').textContent = t.name;
-    $('#wb-target-url').textContent = '→ ' + (t.url || '');
-    $('#wb-target-selector').title = `Switch target (current: ${t.name})`;
-    $('#wb-target-selector').classList.add('has-target');
-    $('#wb-status-dot').classList.add('online');
-    $('#wb-meta-endpoint').innerHTML = `<strong>${esc(t.endpoint_type || '—')}</strong>`;
-    $('#wb-meta-auth').textContent = t.auth_type || 'none';
-    $('#wb-meta-session').textContent = t.session_strategy || 'none';
-    $('#btn-wb-promote').style.display = '';
-    setWorkbenchInteractivity(true);
-
-    if (targetChanged) {
-      wb.activeCardEl = null;
-      wb.baselineCardEl = null;
-      wb.baselineResultId = null;
-      updateBaselineIndicators();
-      resetResponseStream();
-      resetDetailPane();
-    } else if (!$$('#wb-response-stream .response-card').length) {
-      renderWorkbenchEmptyState();
-    }
-  }
-
-  $('#wb-target-selector').addEventListener('click', openWorkbenchTargetDialog);
-  $('#wb-target-dialog-close').addEventListener('click', closeWorkbenchTargetDialog);
-  $('#wb-target-dialog-cancel').addEventListener('click', closeWorkbenchTargetDialog);
-  $('#wb-target-manage').addEventListener('click', () => {
-    closeWorkbenchTargetDialog();
-    showView('view-targets');
-  });
-  $('#wb-empty-pick-target')?.addEventListener('click', openWorkbenchTargetDialog);
-  $('#wb-empty-start-engagement')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    openEngagementWizard();
-  });
-  $('#btn-wb-promote').addEventListener('click', () => {
-    if (!wb.activeTargetId) return;
-    resetWizardState();
-    wizardState.targetMode = 'existing';
-    wizardState.existingTargetId = wb.activeTargetId;
-    wizardState.tested = { ok: true, message: 'Target pre-selected from Workbench.' };
-    persistWizardState();
-    openEngagementWizard();
-  });
-
-  // ── Workbench: prompt picker ───────────────────────────────────────
-  let pickerFilter = { owasp: '', search: '', tab: 'library' };
-  let pickerDebounceTimer = null;
-
-  async function loadPickerPrompts() {
-    try {
-      // Always fetch the full unfiltered list to keep coverage grid accurate
-      const all = await API.call('list_prompts', {});
-      wb.allPrompts = all;
-      updateCoverageGrid(all);
-
-      // Apply OWASP + search filters for the visible list
-      const prompts = applyPromptFilter(all, pickerFilter.owasp, pickerFilter.search);
-      renderPickerPrompts(prompts);
-      $('#picker-prompt-count').textContent = `${prompts.length} prompts`;
-    } catch (err) { toast(`Failed to load prompts: ${err.message}`, 'error'); }
-  }
-
-  // ── W-02 · OWASP coverage grid (client-side from loaded prompts) ──
-  function updateCoverageGrid(prompts) {
-    const refs = ['A01','A02','A03','A04','A05','A06','A07','A08','A09','A10'];
-    refs.forEach(ref => {
-      const count = prompts.filter(p => p.owasp_ref === ref).length;
-      const level = count >= 10 ? 'high' : count >= 5 ? 'med' : count >= 1 ? 'low' : 'none';
-      const cell = $(`.coverage-cell[data-owasp="${ref}"]`);
-      if (cell) cell.dataset.cov = level;
-    });
-  }
-
-  function renderPickerPrompts(prompts) {
-    const list = $('#picker-prompt-list');
-    list.innerHTML = '';
-    if (prompts.length === 0) {
-      list.innerHTML = '<div style="padding:20px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;">no prompts match filter</div>';
-      return;
-    }
-    prompts.forEach(p => {
-      const sevKey = (p.severity || 'low').toLowerCase();
-      const tags = (p.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
-      const row = document.createElement('div');
-      row.className = 'prompt-row';
-      row.dataset.id = p.id;
-      row.innerHTML = `
-        <div class="meta">
-          <span class="id">${esc(p.id)}</span>
-          <span class="owasp prompt-name">${esc(p.category || '')}</span>
-          <span class="sev sev-${esc(sevKey)}">${esc(p.severity || '')}</span>
-        </div>
-        <div class="text">${esc(p.text)}</div>
-        ${tags ? `<div class="tags">${tags}</div>` : ''}`;
-      row.addEventListener('click', () => selectPickerPrompt(p, row));
-      list.appendChild(row);
-    });
-  }
-
-  function selectPickerPrompt(p, rowEl) {
-    $$('#picker-prompt-list .prompt-row').forEach(r => r.classList.remove('selected'));
-    rowEl.classList.add('selected');
-    wb.selectedPromptId = p.id;
-    wb.selectedPrompt = p;
-    $('#wb-prompt-textarea').value = p.text;
-    $('#wb-active-id').textContent = p.id;
-    const sevKey = (p.severity || 'low').toLowerCase();
-    const sevEl = $('#wb-active-sev');
-    sevEl.textContent = p.severity || '';
-    sevEl.className = `active-sev sev-${sevKey}`;
-    updateCharCount();
-  }
-
-  // OWASP chip filter
-  $$('#picker-chips .chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      $$('#picker-chips .chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      pickerFilter.owasp = chip.dataset.owasp;
-      loadPickerPrompts();
-    });
-  });
-
-  // Picker tab switching (T-20: mutations tab wired)
-  $$('.picker-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      $$('.picker-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      pickerFilter.tab = tab.dataset.tab;
-      if (pickerFilter.tab === 'library') loadPickerPrompts();
-      else if (pickerFilter.tab === 'mutations') loadMutationsPicker();
-    });
-  });
-
-  // ── T-20 · Mutations picker tab ───────────────────────────────────
-  async function loadMutationsPicker() {
-    const text = $('#wb-prompt-textarea').value.trim();
-    const list = $('#picker-prompt-list');
-    if (!text) {
-      list.innerHTML = '<div style="padding:20px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;">select or type a prompt first</div>';
-      return;
-    }
-    list.innerHTML = '<div style="padding:20px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;">generating…</div>';
-    try {
-      const mutations = await API.call('get_mutations', { prompt_text: text });
-      list.innerHTML = '';
-      mutations.forEach(m => {
-        const row = document.createElement('div');
-        row.className = 'prompt-row';
-        row.innerHTML = `
-          <div class="meta"><span class="id">${esc(m.label)}</span></div>
-          <div class="text">${esc(m.text)}</div>`;
-        row.addEventListener('click', () => {
-          $$('#picker-prompt-list .prompt-row').forEach(r => r.classList.remove('selected'));
-          row.classList.add('selected');
-          $('#wb-prompt-textarea').value = m.text;
-          $('#wb-active-id').textContent = m.label;
-          updateCharCount();
-        });
-        list.appendChild(row);
-      });
-      $('#picker-prompt-count').textContent = `${mutations.length} mutations`;
-    } catch (err) {
-      list.innerHTML = `<div style="padding:20px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;">${esc(err.message)}</div>`;
-    }
-  }
-
-  // Search
-  $('#picker-search').addEventListener('input', (e) => {
-    clearTimeout(pickerDebounceTimer);
-    pickerDebounceTimer = setTimeout(() => {
-      pickerFilter.search = e.target.value;
-      loadPickerPrompts();
-    }, 200);
-  });
-
-  // Char counter
-  function updateCharCount() {
-    const text = $('#wb-prompt-textarea').value;
-    $('#wb-char-count').textContent = `${text.length} chars`;
-  }
-  $('#wb-prompt-textarea').addEventListener('input', updateCharCount);
-  resetDetailPane();
-
-  // ── T-16 · Fire prompt ────────────────────────────────────────────
-  async function firePrompt() {
-    if (!dbOpen) { toast('Open an engagement first', 'error'); return; }
-    if (!wb.activeTargetId) { toast('Select a target first', 'error'); return; }
-    const text = $('#wb-prompt-textarea').value.trim();
-    if (!text) { toast('Enter a prompt to fire', 'error'); return; }
-
-    const fireBtn = $('#btn-wb-fire');
-    fireBtn.disabled = true;
-
-    // Remove empty placeholder
-    const emptyEl = $('#wb-response-empty');
-    if (emptyEl) emptyEl.remove();
-
-    // Prepend a pending card immediately
-    const cardEl = createResponseCard({
-      promptText: text,
-      promptId: wb.selectedPromptId,
-      pending: true,
-    });
-    $('#wb-response-stream').prepend(cardEl);
-
-    try {
-      const result = await API.call('fire_prompt', {
-        target_id: wb.activeTargetId,
-        prompt_text: text,
-        prompt_id: wb.selectedPromptId || undefined,
-      });
-      updateResponseCard(cardEl, result);
-      if (!getBaselineCard() && (result.response_text || '').trim()) {
-        setBaselineCard(cardEl, false);
-      }
-      selectResponseCard(cardEl);
-    } catch (err) {
-      updateResponseCard(cardEl, { error: err.message });
-      selectResponseCard(cardEl);
-      toast(err.message, 'error');
-    } finally {
-      fireBtn.disabled = false;
-    }
-  }
-
-  function createResponseCard({ promptText, promptId, pending }) {
-    const now = new Date();
-    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-    const card = document.createElement('div');
-    card.className = 'response-card' + (pending ? ' pending' : '');
-    card.innerHTML = `
-      <div class="response-meta">
-        <span class="response-ts">${esc(ts)}</span>
-        ${promptId ? `<span class="response-pid">${esc(promptId)}</span>` : ''}
-        <span class="response-baseline hidden" data-baseline-marker>baseline</span>
-        <span class="verdict-badge verdict-pending" data-verdict>pending</span>
-        <span class="response-status" data-status></span>
-        <span class="response-latency" data-latency></span>
-      </div>
-      <div class="response-prompt-preview">${esc(promptText.substring(0, 120))}</div>
-      <div class="response-body" data-body>
-        <span class="response-loading">…</span>
-      </div>
-      <div class="signal-pills" data-signals></div>
-      <div class="response-actions" data-actions style="display:none">
-        <button class="mini-btn btn-set-baseline">Set Baseline</button>
-        <button class="mini-btn btn-judge">Judge</button>
-        <button class="mini-btn btn-promote">Promote to Finding</button>
-        <button class="mini-btn btn-rerun">Re-run</button>
-        <button class="mini-btn btn-copy-repro">Copy Repro</button>
-        <button class="mini-btn btn-diff-baseline">Diff vs Baseline</button>
-      </div>`;
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('button')) return;
-      selectResponseCard(card);
-    });
-    return card;
-  }
-
-  function updateResponseCard(cardEl, result) {
-    cardEl.classList.remove('pending');
-    cardEl.dataset.resultId = result.result_id || '';
-    cardEl.dataset.runId = result.run_id || '';
-    cardEl.dataset.promptText = cardEl.querySelector('.response-prompt-preview').textContent;
-    cardEl.dataset.responseText = result.response_text || '';
-    cardEl.dataset.signals = JSON.stringify(result.signals || []);
-    cardEl.dataset.judgeVerdict = result.judge_verdict || '';
-    cardEl.dataset.judgeConfidence = result.judge_confidence != null ? String(result.judge_confidence) : '';
-    cardEl.dataset.judgeReason = result.judge_reason || '';
-    cardEl.dataset.judgeModelUsed = result.judge_model_used || '';
-    cardEl.dataset.judgeEvaluatedAt = result.judge_evaluated_at || '';
-
-    const statusEl = cardEl.querySelector('[data-status]');
-    const latencyEl = cardEl.querySelector('[data-latency]');
-    const bodyEl = cardEl.querySelector('[data-body]');
-    const signalsEl = cardEl.querySelector('[data-signals]');
-    const actionsEl = cardEl.querySelector('[data-actions]');
-    const verdictEl = cardEl.querySelector('[data-verdict]');
-
-    if (result.error && !result.response_text) {
-      setVerdictBadge(verdictEl, 'FAIL');
-      bodyEl.innerHTML = `<span class="response-error">${esc(result.error)}</span>`;
-    } else if (result.judge_verdict) {
-      setVerdictBadge(verdictEl, result.judge_verdict);
-      bodyEl.textContent = result.response_text || '(empty response)';
-    } else {
-      setVerdictBadge(verdictEl, '');
-      bodyEl.textContent = result.response_text || '(empty response)';
-    }
-
-    if (result.status_code) statusEl.textContent = `HTTP ${result.status_code}`;
-    if (result.latency_ms != null) latencyEl.textContent = `${result.latency_ms}ms`;
-
-    // Signal pills
-    signalsEl.innerHTML = '';
-    (result.signals || []).forEach(sig => {
-      const pill = document.createElement('span');
-      const typeClass = { pii: 'signal-pii', sys_prompt: 'signal-sys', injection_echo: 'signal-echo', internal_hostname: 'signal-internal' }[sig.type] || '';
-      pill.className = `signal ${typeClass}`;
-      pill.textContent = sig.label;
-      signalsEl.appendChild(pill);
-    });
-
-    actionsEl.style.display = '';
-    wireCardActions(cardEl, result);
-    updateBaselineIndicators();
-  }
-
-  function selectResponseCard(cardEl) {
-    $$('.response-card').forEach(c => c.classList.remove('active'));
-    cardEl.classList.add('active');
-    wb.activeCardEl = cardEl;
-
-    const signals = JSON.parse(cardEl.dataset.signals || '[]');
-    const responseText = cardEl.dataset.responseText || '';
-
-    // Signals tab
-    const signalsList = $('#signals-list');
-    signalsList.innerHTML = '';
-    if (signals.length === 0) {
-      signalsList.innerHTML = '<div style="color:var(--text-3);font-family:var(--mono);font-size:11px;text-align:center;padding:40px 20px;">no signals detected</div>';
-    } else {
-      signals.forEach(sig => {
-        const row = document.createElement('div');
-        row.className = 'signal-row';
-        const evidence = sig.evidence?.length ? sig.evidence.join(', ') : '';
-        const sevClass = (
-          sig.type === 'pii' ? 'sev-high' :
-          sig.type === 'sys_prompt' ? 'sev-medium' :
-          sig.type === 'injection_echo' ? 'sev-critical' :
-          'sev-low'
-        );
-        row.innerHTML = `<span class="s-name">${esc(sig.label)}</span><span class="s-severity sev ${sevClass}">x${sig.count}</span>${evidence ? `<span class="s-evidence">${esc(evidence)}</span>` : ''}`;
-        signalsList.appendChild(row);
-      });
-    }
-    $('#signals-badge').textContent = signals.length;
-
-    // Raw tab
-    $('#detail-raw-pre').textContent = responseText || '—';
-
-    // Judge tab
-    renderJudgePanel(cardEl, signals);
-
-    // Diff tab
-    const baselineCard = getBaselineCard();
-    const baselineText = baselineCard?.dataset.responseText || '';
-    if (!baselineCard) {
-      renderDiffEmpty('set a baseline response first, then select another result');
-    } else if (baselineCard === cardEl) {
-      renderDiffEmpty('selected response is the baseline');
-    } else if (!baselineText.trim() || !responseText.trim()) {
-      renderDiffEmpty('baseline or current response has no text to compare');
-    } else {
-      renderDiff(baselineText, responseText);
-    }
-
-    // Default to diff when possible, otherwise signals/raw.
-    if (baselineCard && baselineCard !== cardEl && baselineText.trim() && responseText.trim()) {
-      switchDetailTab('diff');
-    } else if (signals.length > 0) {
-      switchDetailTab('signals');
-    } else {
-      switchDetailTab('raw');
-    }
-  }
-
-  function switchDetailTab(panel) {
-    $$('.detail-tab').forEach(t => t.classList.remove('active'));
-    $$('.detail-panel').forEach(p => p.classList.remove('active'));
-    const tabEl = $(`.detail-tab[data-panel="${panel}"]`);
-    const panelEl = $(`#detail-${panel}`);
-    if (tabEl) tabEl.classList.add('active');
-    if (panelEl) panelEl.classList.add('active');
-  }
-
-  $('#btn-wb-fire').addEventListener('click', firePrompt);
-
-  $('#btn-wb-baseline').addEventListener('click', () => {
-    const selected = wb.activeCardEl || [...$$('.response-card')].find(c => (c.dataset.responseText || '').trim());
-    if (!selected) {
-      toast('Fire and select a response first', 'info');
-      return;
-    }
-    if (setBaselineCard(selected)) {
-      if (wb.activeCardEl) selectResponseCard(wb.activeCardEl);
-    }
-  });
-
-  $('#btn-wb-judge-all').addEventListener('click', async () => {
-    const btn = $('#btn-wb-judge-all');
-    const cards = [...$$('.response-card')].filter(c => c.dataset.resultId);
-    if (cards.length === 0) {
-      toast('No responses available to judge', 'info');
-      return;
-    }
-
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Judging…';
-    try {
-      const runIds = [...new Set(cards.map(c => c.dataset.runId).filter(Boolean))];
-      const payload = { result_ids: cards.map(c => c.dataset.resultId).filter(Boolean) };
-      if (runIds.length === 1) payload.run_id = runIds[0];
-      const res = await API.call('judge_all', payload);
-      const byResultId = new Map((res.results || []).map(r => [r.result_id, r]));
-      cards.forEach(card => {
-        const judged = byResultId.get(card.dataset.resultId);
-        if (judged) applyJudgeToCard(card, judged);
-      });
-
-      if (wb.activeCardEl) {
-        const signals = JSON.parse(wb.activeCardEl.dataset.signals || '[]');
-        renderJudgePanel(wb.activeCardEl, signals);
-        switchDetailTab('judge');
-      }
-
-      toast(`Judge complete: ${res.judged} judged, ${res.skipped_existing} skipped`, 'success');
-    } catch (err) {
-      toast(`Judge all failed: ${err.message}`, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = original;
-    }
-  });
-
-  $('#btn-wb-save-as').addEventListener('click', () => {
-    const text = $('#wb-prompt-textarea').value.trim();
-    if (!text) { toast('Enter a prompt to save', 'error'); return; }
-    if (!dbOpen) { toast('Open an engagement first', 'error'); return; }
-    const id = `custom-${Date.now()}`;
-    API.call('create_prompt', {
-      id,
-      text,
-      category: 'prompt_injection',
-      owasp_ref: 'A01',
-      severity: 'MEDIUM',
-      tags: [],
-      mode: 'single',
-      source: 'workbench',
-    }).then(() => {
-      toast(`Saved as ${id}`, 'success');
-      wb.allPrompts = [];
-      loadPickerPrompts();
-    }).catch(err => toast(err.message, 'error'));
-  });
-
-  $('#btn-wb-duplicate').addEventListener('click', () => {
-    const text = $('#wb-prompt-textarea').value.trim();
-    if (!text) { toast('Nothing in editor to duplicate', 'error'); return; }
-    $('#wb-prompt-textarea').value = text;
-    $('#wb-active-id').textContent = '—';
-    wb.selectedPromptId = null;
-    wb.selectedPrompt = null;
-    updateCharCount();
-    toast('Duplicated into editor — edit and fire or save as new', 'info');
-  });
-
-  // ── T-17 · Response card actions ─────────────────────────────────
-  function wireCardActions(cardEl, result) {
-    cardEl.querySelector('.btn-set-baseline')?.addEventListener('click', () => {
-      if (setBaselineCard(cardEl)) {
-        if (wb.activeCardEl) selectResponseCard(wb.activeCardEl);
-      }
-    });
-
-    cardEl.querySelector('.btn-judge')?.addEventListener('click', async () => {
-      try {
-        await judgeCard(cardEl, { force: false, switchToJudge: true });
-      } catch (err) {
-        toast(`Judge failed: ${err.message}`, 'error');
-      }
-    });
-
-    cardEl.querySelector('.btn-rerun')?.addEventListener('click', async () => {
-      const promptText = cardEl.querySelector('.response-prompt-preview').textContent;
-      if (!promptText) return;
-      const fireBtn = $('#btn-wb-fire');
-      fireBtn.disabled = true;
-      const newCard = createResponseCard({ promptText, promptId: null, pending: true });
-      $('#wb-response-stream').prepend(newCard);
-      try {
-        const res = await API.call('fire_prompt', {
-          target_id: wb.activeTargetId,
-          prompt_text: promptText,
-        });
-        updateResponseCard(newCard, res);
-        if (!getBaselineCard() && (res.response_text || '').trim()) {
-          setBaselineCard(newCard, false);
-        }
-        selectResponseCard(newCard);
-      } catch (err) {
-        updateResponseCard(newCard, { error: err.message });
-        selectResponseCard(newCard);
-      } finally {
-        fireBtn.disabled = false;
-      }
-    });
-
-    cardEl.querySelector('.btn-copy-repro')?.addEventListener('click', () => {
-      const promptText = cardEl.querySelector('.response-prompt-preview').textContent;
-      navigator.clipboard.writeText(promptText).then(() => toast('Prompt copied to clipboard', 'success'));
-    });
-
-    cardEl.querySelector('.btn-diff-baseline')?.addEventListener('click', () => {
-      const responseText = cardEl.dataset.responseText || '';
-      const baselineCard = getBaselineCard();
-      if (!baselineCard) { toast('Set a baseline first', 'info'); return; }
-      if (baselineCard === cardEl) { toast('Select a non-baseline response for diff', 'info'); return; }
-      renderDiff(baselineCard.dataset.responseText || '', responseText);
-      switchDetailTab('diff');
-    });
-
-    cardEl.querySelector('.btn-promote')?.addEventListener('click', () => {
-      if (!result.result_id) { toast('No result ID to promote', 'error'); return; }
-      showPromoteModal(result.result_id);
-    });
-  }
-
-  // Promote to finding modal
-  const OWASP_REFS = ['A01','A02','A03','A04','A05','A06','A07','A08','A09','A10'];
-
-  let _promoteResultId = null;
-  function showPromoteModal(resultId) {
-    _promoteResultId = resultId;
-    let modal = $('#promote-modal');
-    if (!modal) {
-      const refCheckboxes = OWASP_REFS.map(r =>
-        `<label class="owasp-ref-check"><input type="checkbox" value="${r}"><span>${r}</span></label>`
-      ).join('');
-      modal = document.createElement('div');
-      modal.id = 'promote-modal';
-      modal.className = 'modal';
-      modal.innerHTML = `<div class="modal-content modal-small">
-        <button class="modal-close" id="promote-modal-close">&times;</button>
-        <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Promote to Finding</h3>
-        <div class="form-row">
-          <label for="promote-title">Title</label>
-          <input id="promote-title" type="text" placeholder="Describe the finding…" required>
-        </div>
-        <div class="form-row">
-          <label for="promote-severity">Severity</label>
-          <select id="promote-severity">
-            <option value="LOW">LOW</option>
-            <option value="MEDIUM">MEDIUM</option>
-            <option value="HIGH" selected>HIGH</option>
-            <option value="CRITICAL">CRITICAL</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <label>OWASP refs</label>
-          <div class="owasp-ref-grid" id="promote-owasp-refs">${refCheckboxes}</div>
-        </div>
-        <div class="editor-actions">
-          <button class="btn btn-primary" id="promote-confirm">Promote</button>
-          <button class="btn btn-ghost" id="promote-cancel">Cancel</button>
-        </div>
-      </div>`;
-      document.body.appendChild(modal);
-      modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
-      modal.querySelector('#promote-modal-close').addEventListener('click', () => modal.style.display = 'none');
-      modal.querySelector('#promote-cancel').addEventListener('click', () => modal.style.display = 'none');
-      modal.querySelector('#promote-confirm').addEventListener('click', async () => {
-        const title = modal.querySelector('#promote-title').value.trim();
-        const severity = modal.querySelector('#promote-severity').value;
-        const owasp_refs = [...modal.querySelectorAll('#promote-owasp-refs input:checked')].map(cb => cb.value);
-        if (!title) { toast('Enter a title', 'error'); return; }
-        try {
-          await API.call('promote_finding', { result_id: _promoteResultId, title, severity, owasp_refs });
-          toast('Finding promoted', 'success');
-          modal.style.display = 'none';
-          $('#findings-drawer').classList.remove('collapsed');
-          loadFindings();
-        } catch (err) { toast(err.message, 'error'); }
-      });
-    }
-    modal.querySelector('#promote-title').value = '';
-    modal.querySelectorAll('#promote-owasp-refs input').forEach(cb => cb.checked = false);
-    // pre-check the OWASP ref from the selected prompt if available
-    if (wb.selectedPrompt?.owasp_ref) {
-      const cb = modal.querySelector(`#promote-owasp-refs input[value="${wb.selectedPrompt.owasp_ref}"]`);
-      if (cb) cb.checked = true;
-    }
-    modal.style.display = 'flex';
-  }
-
-  // ── T-18 · Detail pane: diff helper ──────────────────────────────
-  function renderDiff(baseText, newText) {
-    const diffEl = $('#detail-diff');
-    const baseWords = String(baseText || '').trim().split(/\s+/).filter(Boolean);
-    const newWords = String(newText || '').trim().split(/\s+/).filter(Boolean);
-    const newSet = new Set(newWords);
-    const baseSet = new Set(baseWords);
-
-    const leftHtml = baseWords.map(w =>
-      newSet.has(w) ? esc(w) : `<span class="diff-del">${esc(w)}</span>`
-    ).join(' ');
-    const rightHtml = newWords.map(w =>
-      baseSet.has(w) ? esc(w) : `<span class="diff-add">${esc(w)}</span>`
-    ).join(' ');
-
-    diffEl.innerHTML = `<div class="diff-row">
-      <div class="diff-col baseline">
-        <div class="label">baseline</div>
-        <div class="body">${leftHtml || '—'}</div>
-      </div>
-      <div class="diff-col attack">
-        <div class="label">current</div>
-        <div class="body">${rightHtml || '—'}</div>
-      </div>
-    </div>`;
-  }
-
-  // ── Workbench: detail tabs ─────────────────────────────────────────
-  $$('.detail-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      switchDetailTab(tab.dataset.panel);
-    });
-  });
-
-  // ── T-19 · Findings drawer ────────────────────────────────────────
-  $('#findings-header').addEventListener('click', () => {
-    $('#findings-drawer').classList.toggle('collapsed');
-  });
-
-  async function loadFindings() {
-    if (!dbOpen) return;
-    try {
-      const findings = await API.call('list_findings', {});
-      wb.findings = findings;
-      renderFindings(findings);
-    } catch (err) { toast(`Failed to load findings: ${err.message}`, 'error'); }
-  }
-
-  function renderFindings(findings) {
-    const body = $('#findings-body');
-    const countEl = $('#findings-count');
-    const critEl = $('#findings-stat-crit');
-    const highEl = $('#findings-stat-high');
-    const medEl = $('#findings-stat-med');
-
-    const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-    findings.forEach(f => { if (f.severity in counts) counts[f.severity]++; });
-
-    countEl.textContent = findings.length;
-    critEl.textContent = counts.CRITICAL;
-    highEl.textContent = counts.HIGH;
-    medEl.textContent = counts.MEDIUM;
-
-    body.innerHTML = '';
-    if (findings.length === 0) {
-      body.innerHTML = '<div style="padding:16px 20px;font-family:var(--mono);font-size:11px;color:var(--text-3);">no findings yet — promote a response to add one</div>';
-      return;
-    }
-    findings.forEach(f => {
-      const row = document.createElement('div');
-      row.className = 'finding-row';
-      const sevKey = (f.severity || 'low').toLowerCase();
-      const refs = (f.owasp_refs || []).map(r => `<span class="chip chip-sm">${esc(r)}</span>`).join('');
-      const date = f.promoted_at ? f.promoted_at.substring(0, 10) : '';
-      row.innerHTML = `
-        <span class="sev sev-${esc(sevKey)}">${esc(f.severity)}</span>
-        <span class="finding-title">${esc(f.title)}</span>
-        <span class="finding-refs">${refs}</span>
-        <span class="finding-date">${esc(date)}</span>`;
-      body.appendChild(row);
-    });
-  }
-
-  $('#btn-export-pdf').addEventListener('click', async () => {
-    if (!dbOpen) { toast('Open an engagement first', 'error'); return; }
-    try {
-      const result = await API.call('export_findings_pdf', {});
-      toast(`Report saved: ${result.path}`, 'success');
-    } catch (err) { toast(err.message, 'error'); }
-  });
-
-  // ── Target config: multi-request editor ────────────────────────────
-  const targetEditorState = {
-    targetId: '',
-    requests: [],
-    selectedRequestId: '',
-    authAcquisition: null,
+  const requestEditor = {
+    /** id of the request currently being edited; '' for a new draft. */
+    currentId: '',
+    /** Track the editor's body mode so Save serialises the right shape. */
+    bodyMode: 'structured', // 'structured' | 'raw'
+    /** Pending delete id while the references dialog is open. */
+    pendingDeleteId: '',
   };
 
-  function slugifyEntityName(name, fallback = 'item') {
-    const base = (name || fallback)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-    return `${base || fallback}-${Date.now().toString(36)}`;
+  function renderRequestHeaders(headers) {
+    const root = $('#req-headers');
+    root.innerHTML = '';
+    Object.entries(headers || {}).forEach(([k, v]) => {
+      addRequestHeaderRow(k, v);
+    });
+    if (Object.keys(headers || {}).length === 0) {
+      addRequestHeaderRow('Content-Type', 'application/json');
+    }
   }
 
-  function blankRequestDraft(targetId = '', targetName = '') {
-    const requestId = slugifyEntityName(targetName || 'request', 'request');
-    return {
-      id: requestId,
-      name: targetName ? `${targetName} request` : 'New request',
-      method: 'POST',
-      url: '',
-      endpoint_type: 'custom_rest',
-      auth_type: 'none',
-      auth_env: '',
-      auth_header: '',
-      headers_mode: 'structured',
-      headers: [{ key: 'Content-Type', value: 'application/json' }],
-      raw_headers: 'Content-Type: application/json',
-      content_type_hint: 'application/json',
-      body_format: 'json',
-      body_text: '{\n  "message": "{{prompt}}"\n}',
-      response_extract_type: 'jsonpath',
-      response_extract_value: '$.response',
-      timeout_seconds: 30,
-      target_id: targetId || '',
-    };
+  function addRequestHeaderRow(name = '', value = '') {
+    const row = document.createElement('div');
+    row.className = 'header-row';
+    row.style.cssText = 'display:flex;gap:6px;margin-bottom:4px;';
+    row.innerHTML = `
+      <input type="text" class="req-header-name"  placeholder="Header"   value="${esc(name)}"  style="flex:0 0 35%;">
+      <input type="text" class="req-header-value" placeholder="value"    value="${esc(value)}" style="flex:1;">
+      <button type="button" class="btn btn-ghost req-header-remove" style="font-size:11px;padding:4px 10px;">×</button>
+    `;
+    row.querySelector('.req-header-remove').addEventListener('click', () => row.remove());
+    $('#req-headers').appendChild(row);
   }
 
-  function blankAuthAcquisitionDraft() {
-    return {
-      auth_source: 'manual',
-      auth_login_env: '',
-      auth_password_env: '',
-      auth_login_url: '',
-      auth_login_method: 'POST',
-      auth_login_headers: { 'Content-Type': 'application/json' },
-      auth_login_body_template: '{"email":"{{login}}","password":"{{password}}"}',
-      auth_token_json_path: '$.jwToken',
-      auth_login_timeout_seconds: 60,
-    };
-  }
-
-  function normalizeRequestAdapter(adapter) {
-    if (adapter === 'open-ai-compat') return 'openai_compat';
-    if (adapter === 'raw-http') return 'raw_http';
-    if (adapter === 'custom-rest') return 'custom_rest';
-    return adapter || 'custom_rest';
-  }
-
-  function headersObjectToRows(headers) {
-    const entries = Object.entries(headers || {});
-    if (entries.length === 0) return [{ key: '', value: '' }];
-    return entries.map(([key, value]) => ({ key, value: String(value ?? '') }));
-  }
-
-  function headersRowsToObject(rows) {
+  function readRequestHeadersFromForm() {
     const out = {};
-    (rows || []).forEach(({ key, value }) => {
-      const cleanKey = (key || '').trim();
-      if (!cleanKey) return;
-      out[cleanKey] = value ?? '';
+    $$('#req-headers .header-row').forEach(row => {
+      const name = row.querySelector('.req-header-name').value.trim();
+      const value = row.querySelector('.req-header-value').value;
+      if (name) out[name] = value;
     });
     return out;
   }
 
-  function headersObjectToRaw(headers) {
-    return Object.entries(headers || {})
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n');
-  }
-
-  function rawHeadersToRows(text) {
-    const rows = (text || '')
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(line => {
-        const idx = line.indexOf(':');
-        if (idx < 0) return { key: line, value: '' };
-        return {
-          key: line.slice(0, idx).trim(),
-          value: line.slice(idx + 1).trim(),
-        };
-      });
-    return rows.length ? rows : [{ key: '', value: '' }];
-  }
-
-  function bodyContentToDraftText(format, content) {
-    if (format === 'text') {
-      return typeof content === 'string' ? content : String(content ?? '');
-    }
-    if (format === 'form') {
-      if (content && typeof content === 'object' && !Array.isArray(content)) {
-        return Object.entries(content)
-          .map(([key, value]) => `${key}=${value == null ? '' : value}`)
-          .join('\n');
-      }
-      return '';
-    }
-    try {
-      return JSON.stringify(content ?? {}, null, 2);
-    } catch (_err) {
-      return '{}';
-    }
-  }
-
-  function parseBodyDraft(format, text) {
-    const raw = text || '';
-    if (format === 'text') return raw;
-    if (format === 'form') {
-      const out = {};
-      raw.split(/\r?\n/).forEach(line => {
-        if (!line.trim()) return;
-        const idx = line.indexOf('=');
-        if (idx < 0) {
-          out[line.trim()] = '';
-          return;
-        }
-        out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      });
-      return out;
-    }
-    if (!raw.trim()) return {};
-    return JSON.parse(raw);
-  }
-
-  function unescapeAnsiCString(text) {
-    return text
-      .replace(/\\\\/g, '\\')
-      .replace(/\\r/g, '\r')
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\'/g, "'")
-      .replace(/\\"/g, '"');
-  }
-
-  function preprocessCurlInput(input) {
-    let text = String(input || '');
-    text = text.replace(/\\\r?\n/g, ' ');
-    text = text.replace(/`\r?\n/g, ' ');
-    text = text.replace(/\$'((?:\\.|[^'])*)'/g, (_match, inner) => `'${unescapeAnsiCString(inner).replace(/'/g, "\\'")}'`);
-    return text.trim();
-  }
-
-  function tokenizeCommand(input) {
-    const text = preprocessCurlInput(input);
-    const tokens = [];
-    let current = '';
-    let state = 'normal';
-
-    for (let i = 0; i < text.length; i += 1) {
-      const ch = text[i];
-
-      if (state === 'single') {
-        if (ch === "'") {
-          state = 'normal';
-        } else {
-          current += ch;
-        }
-        continue;
-      }
-
-      if (state === 'double') {
-        if (ch === '"') {
-          state = 'normal';
-        } else if (ch === '\\' && i + 1 < text.length) {
-          i += 1;
-          current += text[i];
-        } else {
-          current += ch;
-        }
-        continue;
-      }
-
-      if (/\s/.test(ch)) {
-        if (current) {
-          tokens.push(current);
-          current = '';
-        }
-        continue;
-      }
-      if (ch === "'") {
-        state = 'single';
-        continue;
-      }
-      if (ch === '"') {
-        state = 'double';
-        continue;
-      }
-      if (ch === '\\' && i + 1 < text.length) {
-        i += 1;
-        current += text[i];
-        continue;
-      }
-      current += ch;
-    }
-
-    if (current) tokens.push(current);
-    return tokens;
-  }
-
-  function parseCurlIntoDraft(curlText, draft) {
-    const tokens = tokenizeCommand(curlText);
-    if (!tokens.length) throw new Error('curl command is empty');
-
-    let idx = 0;
-    if (/^curl(?:\.exe)?$/i.test(tokens[0])) idx = 1;
-    if (idx >= tokens.length) throw new Error('curl command has no URL or options');
-
-    let method = '';
-    let url = '';
-    const headers = [];
-    const dataParts = [];
-
-    const takeValue = (label) => {
-      idx += 1;
-      if (idx >= tokens.length) throw new Error(`Missing value for ${label}`);
-      return tokens[idx];
-    };
-
-    for (; idx < tokens.length; idx += 1) {
-      const token = tokens[idx];
-      if (token === '-X' || token === '--request') {
-        method = takeValue(token).toUpperCase();
-        continue;
-      }
-      if (token === '-H' || token === '--header') {
-        headers.push(takeValue(token));
-        continue;
-      }
-      if (token === '--url') {
-        url = takeValue(token);
-        continue;
-      }
-      if (token === '--data' || token === '--data-raw' || token === '--data-binary' || token === '-d') {
-        dataParts.push(takeValue(token));
-        continue;
-      }
-      if (token.startsWith('http://') || token.startsWith('https://')) {
-        if (!url) url = token;
-        continue;
-      }
-    }
-
-    if (!url) throw new Error('Could not find a URL in the curl command');
-
-    const next = { ...draft };
-    next.method = method || (dataParts.length > 0 ? 'POST' : 'GET');
-    next.url = url;
-    next.headers_mode = 'structured';
-
-    let authType = 'none';
-    let authEnv = draft.auth_env || '';
-    let authHeader = draft.auth_header || '';
-    const regularHeaders = {};
-
-    headers.forEach((line) => {
-      const sep = line.indexOf(':');
-      if (sep < 0) return;
-      const key = line.slice(0, sep).trim();
-      const value = line.slice(sep + 1).trim();
-      if (!key) return;
-
-      if (/^authorization$/i.test(key) && /^bearer\s+/i.test(value)) {
-        authType = 'bearer';
-        authEnv = authEnv || 'HAMM0R_BEARER_TOKEN';
-        return;
-      }
-      if (/^authorization$/i.test(key) && /^basic\s+/i.test(value)) {
-        authType = 'basic';
-        authEnv = authEnv || 'HAMM0R_USER';
-        return;
-      }
-      if (/^(x-api-key|api-key)$/i.test(key)) {
-        authType = 'api_key';
-        authEnv = authEnv || 'HAMM0R_API_KEY';
-        authHeader = key;
-        return;
-      }
-
-      regularHeaders[key] = value;
-    });
-
-    next.auth_type = authType;
-    next.auth_env = authEnv;
-    next.auth_header = authHeader;
-    next.headers = headersObjectToRows(regularHeaders);
-    next.raw_headers = headersObjectToRaw(regularHeaders);
-
-    const contentType =
-      regularHeaders['Content-Type'] ||
-      regularHeaders['content-type'] ||
-      '';
-    next.content_type_hint = contentType;
-
-    const bodyText = dataParts.join(contentType.includes('x-www-form-urlencoded') ? '&' : '\n');
-    let bodyFormat = 'text';
-    let bodyEditorText = bodyText;
-    let endpointType = 'custom_rest';
-    let extractType = 'raw';
-    let extractValue = '';
-
-    const looksLikeJson = contentType.includes('json') || /^[\[{]/.test(bodyText.trim());
-    if (looksLikeJson && bodyText.trim()) {
-      try {
-        const parsed = JSON.parse(bodyText);
-        bodyFormat = 'json';
-        bodyEditorText = JSON.stringify(parsed, null, 2);
-        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.messages)) {
-          endpointType = 'openai_compat';
-          extractType = 'jsonpath';
-          extractValue = '$.choices[0].message.content';
-        } else {
-          endpointType = 'custom_rest';
-        }
-      } catch (_err) {
-        bodyFormat = 'text';
-      }
-    } else if (contentType.includes('x-www-form-urlencoded')) {
-      bodyFormat = 'form';
-      bodyEditorText = bodyText.split('&').join('\n');
-    } else if (!bodyText.trim()) {
-      bodyFormat = 'text';
-      bodyEditorText = '';
-    } else {
-      bodyFormat = 'text';
-      endpointType = 'raw_http';
-    }
-
-    next.endpoint_type = endpointType;
-    next.body_format = bodyFormat;
-    next.body_text = bodyEditorText;
-    next.response_extract_type = extractType;
-    next.response_extract_value = extractValue;
-    next.timeout_seconds = draft.timeout_seconds || 30;
-
-    return next;
-  }
-
-  function extractConfigToRequest(draft) {
-    if (draft.response_extract_type === 'jsonpath') {
-      return { type: 'jsonpath', path: draft.response_extract_value || '$.response' };
-    }
-    if (draft.response_extract_type === 'regex') {
-      return { type: 'regex', pattern: draft.response_extract_value || '(.*)' };
-    }
-    return { type: 'raw' };
-  }
-
-  function requestAdapterToWireValue(adapter) {
-    if (adapter === 'openai_compat') return 'open-ai-compat';
-    if (adapter === 'raw_http') return 'raw-http';
-    return 'custom-rest';
-  }
-
-  function buildRequestFromDraft(draft) {
-    const headers = draft.headers_mode === 'raw'
-      ? headersRowsToObject(rawHeadersToRows(draft.raw_headers))
-      : headersRowsToObject(draft.headers);
-    if (draft.content_type_hint) {
-      headers['Content-Type'] = draft.content_type_hint;
-    }
-
+  function blankRequest() {
     return {
       version: 1,
-      id: draft.id,
-      name: draft.name || draft.id,
-      method: draft.method || 'POST',
-      url: draft.url,
-      auth: (() => {
-        if (draft.auth_type === 'bearer') {
-          return { type: 'bearer', token_env: draft.auth_env || 'HAMM0R_TOKEN' };
-        }
-        if (draft.auth_type === 'basic') {
-          return { type: 'basic', user_env: draft.auth_env || 'HAMM0R_USER', password_env: 'HAMM0R_PASS' };
-        }
-        if (draft.auth_type === 'api_key') {
-          return {
-            type: 'custom-header',
-            header_name: draft.auth_header || 'Authorization',
-            value_env: draft.auth_env || 'HAMM0R_KEY',
-          };
-        }
-        return { type: 'none' };
-      })(),
-      headers,
+      id: '',
+      name: '',
+      method: 'POST',
+      url: '',
+      auth: { type: 'none' },
+      headers: { 'Content-Type': 'application/json' },
       body: {
-        format: draft.body_format || 'json',
-        content: parseBodyDraft(draft.body_format || 'json', draft.body_text || ''),
+        format: 'json',
+        content: { model: 'gpt-4', messages: [{ role: 'user', content: '{{prompt}}' }] },
       },
-      response: { extract: extractConfigToRequest(draft) },
-      timeout_seconds: Number(draft.timeout_seconds || 30),
-      adapter: requestAdapterToWireValue(draft.endpoint_type),
+      response: { extract: { type: 'raw' } },
+      timeout_seconds: 30,
+      adapter: 'custom-rest',
     };
   }
 
-  function buildRequestFromDraftOrThrow(draft, options = {}) {
-    const requestLabel = draft.name || draft.id || 'request';
-    try {
-      return buildRequestFromDraft(draft);
-    } catch (err) {
-      const message = err && err.message ? err.message : String(err);
-      const format = draft.body_format || 'json';
-      if (format === 'json') {
-        if (options.focusBody !== false) {
-          $('#target-body-text').focus();
-        }
-        throw new Error(`Request "${requestLabel}" has invalid JSON body content: ${message}`);
+  function setRequestBodyMode(mode) {
+    requestEditor.bodyMode = mode;
+    $$('#req-body-tabs .tab').forEach(t => {
+      t.classList.toggle('tab-active', t.dataset.bodyTab === mode);
+    });
+    $('#req-body-structured').style.display = mode === 'structured' ? '' : 'none';
+    $('#req-body-raw').style.display = mode === 'raw' ? '' : 'none';
+    updatePromptDetector();
+  }
+
+  function updatePromptDetector() {
+    const text = requestEditor.bodyMode === 'raw'
+      ? $('#req-body-raw-text').value
+      : $('#req-body-json').value;
+    const has = /\{\{\s*prompt\s*\}\}/.test(text);
+    const el = $('#req-prompt-detector');
+    el.innerHTML = has
+      ? '<span style="color:var(--ok,#3a3)">✓ {{prompt}} placeholder detected</span>'
+      : '<span style="color:var(--warn,#c80)">⚠ no {{prompt}} placeholder — payload will not be substituted</span>';
+  }
+
+  function populateRequestEditor(req) {
+    $('#req-name').value = req.name || '';
+    $('#req-id').value = req.id || '';
+    $('#req-id').disabled = !!req.id; // id is the filename; immutable after creation
+    if ($('#req-tag')) $('#req-tag').value = req.tag || '';
+    $('#req-method').value = (req.method || 'POST').toUpperCase();
+    $('#req-url').value = req.url || '';
+    renderRequestHeaders(req.headers || {});
+
+    // Auth
+    const auth = req.auth || { type: 'none' };
+    $('#req-auth-type').value = auth.type || 'none';
+    $('#req-auth-bearer').style.display = auth.type === 'bearer' ? '' : 'none';
+    $('#req-auth-custom').style.display = auth.type === 'custom-header' ? '' : 'none';
+    $('#req-auth-token-env').value = auth.token_env || '';
+    $('#req-auth-header-name').value = auth.header_name || '';
+    $('#req-auth-value-env').value = auth.value_env || '';
+    refreshRequestAuthTokenStatus().catch((err) => {
+      console.error('refreshRequestAuthTokenStatus', err);
+    });
+
+    // Body
+    const fmt = req.body && req.body.format;
+    if (fmt === 'raw') {
+      const raw = typeof req.body.content === 'string' ? req.body.content : JSON.stringify(req.body.content || '');
+      $('#req-body-raw-text').value = raw;
+      $('#req-body-json').value = '';
+      setRequestBodyMode('raw');
+    } else {
+      const content = (req.body && req.body.content) ?? {};
+      $('#req-body-json').value = typeof content === 'string'
+        ? content
+        : JSON.stringify(content, null, 2);
+      $('#req-body-raw-text').value = '';
+      setRequestBodyMode('structured');
+    }
+
+    // Response extract
+    const ext = (req.response && req.response.extract) || { type: 'raw' };
+    $('#req-extract-type').value = ext.type || 'raw';
+    $('#req-extract-path').value = ext.path || ext.pattern || '';
+    $('#req-extract-path').style.display = ext.type === 'raw' ? 'none' : '';
+    if ($('#req-bind')) $('#req-bind').value = (req.response && req.response.bind) || '';
+
+    $('#req-timeout').value = Number(req.timeout_seconds || 30);
+    $('#req-test-prompt').value = '';
+    $('#btn-req-delete').style.display = req.id ? '' : 'none';
+    clearRequestTestResult();
+  }
+
+  function renderRequestTestResult(result) {
+    $('#req-test-result').style.display = '';
+    $('#req-test-status').textContent = String(result.status ?? '—');
+    $('#req-test-duration').textContent = `${result.duration_ms ?? 0} ms`;
+    $('#req-test-request-line').value =
+      [String(result.request_method || '').toUpperCase(), String(result.request_url || '').trim()]
+        .filter(Boolean)
+        .join(' ');
+    $('#req-test-request-headers').value = Object.entries(result.request_headers || {})
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+    $('#req-test-request-body').value = result.request_body || '';
+    $('#req-test-response-headers').value = Object.entries(result.response_headers || {})
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+    $('#req-test-response-extracted').value = result.extracted_response_body || '';
+    $('#req-test-response-raw').value = result.raw_response_body || '';
+  }
+
+  function clearRequestTestResult() {
+    $('#req-test-result').style.display = 'none';
+    $('#req-test-status').textContent = '—';
+    $('#req-test-duration').textContent = '—';
+    $('#req-test-request-line').value = '';
+    $('#req-test-request-headers').value = '';
+    $('#req-test-request-body').value = '';
+    $('#req-test-response-headers').value = '';
+    $('#req-test-response-extracted').value = '';
+    $('#req-test-response-raw').value = '';
+  }
+
+  function buildRequestFromForm() {
+    const headers = readRequestHeadersFromForm();
+    const authType = $('#req-auth-type').value;
+    let auth = { type: 'none' };
+    if (authType === 'bearer') {
+      auth = { type: 'bearer', token_env: $('#req-auth-token-env').value.trim() };
+    } else if (authType === 'custom-header') {
+      auth = {
+        type: 'custom-header',
+        header_name: $('#req-auth-header-name').value.trim(),
+        value_env: $('#req-auth-value-env').value.trim(),
+      };
+    }
+
+    let body;
+    if (requestEditor.bodyMode === 'raw') {
+      body = { format: 'raw', content: $('#req-body-raw-text').value };
+    } else {
+      const text = $('#req-body-json').value.trim();
+      let parsed;
+      try {
+        parsed = text === '' ? {} : JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Body is not valid JSON: ${e.message}`);
       }
-      throw new Error(`Request "${requestLabel}" could not be prepared: ${message}`);
-    }
-  }
-
-  function extractConfigToDraft(extract) {
-    if (!extract || !extract.type || extract.type === 'raw') {
-      return { type: 'raw', value: '' };
-    }
-    if (extract.type === 'jsonpath') {
-      return { type: 'jsonpath', value: extract.path || '' };
-    }
-    if (extract.type === 'regex') {
-      return { type: 'regex', value: extract.pattern || '' };
-    }
-    return { type: 'raw', value: '' };
-  }
-
-  function requestRecordToDraft(record) {
-    const request = record.request || {};
-    let authType = 'none';
-    let authEnv = '';
-    let authHeader = '';
-    const auth = request.auth || {};
-    if (auth.type === 'bearer') {
-      authType = 'bearer';
-      authEnv = auth.token_env || '';
-    } else if (auth.type === 'basic') {
-      authType = 'basic';
-      authEnv = auth.user_env || '';
-    } else if (auth.type === 'custom-header') {
-      authType = 'api_key';
-      authEnv = auth.value_env || '';
-      authHeader = auth.header_name || '';
+      body = { format: 'json', content: parsed };
     }
 
-    const headers = request.headers || {};
-    const extract = extractConfigToDraft(request.response && request.response.extract);
+    const extType = $('#req-extract-type').value;
+    let extract;
+    if (extType === 'jsonpath') {
+      extract = { type: 'jsonpath', path: $('#req-extract-path').value.trim() };
+    } else if (extType === 'regex') {
+      extract = { type: 'regex', pattern: $('#req-extract-path').value.trim() };
+    } else {
+      extract = { type: 'raw' };
+    }
 
-    return {
-      id: request.id,
-      name: request.name || request.id,
-      method: request.method || 'POST',
-      url: request.url || '',
-      endpoint_type: normalizeRequestAdapter(request.adapter),
-      auth_type: authType,
-      auth_env: authEnv,
-      auth_header: authHeader,
-      headers_mode: 'structured',
-      headers: headersObjectToRows(headers),
-      raw_headers: headersObjectToRaw(headers),
-      content_type_hint: headers['Content-Type'] || headers['content-type'] || '',
-      body_format: (request.body && request.body.format) || 'json',
-      body_text: bodyContentToDraftText((request.body && request.body.format) || 'json', request.body && request.body.content),
-      response_extract_type: extract.type,
-      response_extract_value: extract.value,
-      timeout_seconds: request.timeout_seconds || 30,
-      target_id: record.target_id || '',
-      primary: !!record.primary,
+    const bindRaw = ($('#req-bind')?.value || '').trim();
+    const bind = bindRaw === '' ? null : bindRaw;
+    const tagRaw = ($('#req-tag')?.value || '').trim();
+    const tag = tagRaw === '' ? null : tagRaw;
+
+    const out = {
+      version: 1,
+      id: $('#req-id').value.trim(),
+      name: $('#req-name').value.trim(),
+      method: $('#req-method').value.toUpperCase(),
+      url: $('#req-url').value.trim(),
+      auth,
+      headers,
+      body,
+      response: bind ? { extract, bind } : { extract },
+      timeout_seconds: Math.max(1, Number($('#req-timeout').value || 30)),
+      adapter: body.format === 'raw' ? 'raw-http' : 'custom-rest',
     };
+    if (tag) out.tag = tag;
+    return out;
   }
 
-  function updateTargetAuthUI() {
-    const v = $('#target-auth-type').value;
-    $('#auth-value-row').style.display = v === 'none' ? 'none' : '';
-    $('#auth-header-row').style.display = v === 'api_key' ? '' : 'none';
-    $('#target-auth-fetch-group').style.display = v === 'bearer' ? '' : 'none';
-    // Keychain-backed token UI is only shown for single-secret auth modes.
-    // Basic auth uses two env vars (user + pass) and is env-var-only for now.
-    const tokenRowVisible = v === 'bearer' || v === 'api_key';
-    $('#auth-token-row').style.display = tokenRowVisible ? '' : 'none';
-    updateTargetAuthAcquisitionUI();
-    if (tokenRowVisible) refreshAuthTokenStatus();
-  }
-
-  function ensureAuthAcquisitionDraft() {
-    if (!targetEditorState.authAcquisition) {
-      targetEditorState.authAcquisition = blankAuthAcquisitionDraft();
+  async function loadRequestList(selectAfter = '') {
+    const list = $('#request-list');
+    list.innerHTML = '';
+    let requests;
+    try {
+      requests = await API.call('list_requests', {});
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
     }
-    return targetEditorState.authAcquisition;
+
+    $('#request-empty').style.display = requests.length === 0 ? '' : 'none';
+
+    requests.forEach(r => {
+      const li = document.createElement('li');
+      li.className = 'target-card-row';
+      if (r.id === requestEditor.currentId) li.classList.add('active');
+      li.dataset.id = r.id;
+      const urlShort = (r.url || '').replace(/^https?:\/\//, '');
+      li.innerHTML = `
+        <div class="target-card-name">${esc(r.name || r.id)}</div>
+        <div class="target-card-url">${esc(r.method || 'POST')} · ${esc(urlShort)}</div>`;
+      li.addEventListener('click', () => openRequestEditor(r.id));
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn-icon btn-row-delete';
+      deleteBtn.title = 'Delete request';
+      deleteBtn.setAttribute('aria-label', 'Delete request');
+      deleteBtn.innerHTML = ICONS.archive;
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        attemptDeleteRequest(r.id);
+      });
+      li.appendChild(deleteBtn);
+      list.appendChild(li);
+    });
+
+    if (selectAfter) {
+      openRequestEditor(selectAfter);
+    } else {
+      // Show welcome when nothing is selected (form is hidden).
+      if ($('#request-form').style.display === 'none' || !$('#request-form').style.display) {
+        $('#request-welcome').style.display = '';
+      }
+    }
   }
 
-  function syncAuthAcquisitionDraftFromForm() {
-    const draft = ensureAuthAcquisitionDraft();
-    draft.auth_source = $('#target-auth-source').value || 'manual';
-    draft.auth_login_env = $('#target-auth-login-env').value.trim();
-    draft.auth_password_env = $('#target-auth-password-env').value.trim();
-    draft.auth_login_url = $('#target-auth-login-url').value.trim();
-    draft.auth_login_method = $('#target-auth-login-method').value || 'POST';
-    draft.auth_login_headers = headersRowsToObject(rawHeadersToRows($('#target-auth-login-headers').value));
-    draft.auth_login_body_template = $('#target-auth-body-template').value;
-    draft.auth_token_json_path = $('#target-auth-token-path').value.trim();
-    draft.auth_login_timeout_seconds = Number($('#target-auth-login-timeout').value || 60);
-    return draft;
+  function startNewRequest() {
+    requestEditor.currentId = '';
+    populateRequestEditor(blankRequest());
+    $('#req-id').disabled = false;
+    $('#request-welcome').style.display = 'none';
+    $('#request-form').style.display = '';
+    $('#btn-req-delete').style.display = 'none';
+    $$('#request-list .target-card-row').forEach((row) => row.classList.remove('active'));
+    setTimeout(() => $('#req-name').focus(), 0);
   }
 
-  function populateAuthAcquisitionEditor(draft) {
-    const next = draft || blankAuthAcquisitionDraft();
-    targetEditorState.authAcquisition = {
-      ...blankAuthAcquisitionDraft(),
-      ...next,
-      auth_login_headers: next.auth_login_headers || { 'Content-Type': 'application/json' },
-    };
-
-    $('#target-auth-source').value = targetEditorState.authAcquisition.auth_source || 'manual';
-    $('#target-auth-login-env').value = targetEditorState.authAcquisition.auth_login_env || '';
-    $('#target-auth-password-env').value = targetEditorState.authAcquisition.auth_password_env || '';
-    $('#target-auth-login-url').value = targetEditorState.authAcquisition.auth_login_url || '';
-    $('#target-auth-login-method').value = targetEditorState.authAcquisition.auth_login_method || 'POST';
-    $('#target-auth-login-headers').value = headersObjectToRaw(targetEditorState.authAcquisition.auth_login_headers || {});
-    $('#target-auth-body-template').value = targetEditorState.authAcquisition.auth_login_body_template || '';
-    $('#target-auth-token-path').value = targetEditorState.authAcquisition.auth_token_json_path || '';
-    $('#target-auth-login-timeout').value = targetEditorState.authAcquisition.auth_login_timeout_seconds || 60;
-    updateTargetAuthAcquisitionUI();
+  async function openRequestEditor(id) {
+    let req;
+    try {
+      req = await API.call('get_request', { id });
+    } catch (err) {
+      toast(err.message, 'error');
+      return;
+    }
+    if (!req) {
+      toast(`Request '${id}' not found`, 'error');
+      return;
+    }
+    requestEditor.currentId = req.id;
+    populateRequestEditor(req);
+    $('#request-welcome').style.display = 'none';
+    $('#request-form').style.display = '';
+    $$('#request-list .target-card-row').forEach((row) => {
+      row.classList.toggle('active', row.dataset.id === req.id);
+    });
   }
 
-  function updateTargetAuthAcquisitionUI() {
-    const authType = $('#target-auth-type').value;
-    const authSource = $('#target-auth-source').value || 'manual';
-    const bearerMode = authType === 'bearer';
-    const httpMode = bearerMode && authSource === 'http_login';
-    $('#target-auth-http-config').style.display = httpMode ? '' : 'none';
-    $('#target-auth-fetch-action-row').style.display = httpMode ? '' : 'none';
+  // Expose for the top-level click delegation so the Requests buttons
+  // and per-row clicks work even if a later DCL setup step throws.
+  window.__hamm0r.startNewRequest = startNewRequest;
+  window.__hamm0r.openRequestEditor = openRequestEditor;
+
+  // Body tab switching
+  document.addEventListener('click', (e) => {
+    const tab = e.target.closest('#req-body-tabs .tab');
+    if (!tab) return;
+    setRequestBodyMode(tab.dataset.bodyTab);
+  });
+
+  // Live prompt-placeholder detection on either textarea
+  ['req-body-json', 'req-body-raw-text'].forEach(id => {
+    document.addEventListener('input', (e) => {
+      if (e.target && e.target.id === id) updatePromptDetector();
+    });
+  });
+
+  // Auth-type dependent field toggling
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'req-auth-type') {
+      $('#req-auth-bearer').style.display = e.target.value === 'bearer' ? '' : 'none';
+      $('#req-auth-custom').style.display = e.target.value === 'custom-header' ? '' : 'none';
+      if (e.target.value === 'bearer') {
+        refreshRequestAuthTokenStatus().catch((err) => {
+          console.error('refreshRequestAuthTokenStatus', err);
+        });
+      }
+    }
+    if (e.target && e.target.id === 'req-extract-type') {
+      $('#req-extract-path').style.display = e.target.value === 'raw' ? 'none' : '';
+    }
+  });
+
+  // Wire the static buttons (these elements only ever exist once).
+  if ($('#btn-new-request')) {
+    $('#btn-new-request').addEventListener('click', startNewRequest);
+  }
+  if ($('#btn-request-get-started')) {
+    $('#btn-request-get-started').addEventListener('click', startNewRequest);
+  }
+  if ($('#btn-req-add-header')) {
+    $('#btn-req-add-header').addEventListener('click', () => addRequestHeaderRow('', ''));
+  }
+  if ($('#btn-req-cancel')) {
+    $('#btn-req-cancel').addEventListener('click', () => {
+      $('#request-form').style.display = 'none';
+      $('#request-welcome').style.display = '';
+      clearRequestTestResult();
+    });
+  }
+  if ($('#btn-req-fire')) {
+    $('#btn-req-fire').addEventListener('click', async () => {
+      const btn = $('#btn-req-fire');
+      btn.disabled = true;
+      try {
+        const request = buildRequestFromForm();
+        const result = await API.call('test_request', {
+          request,
+          session_strategy: 'none',
+          session_field: null,
+          prompt_text: $('#req-test-prompt').value,
+        });
+        renderRequestTestResult(result);
+        toast(
+          `Request fired: ${result.status}`,
+          result.status >= 200 && result.status < 400 ? 'success' : 'info',
+        );
+      } catch (err) {
+        clearRequestTestResult();
+        toast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+  // ── Bearer-token keychain UI ───────────────────────────────────────
+  // Stores a token in the OS credential vault under the env-var name
+  // shown in #req-auth-token-env. The runner resolves the env var
+  // first and falls back to the keychain — see secrets.rs::resolve_token.
+  // Plaintext crosses the JS↔Rust bridge exactly once on save and is
+  // never read back into the UI.
+
+  let authTokenStatusTimer = null;
+  function scheduleAuthTokenStatusRefresh() {
+    clearTimeout(authTokenStatusTimer);
+    authTokenStatusTimer = setTimeout(() => {
+      refreshRequestAuthTokenStatus().catch((err) => {
+        console.error('refreshRequestAuthTokenStatus', err);
+      });
+    }, 200);
   }
 
-  function buildAcquireTargetAuthDto() {
-    syncAuthAcquisitionDraftFromForm();
-    return {
-      auth_type: $('#target-auth-type').value,
-      auth_env: $('#target-auth-value').value.trim() || null,
-      auth_source: targetEditorState.authAcquisition?.auth_source || 'manual',
-      auth_login_env: targetEditorState.authAcquisition?.auth_login_env || null,
-      auth_password_env: targetEditorState.authAcquisition?.auth_password_env || null,
-      auth_login_url: targetEditorState.authAcquisition?.auth_login_url || null,
-      auth_login_method: targetEditorState.authAcquisition?.auth_login_method || null,
-      auth_login_headers: targetEditorState.authAcquisition?.auth_login_headers || {},
-      auth_login_body_template: targetEditorState.authAcquisition?.auth_login_body_template || null,
-      auth_token_json_path: targetEditorState.authAcquisition?.auth_token_json_path || null,
-      auth_login_timeout_seconds: Number(targetEditorState.authAcquisition?.auth_login_timeout_seconds || 60),
-    };
-  }
+  async function refreshRequestAuthTokenStatus() {
+    const pill = $('#req-auth-token-status');
+    const setBtn = $('#btn-req-auth-token-set');
+    const forgetBtn = $('#btn-req-auth-token-forget');
+    if (!pill || !setBtn || !forgetBtn) return;
 
-  let _authTokenStatusDebounce = null;
-
-  async function refreshAuthTokenStatus() {
-    const statusEl = $('#auth-token-status');
-    const setBtn = $('#btn-auth-token-set');
-    const forgetBtn = $('#btn-auth-token-forget');
-    const varName = $('#target-auth-value').value.trim();
-
+    const varName = ($('#req-auth-token-env').value || '').trim();
     if (!varName) {
-      statusEl.dataset.state = 'empty';
-      statusEl.textContent = 'Enter an env var name above';
+      pill.dataset.state = 'empty';
+      pill.textContent = 'Enter an env var name above';
       setBtn.disabled = true;
       forgetBtn.style.display = 'none';
       return;
     }
     setBtn.disabled = false;
-    setBtn.title = '';
-    statusEl.dataset.state = 'empty';
-    statusEl.textContent = 'Checking…';
 
     try {
       const status = await API.call('bearer_token_status', { var: varName });
-
-      // Keychain backend itself unreachable (typical on WSL/headless Linux
-      // without a Secret Service daemon). Force the env-var-only path.
-      if (status.keychain_available === false) {
-        if (status.env_var_set) {
-          statusEl.dataset.state = 'env';
-          statusEl.textContent = `Using env var $${varName} — keychain unavailable here`;
-        } else {
-          statusEl.dataset.state = 'missing';
-          statusEl.textContent = `Keychain unavailable — export $${varName} in your shell`;
-        }
+      if (!status.keychain_available) {
+        pill.dataset.state = 'unavailable';
+        pill.textContent = 'OS keychain unavailable — env var only';
         setBtn.disabled = true;
-        setBtn.title = 'Keychain backend not reachable in this environment (e.g. WSL without Secret Service). Use the env var instead.';
         forgetBtn.style.display = 'none';
         return;
       }
-
-      if (status.stored_in_keychain) {
-        statusEl.dataset.state = 'stored';
-        statusEl.textContent = status.env_var_set
-          ? 'Stored in keychain (env var also set — keychain wins)'
-          : 'Stored in keychain';
-        forgetBtn.style.display = '';
+      forgetBtn.style.display = status.stored_in_keychain ? '' : 'none';
+      if (status.env_var_set && status.stored_in_keychain) {
+        pill.dataset.state = 'env';
+        pill.textContent = 'env var set (wins) · keychain entry exists';
       } else if (status.env_var_set) {
-        statusEl.dataset.state = 'env';
-        statusEl.textContent = `Using env var $${varName}`;
-        forgetBtn.style.display = 'none';
+        pill.dataset.state = 'env';
+        pill.textContent = 'env var set';
+      } else if (status.stored_in_keychain) {
+        pill.dataset.state = 'keychain';
+        pill.textContent = 'stored in keychain';
       } else {
-        statusEl.dataset.state = 'missing';
-        statusEl.textContent = 'Not set — runs will fail';
-        forgetBtn.style.display = 'none';
+        pill.dataset.state = 'missing';
+        pill.textContent = 'not set';
       }
     } catch (err) {
-      statusEl.dataset.state = 'missing';
-      statusEl.textContent = 'Status check failed';
-      forgetBtn.style.display = 'none';
-      console.error('bearer_token_status', err);
+      pill.dataset.state = 'error';
+      pill.textContent = `status error: ${err.message || err}`;
     }
   }
 
-  function openAuthTokenModal() {
-    const varName = $('#target-auth-value').value.trim();
+  function openRequestAuthTokenModal() {
+    const varName = ($('#req-auth-token-env').value || '').trim();
     if (!varName) {
-      toast('Enter an env var name first', 'error');
+      toast('Enter an env var name first.', 'error');
       return;
     }
-    $('#auth-token-modal-var').textContent = varName;
-    const input = $('#auth-token-input');
-    input.value = '';
-    input.type = 'password';
-    $('#auth-token-reveal').checked = false;
-    $('#auth-token-modal').style.display = 'flex';
-    setTimeout(() => input.focus(), 0);
+    $('#req-auth-token-env-display').value = varName;
+    $('#req-auth-token-input').value = '';
+    $('#req-auth-token-input').type = 'password';
+    $('#req-auth-token-reveal').checked = false;
+    $('#req-auth-token-modal').style.display = 'flex';
+    setTimeout(() => $('#req-auth-token-input').focus(), 0);
   }
 
-  function closeAuthTokenModal() {
-    $('#auth-token-input').value = '';
-    $('#auth-token-modal').style.display = 'none';
+  function closeRequestAuthTokenModal() {
+    $('#req-auth-token-input').value = '';
+    $('#req-auth-token-modal').style.display = 'none';
   }
 
-  async function saveAuthTokenFromModal() {
-    const varName = $('#auth-token-modal-var').textContent.trim();
-    const input = $('#auth-token-input');
-    const token = input.value;
-    if (!varName || !token) {
-      toast('Token cannot be empty', 'error');
-      return;
-    }
+  async function saveRequestAuthTokenFromModal() {
+    const varName = ($('#req-auth-token-env-display').value || '').trim();
+    const token = $('#req-auth-token-input').value;
+    if (!varName) { toast('No env var name available.', 'error'); return; }
+    if (!token) { toast('Token must not be empty.', 'error'); return; }
     try {
       await API.call('set_bearer_token', { var: varName, token });
-      input.value = '';
-      closeAuthTokenModal();
-      toast(`Token saved to keychain for ${varName}`, 'success');
-      refreshAuthTokenStatus();
+      closeRequestAuthTokenModal();
+      toast(`Token stored in keychain for ${varName}.`, 'success');
+      await refreshRequestAuthTokenStatus();
     } catch (err) {
-      toast(err.message || 'Failed to save token', 'error');
+      toast(err.message || String(err), 'error');
     }
   }
 
-  async function forgetAuthToken() {
-    const varName = $('#target-auth-value').value.trim();
+  async function forgetRequestAuthToken() {
+    const varName = ($('#req-auth-token-env').value || '').trim();
     if (!varName) return;
     if (!confirm(`Remove the keychain entry for ${varName}?`)) return;
     try {
       await API.call('forget_bearer_token', { var: varName });
-      toast(`Token removed from keychain for ${varName}`, 'success');
-      refreshAuthTokenStatus();
+      toast(`Token removed for ${varName}.`, 'success');
+      await refreshRequestAuthTokenStatus();
     } catch (err) {
-      toast(err.message || 'Failed to remove token', 'error');
+      toast(err.message || String(err), 'error');
     }
   }
 
-  async function fetchAuthToken() {
-    try {
-      const dto = buildAcquireTargetAuthDto();
-      const result = await API.call('acquire_target_auth', { dto });
-      toast(result.message || 'Token fetched', 'success');
-      refreshAuthTokenStatus();
-    } catch (err) {
-      toast(err.message || 'Failed to fetch token', 'error');
-    }
+  if ($('#btn-req-auth-token-set')) {
+    $('#btn-req-auth-token-set').addEventListener('click', openRequestAuthTokenModal);
   }
-
-  function updateTargetEndpointUI() {
-    const adapter = $('#target-endpoint').value;
-    const defaultContentType =
-      adapter === 'raw_http' ? 'text/plain' :
-      adapter === 'openai_compat' ? 'application/json' :
-      ($('#target-body-format').value === 'form' ? 'application/x-www-form-urlencoded' :
-        $('#target-body-format').value === 'text' ? 'text/plain' : 'application/json');
-    if (!$('#target-content-type').value.trim()) {
-      $('#target-content-type').value = defaultContentType;
-    }
+  if ($('#btn-req-auth-token-forget')) {
+    $('#btn-req-auth-token-forget').addEventListener('click', forgetRequestAuthToken);
   }
-
-  function updateTargetSessionUI() {
-    $('#session-field-row').style.display =
-      $('#target-session-strategy').value === 'none' ? 'none' : '';
+  if ($('#req-auth-token-env')) {
+    $('#req-auth-token-env').addEventListener('input', scheduleAuthTokenStatusRefresh);
   }
-
-  function updateTargetHeadersUI() {
-    const mode = $('#target-headers-mode').value;
-    $('#target-headers-structured').style.display = mode === 'structured' ? '' : 'none';
-    $('#target-headers-raw').style.display = mode === 'raw' ? '' : 'none';
+  if ($('#req-auth-token-modal-close')) {
+    $('#req-auth-token-modal-close').addEventListener('click', closeRequestAuthTokenModal);
   }
-
-  function updateTargetResponseExtractUI() {
-    const mode = $('#target-response-extract-type').value;
-    $('#target-response-extract-value-row').style.display = mode === 'raw' ? 'none' : '';
-    const input = $('#target-response-extract-value');
-    if (mode === 'jsonpath') input.placeholder = '$.response';
-    if (mode === 'regex') input.placeholder = '(?s)answer:(.*)';
+  if ($('#req-auth-token-cancel')) {
+    $('#req-auth-token-cancel').addEventListener('click', closeRequestAuthTokenModal);
   }
-
-  function renderHeaderRows(rows) {
-    const container = $('#target-header-rows');
-    container.innerHTML = '';
-    (rows || [{ key: '', value: '' }]).forEach((row, index) => {
-      const item = document.createElement('div');
-      item.className = 'header-row-item';
-      item.innerHTML = `
-        <div class="form-row">
-          <label>${index === 0 ? 'Header name' : '&nbsp;'}</label>
-          <input type="text" class="target-header-key" value="${esc(row.key || '')}" placeholder="Accept">
-        </div>
-        <div class="form-row">
-          <label>${index === 0 ? 'Header value' : '&nbsp;'}</label>
-          <input type="text" class="target-header-value" value="${esc(row.value || '')}" placeholder="application/json">
-        </div>
-        <button type="button" class="btn btn-ghost header-row-remove" title="Remove header">x</button>`;
-      item.querySelector('.header-row-remove').addEventListener('click', () => {
-        const nextRows = collectHeaderRowsFromDom().filter((_, idx) => idx !== index);
-        renderHeaderRows(nextRows.length ? nextRows : [{ key: '', value: '' }]);
-      });
-      container.appendChild(item);
+  if ($('#req-auth-token-save')) {
+    $('#req-auth-token-save').addEventListener('click', saveRequestAuthTokenFromModal);
+  }
+  if ($('#req-auth-token-reveal')) {
+    $('#req-auth-token-reveal').addEventListener('change', (e) => {
+      $('#req-auth-token-input').type = e.target.checked ? 'text' : 'password';
     });
   }
-
-  function collectHeaderRowsFromDom() {
-    return Array.from($$('#target-header-rows .header-row-item')).map((row) => ({
-      key: row.querySelector('.target-header-key')?.value || '',
-      value: row.querySelector('.target-header-value')?.value || '',
-    }));
-  }
-
-  function logTargetEditorDebug(event, fields = {}) {
-    const safeFields = Object.fromEntries(
-      Object.entries(fields)
-        .filter(([, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => [key, String(value)]),
-    );
-    console.debug('[target-editor]', event, safeFields);
-    API.call('log_ui_debug', {
-      component: 'target-editor',
-      event,
-      fields: safeFields,
-    }).catch(() => {});
-  }
-
-  function addStructuredHeaderRow() {
-    syncCurrentRequestDraftFromForm();
-    const draft = ensureCurrentRequestDraft();
-    logTargetEditorDebug('add-header-click', {
-      target_id: $('#target-id')?.value.trim() || targetEditorState.targetId || '',
-      request_id: draft?.id || '',
-      request_count: targetEditorState.requests.length,
-      headers_mode: draft?.headers_mode || '',
-      header_rows_before: (draft?.headers || []).length,
-    });
-    if (!draft) {
-      toast('No request selected', 'error');
-      return;
-    }
-
-    const nextRows = draft.headers_mode === 'raw'
-      ? rawHeadersToRows(draft.raw_headers)
-      : (draft.headers || [{ key: '', value: '' }]);
-
-    draft.headers_mode = 'structured';
-    draft.headers = [...nextRows, { key: '', value: '' }];
-    draft.raw_headers = headersObjectToRaw(headersRowsToObject(draft.headers));
-
-    populateRequestEditor(draft);
-    logTargetEditorDebug('add-header-rendered', {
-      request_id: draft.id,
-      header_rows_after: (draft.headers || []).length,
-    });
-
-    const keys = $$('#target-header-rows .target-header-key');
-    const lastKey = keys[keys.length - 1];
-    if (lastKey) {
-      lastKey.focus();
-    }
-  }
-
-  function ensureCurrentRequestDraft() {
-    const targetName = $('#target-name')?.value.trim() || '';
-    const existingTargetId = $('#target-id')?.value.trim() || targetEditorState.targetId || '';
-    let currentId =
-      $('#target-request-id')?.value.trim() ||
-      targetEditorState.selectedRequestId ||
-      targetEditorState.requests[0]?.id ||
-      '';
-
-    if (!currentId) {
-      currentId = existingTargetId || slugifyEntityName(targetName || 'request', 'request');
-    }
-
-    let draft = targetEditorState.requests.find(r => r.id === currentId);
-    if (!draft) {
-      logTargetEditorDebug('ensure-current-request-create', {
-        current_id: currentId,
-        existing_target_id: existingTargetId,
-        selected_request_id: targetEditorState.selectedRequestId || '',
-        request_count_before: targetEditorState.requests.length,
-      });
-      draft = blankRequestDraft(existingTargetId, targetName);
-      draft.id = currentId;
-      draft.name = $('#target-request-name')?.value.trim() || draft.name;
-      draft.method = $('#target-method')?.value || draft.method;
-      draft.url = $('#target-url')?.value.trim() || draft.url;
-      draft.endpoint_type = $('#target-endpoint')?.value || draft.endpoint_type;
-      draft.auth_type = $('#target-auth-type')?.value || draft.auth_type;
-      draft.auth_env = $('#target-auth-value')?.value.trim() || draft.auth_env;
-      draft.auth_header = $('#target-auth-header')?.value.trim() || draft.auth_header;
-      draft.headers_mode = $('#target-headers-mode')?.value || draft.headers_mode;
-      draft.content_type_hint = $('#target-content-type')?.value.trim() || draft.content_type_hint;
-      draft.raw_headers = $('#target-headers-raw-text')?.value || draft.raw_headers;
-      draft.body_format = $('#target-body-format')?.value || draft.body_format;
-      draft.body_text = $('#target-body-text')?.value || draft.body_text;
-      draft.response_extract_type = $('#target-response-extract-type')?.value || draft.response_extract_type;
-      draft.response_extract_value = $('#target-response-extract-value')?.value.trim() || draft.response_extract_value;
-      draft.timeout_seconds = Number($('#target-timeout-seconds')?.value || draft.timeout_seconds || 30);
-      targetEditorState.requests.push(draft);
-      logTargetEditorDebug('ensure-current-request-created', {
-        draft_id: draft.id,
-        request_count_after: targetEditorState.requests.length,
-      });
-    }
-
-    targetEditorState.selectedRequestId = draft.id;
-    $('#target-request-id').value = draft.id;
-    return draft;
-  }
-
-  async function handleTargetFormSubmit(e) {
-    e.preventDefault();
-    publishTargetInteractionDebug('target-form submit', e);
-    syncCurrentRequestDraftFromForm();
-    syncAuthAcquisitionDraftFromForm();
-    ensureCurrentRequestDraft();
-
-    const targetName = $('#target-name').value.trim();
-    const existingId = $('#target-id').value.trim();
-    const targetId = existingId || slugifyEntityName(targetName || 'target', 'target');
-    $('#target-id').value = targetId;
-    targetEditorState.targetId = targetId;
-
-    const metaDto = {
-      id: targetId,
-      name: targetName,
-      request_ids: [],
-      session_strategy: $('#target-session-strategy').value,
-      session_field: $('#target-session-field').value.trim() || null,
-      auth_source: targetEditorState.authAcquisition?.auth_source || 'manual',
-      auth_login_env: targetEditorState.authAcquisition?.auth_login_env || null,
-      auth_password_env: targetEditorState.authAcquisition?.auth_password_env || null,
-      auth_login_url: targetEditorState.authAcquisition?.auth_login_url || null,
-      auth_login_method: targetEditorState.authAcquisition?.auth_login_method || null,
-      auth_login_headers: targetEditorState.authAcquisition?.auth_login_headers || {},
-      auth_login_body_template: targetEditorState.authAcquisition?.auth_login_body_template || null,
-      auth_token_json_path: targetEditorState.authAcquisition?.auth_token_json_path || null,
-      auth_login_timeout_seconds: Number(targetEditorState.authAcquisition?.auth_login_timeout_seconds || 60),
-      notes: $('#target-system-prompt').value.trim() || null,
-    };
-
-    try {
-      updateTargetEditorDebugStatus('Save step: validating target and request data…');
-      logTargetEditorDebug('save-start', {
-        target_id: targetId,
-        selected_request_id: targetEditorState.selectedRequestId || '',
-        request_count: targetEditorState.requests.length,
-        target_name_len: targetName.length,
-      });
-      validateTargetEditorBeforeSave(targetName);
-      logTargetEditorDebug('save-validated', {
-        target_id: targetId,
-        selected_request_id: targetEditorState.selectedRequestId || '',
-      });
-
-      const requestsToSave = targetEditorState.requests.map((draft) => ({
-        draft,
-        request: buildRequestFromDraftOrThrow(draft),
-      }));
-      updateTargetEditorDebugStatus(`Save step: built ${requestsToSave.length} request payload(s). Saving target metadata…`);
-      logTargetEditorDebug('save-built-requests', {
-        target_id: targetId,
-        request_ids: requestsToSave.map((entry) => entry.request.id).join(','),
-        body_lengths: requestsToSave
-          .map((entry) => `${entry.request.id}:${JSON.stringify(entry.request.body?.content ?? '').length}`)
-          .join(','),
-      });
-      metaDto.request_ids = requestsToSave.map((entry) => entry.request.id);
-
-      await API.call('save_target_meta', metaDto);
-      updateTargetEditorDebugStatus('Save step: target metadata saved. Saving requests…');
-      logTargetEditorDebug('save-target-meta-ok', {
-        target_id: targetId,
-        request_ids: metaDto.request_ids.join(','),
-      });
-
-      for (const entry of requestsToSave) {
-        updateTargetEditorDebugStatus(`Save step: saving request "${entry.request.id}"…`);
-        logTargetEditorDebug('save-request-start', {
-          target_id: targetId,
-          request_id: entry.request.id,
-          url_len: (entry.request.url || '').length,
-          method: entry.request.method,
-        });
-        await API.call('save_request', { target_id: targetId, request: entry.request });
-        logTargetEditorDebug('save-request-ok', {
-          target_id: targetId,
-          request_id: entry.request.id,
-        });
+  if ($('#req-auth-token-input')) {
+    $('#req-auth-token-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveRequestAuthTokenFromModal();
       }
-
-      toast('Target saved', 'success');
-      updateTargetEditorDebugStatus(`Save finished: target "${targetId}" saved successfully.`);
-      logTargetEditorDebug('save-finished', {
-        target_id: targetId,
-        request_count: requestsToSave.length,
-      });
-      await loadTargetList();
-      await openTargetEditor(targetId);
-    } catch (err) {
-      updateTargetEditorDebugStatus(`Save failed: ${err.message || String(err)}`);
-      logTargetEditorDebug('save-error', {
-        target_id: targetId,
-        selected_request_id: targetEditorState.selectedRequestId || '',
-        error: err.message || String(err),
-      });
-      toast(err.message, 'error');
-    }
+    });
   }
-
-  function validateTargetEditorBeforeSave(targetName) {
-    if (!targetName) {
-      $('#target-name').focus();
-      throw new Error('Target name is required');
-    }
-
-    if (!targetEditorState.requests.length) {
-      throw new Error('Add at least one request before saving');
-    }
-
-    const selectedRequest = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId)
-      || targetEditorState.requests[0];
-
-    if (!selectedRequest) {
-      throw new Error('No request selected');
-    }
-
-    const requestName = String(selectedRequest.name || '').trim();
-    if (!requestName) {
-      $('#target-request-name').focus();
-      throw new Error('Request name is required');
-    }
-
-    const requestUrl = String(selectedRequest.url || '').trim();
-    if (!requestUrl) {
-      $('#target-url').focus();
-      throw new Error('Request URL is required');
-    }
-
-    try {
-      new URL(requestUrl);
-    } catch (_err) {
-      $('#target-url').focus();
-      throw new Error('Request URL must be a valid absolute URL');
-    }
-  }
-
-  function syncCurrentRequestDraftFromForm() {
-    const draft = ensureCurrentRequestDraft();
-    if (!draft) return;
-    draft.name = $('#target-request-name').value.trim() || draft.name;
-    draft.method = $('#target-method').value;
-    draft.url = $('#target-url').value.trim();
-    draft.endpoint_type = $('#target-endpoint').value;
-    draft.auth_type = $('#target-auth-type').value;
-    draft.auth_env = $('#target-auth-value').value.trim();
-    draft.auth_header = $('#target-auth-header').value.trim();
-    draft.headers_mode = $('#target-headers-mode').value;
-    draft.content_type_hint = $('#target-content-type').value.trim();
-    draft.headers = collectHeaderRowsFromDom();
-    draft.raw_headers = $('#target-headers-raw-text').value;
-    draft.body_format = $('#target-body-format').value;
-    draft.body_text = $('#target-body-text').value;
-    draft.response_extract_type = $('#target-response-extract-type').value;
-    draft.response_extract_value = $('#target-response-extract-value').value.trim();
-    draft.timeout_seconds = Number($('#target-timeout-seconds').value || 30);
-    syncAuthAcquisitionDraftFromForm();
-  }
-
-  function populateRequestEditor(draft) {
-    if (!draft) return;
-    $('#target-request-id').value = draft.id;
-    $('#target-request-name').value = draft.name || '';
-    $('#target-method').value = draft.method || 'POST';
-    $('#target-url').value = draft.url || '';
-    $('#target-endpoint').value = draft.endpoint_type || 'custom_rest';
-    $('#target-auth-type').value = draft.auth_type || 'none';
-    $('#target-auth-value').value = draft.auth_env || '';
-    $('#target-auth-header').value = draft.auth_header || '';
-    $('#target-headers-mode').value = draft.headers_mode || 'structured';
-    $('#target-content-type').value = draft.content_type_hint || '';
-    renderHeaderRows(draft.headers || [{ key: '', value: '' }]);
-    $('#target-headers-raw-text').value = draft.raw_headers || '';
-    $('#target-body-format').value = draft.body_format || 'json';
-    $('#target-body-text').value = draft.body_text || '';
-    $('#target-response-extract-type').value = draft.response_extract_type || 'raw';
-    $('#target-response-extract-value').value = draft.response_extract_value || '';
-    $('#target-timeout-seconds').value = draft.timeout_seconds || 30;
-    updateTargetAuthUI();
-    updateTargetEndpointUI();
-    updateTargetHeadersUI();
-    updateTargetResponseExtractUI();
-    $('#btn-delete-request').style.display = targetEditorState.requests.length > 1 ? '' : 'none';
-  }
-
-  function renderTargetRequestList() {
-    const list = $('#target-request-list');
-    list.innerHTML = '';
-    if (targetEditorState.requests.length === 0) {
-      list.innerHTML = '<div class="target-request-row"><div class="target-request-main"><div class="target-request-name">No requests yet</div><div class="target-request-meta">Create the first request for this target.</div></div></div>';
-      $('#btn-delete-request').style.display = 'none';
-      return;
-    }
-
-    targetEditorState.requests.forEach((draft) => {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'target-request-row' + (draft.id === targetEditorState.selectedRequestId ? ' active' : '');
-      row.innerHTML = `
-        <div class="target-request-main">
-          <div class="target-request-name">${esc(draft.name || draft.id)}</div>
-          <div class="target-request-meta">${esc((draft.method || 'POST') + ' · ' + (draft.url || 'no url').replace(/^https?:\/\//, ''))}</div>
-        </div>
-        ${draft.primary ? '<span class="target-request-badge">primary</span>' : ''}`;
-      row.addEventListener('click', () => {
-        syncCurrentRequestDraftFromForm();
-        targetEditorState.selectedRequestId = draft.id;
-        clearTestRequestResult();
-        populateRequestEditor(draft);
-        renderTargetRequestList();
-      });
-      list.appendChild(row);
+  if ($('#request-form')) {
+    $('#request-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        const req = buildRequestFromForm();
+        if (!req.id) { toast('Id is required', 'error'); return; }
+        if (!req.name) { toast('Name is required', 'error'); return; }
+        if (!/^[a-z0-9][a-z0-9-]*$/.test(req.id)) {
+          toast('Id must be kebab-case (lowercase letters, digits, hyphens)', 'error');
+          return;
+        }
+        await API.call('save_request_global', { request: req });
+        toast(`Saved request '${req.name}'`, 'success');
+        requestEditor.currentId = req.id;
+        await loadRequestList(req.id);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
     });
   }
 
-  function ensureSelectedRequest() {
-    if (!targetEditorState.selectedRequestId && targetEditorState.requests.length > 0) {
-      targetEditorState.selectedRequestId = targetEditorState.requests[0].id;
-    }
-    const draft = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId);
-    if (draft) populateRequestEditor(draft);
-    renderTargetRequestList();
-  }
-
-  function renderTestRequestResult(result) {
-    $('#target-test-result').style.display = '';
-    $('#target-test-status').textContent = String(result.status ?? '—');
-    $('#target-test-duration').textContent = `${result.duration_ms ?? 0} ms`;
-    const headers = Object.entries(result.response_headers || {})
-      .map(([key, value]) => `${key}: ${value}`)
-      .join('\n');
-    $('#target-test-response-headers').value = headers;
-    $('#target-test-response-extracted').value = result.extracted_response_body || '';
-    $('#target-test-response-raw').value = result.raw_response_body || '';
-  }
-
-  function clearTestRequestResult() {
-    $('#target-test-result').style.display = 'none';
-    $('#target-test-status').textContent = '—';
-    $('#target-test-duration').textContent = '—';
-    $('#target-test-response-headers').value = '';
-    $('#target-test-response-extracted').value = '';
-    $('#target-test-response-raw').value = '';
-  }
-
-  $('#target-auth-type').addEventListener('change', updateTargetAuthUI);
-  $('#target-auth-source').addEventListener('change', () => {
-    syncAuthAcquisitionDraftFromForm();
-    updateTargetAuthAcquisitionUI();
-  });
-  $('#target-auth-value').addEventListener('input', () => {
-    clearTimeout(_authTokenStatusDebounce);
-    _authTokenStatusDebounce = setTimeout(refreshAuthTokenStatus, 250);
-  });
-  $('#btn-auth-fetch-token').addEventListener('click', () => {
-    void fetchAuthToken();
-  });
-  $('#btn-auth-token-set').addEventListener('click', openAuthTokenModal);
-  $('#btn-auth-token-forget').addEventListener('click', forgetAuthToken);
-  $('#auth-token-modal-close').addEventListener('click', closeAuthTokenModal);
-  $('#auth-token-cancel').addEventListener('click', closeAuthTokenModal);
-  $('#auth-token-save').addEventListener('click', saveAuthTokenFromModal);
-  $('#auth-token-reveal').addEventListener('change', (e) => {
-    $('#auth-token-input').type = e.target.checked ? 'text' : 'password';
-  });
-  $('#auth-token-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveAuthTokenFromModal();
-    }
-  });
-  $('#target-endpoint').addEventListener('change', updateTargetEndpointUI);
-  $('#target-session-strategy').addEventListener('change', updateTargetSessionUI);
-  $('#target-headers-mode').addEventListener('change', () => {
-    const mode = $('#target-headers-mode').value;
-    if (mode === 'raw') {
-      $('#target-headers-raw-text').value = headersObjectToRaw(headersRowsToObject(collectHeaderRowsFromDom()));
-    } else {
-      renderHeaderRows(rawHeadersToRows($('#target-headers-raw-text').value));
-    }
-    updateTargetHeadersUI();
-  });
-  $('#target-body-format').addEventListener('change', updateTargetEndpointUI);
-  $('#target-response-extract-type').addEventListener('change', updateTargetResponseExtractUI);
-  $('#btn-import-curl').addEventListener('click', () => {
-    $('#curl-import-text').value = '';
-    $('#curl-import-modal').style.display = 'flex';
-  });
-  $('#curl-import-close').addEventListener('click', () => {
-    $('#curl-import-modal').style.display = 'none';
-  });
-  $('#curl-import-cancel').addEventListener('click', () => {
-    $('#curl-import-modal').style.display = 'none';
-  });
-  $('#curl-import-apply').addEventListener('click', () => {
+  // Delete flow with references confirmation.
+  async function attemptDeleteRequest(id) {
+    const deletingCurrent = requestEditor.currentId === id;
+    let res;
     try {
-      syncCurrentRequestDraftFromForm();
-      const draft = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId);
-      if (!draft) {
-        toast('No request selected', 'error');
-        return;
-      }
-      const imported = parseCurlIntoDraft($('#curl-import-text').value, draft);
-      Object.assign(draft, imported);
-      clearTestRequestResult();
-      populateRequestEditor(draft);
-      renderTargetRequestList();
-      $('#curl-import-modal').style.display = 'none';
-      toast('curl imported', 'success');
+      res = await API.call('delete_request_global', { id, force: false });
     } catch (err) {
       toast(err.message, 'error');
-    }
-  });
-  $('#btn-test-request').addEventListener('click', async () => {
-    syncCurrentRequestDraftFromForm();
-    const draft = targetEditorState.requests.find(r => r.id === targetEditorState.selectedRequestId);
-    if (!draft) {
-      toast('No request selected', 'error');
       return;
     }
-
-    try {
-      const request = buildRequestFromDraftOrThrow(draft);
-      const result = await API.call('test_request', {
-        request,
-        session_strategy: $('#target-session-strategy').value,
-        session_field: $('#target-session-field').value.trim() || null,
-        prompt_text: $('#target-test-prompt').value,
-      });
-      renderTestRequestResult(result);
-      toast(`Test request completed: ${result.status}`, result.status >= 200 && result.status < 400 ? 'success' : 'info');
-    } catch (err) {
-      clearTestRequestResult();
-      toast(err.message, 'error');
-    }
-  });
-
-  // ── Targets: list + CRUD ───────────────────────────────────────────
-  async function loadTargetList() {
-    try {
-      const targets = await API.call('list_targets', {});
-      const ul = $('#target-list');
-      ul.innerHTML = '';
-      targets.forEach(t => {
-        const li = document.createElement('li');
-        li.className = 'target-card-row';
-        li.dataset.id = t.id;
-        li.innerHTML = `
-          <div class="target-card-name">${esc(t.name)}</div>
-          <div class="target-card-url">${esc((t.url || '').replace(/^https?:\/\//, ''))}</div>`;
-        li.addEventListener('click', () => openTargetEditor(t.id));
-        ul.appendChild(li);
-      });
-
-      const welcomeEl = $('#target-welcome');
-      const contentEl = $('#target-content');
-      if (targets.length === 0) {
-        welcomeEl.style.display = '';
-        contentEl.style.display = 'none';
-        $('#target-form').style.display = 'none';
-      } else {
-        welcomeEl.style.display = 'none';
-        contentEl.style.display = '';
-      }
-    } catch (err) { toast(err.message, 'error'); }
-  }
-
-  function startNewTarget() {
-    $('#target-form').reset();
-    const targetId = '';
-    const requestDraft = blankRequestDraft('', '');
-    targetEditorState.targetId = targetId;
-    targetEditorState.requests = [requestDraft];
-    targetEditorState.selectedRequestId = requestDraft.id;
-    targetEditorState.authAcquisition = blankAuthAcquisitionDraft();
-    $('#target-id').value = '';
-    $('#target-request-id').value = requestDraft.id;
-    $('#target-form').style.display = '';
-    updateTargetEditorDebugStatus('Waiting for interaction…');
-    $('#btn-delete-target').style.display = 'none';
-    $('#target-welcome').style.display = 'none';
-    $('#target-content').style.display = '';
-    $('#target-session-strategy').value = 'none';
-    $('#target-test-prompt').value = '';
-    clearTestRequestResult();
-    updateTargetSessionUI();
-    updateTargetHeadersUI();
-    updateTargetResponseExtractUI();
-    populateRequestEditor(requestDraft);
-    populateAuthAcquisitionEditor(targetEditorState.authAcquisition);
-    renderTargetRequestList();
-  }
-
-  $('#btn-new-target').addEventListener('click', startNewTarget);
-  $('#btn-get-started').addEventListener('click', startNewTarget);
-
-  async function openTargetEditor(targetId) {
-    try {
-      const [meta, requestRecords] = await Promise.all([
-        API.call('get_target_meta', { id: targetId }),
-        API.call('list_target_requests', { target_id: targetId }),
-      ]);
-      if (!meta) return;
-
-      targetEditorState.targetId = meta.id;
-      targetEditorState.requests = (requestRecords || []).map(requestRecordToDraft);
-      targetEditorState.selectedRequestId =
-        (targetEditorState.requests.find(r => r.primary) || targetEditorState.requests[0] || {}).id || '';
-      targetEditorState.authAcquisition = {
-        ...blankAuthAcquisitionDraft(),
-        auth_source: meta.auth_source || 'manual',
-        auth_login_env: meta.auth_login_env || '',
-        auth_password_env: meta.auth_password_env || '',
-        auth_login_url: meta.auth_login_url || '',
-        auth_login_method: meta.auth_login_method || 'POST',
-        auth_login_headers: meta.auth_login_headers || { 'Content-Type': 'application/json' },
-        auth_login_body_template: meta.auth_login_body_template || '{"email":"{{login}}","password":"{{password}}"}',
-        auth_token_json_path: meta.auth_token_json_path || '$.jwToken',
-        auth_login_timeout_seconds: Number(meta.auth_login_timeout_seconds || 60),
-      };
-
-      $('#target-id').value = meta.id;
-      $('#target-name').value = meta.name || '';
-      $('#target-session-strategy').value = meta.session_strategy || 'none';
-      $('#target-session-field').value = meta.session_field || '';
-      $('#target-system-prompt').value = meta.notes || '';
-      $('#target-test-prompt').value = '';
-      clearTestRequestResult();
-      updateTargetSessionUI();
-
-      $('#target-form').style.display = '';
-      updateTargetEditorDebugStatus('Loaded target editor. Waiting for interaction…');
-      $('#btn-delete-target').style.display = '';
-      $('#target-welcome').style.display = 'none';
-      $('#target-content').style.display = '';
-
-      ensureSelectedRequest();
-      populateAuthAcquisitionEditor(targetEditorState.authAcquisition);
-      $$('#target-list .target-card-row').forEach(li => li.classList.toggle('active', li.dataset.id === targetId));
-    } catch (err) { toast(err.message, 'error'); }
-  }
-
-  $('#btn-new-request').addEventListener('click', () => {
-    syncCurrentRequestDraftFromForm();
-    const targetName = $('#target-name').value.trim();
-    const draft = blankRequestDraft(targetEditorState.targetId, targetName);
-    targetEditorState.requests.push(draft);
-    targetEditorState.selectedRequestId = draft.id;
-    clearTestRequestResult();
-    populateRequestEditor(draft);
-    renderTargetRequestList();
-  });
-
-  $('#target-form').addEventListener('click', (event) => {
-    publishTargetInteractionDebug('target-form click', event);
-  }, true);
-
-  $('#btn-save-target').addEventListener('click', (event) => {
-    event.preventDefault();
-    publishTargetInteractionDebug('save button click', event);
-    void handleTargetFormSubmit(event);
-  }, true);
-
-  $('#btn-add-header-row').addEventListener('click', (event) => {
-    publishTargetInteractionDebug('add-header button click', event);
-  }, true);
-
-  $('#btn-delete-request').addEventListener('click', async () => {
-    const requestId = $('#target-request-id').value.trim();
-    if (!requestId) return;
-    if (targetEditorState.requests.length <= 1) {
-      toast('A target needs at least one request. Delete the whole target instead.', 'error');
-      return;
-    }
-    if (!confirm('Delete this request?')) return;
-
-    const persistedTargetId = $('#target-id').value.trim();
-    try {
-      if (persistedTargetId) {
-        await API.call('delete_request', { target_id: persistedTargetId, id: requestId });
-      }
-      targetEditorState.requests = targetEditorState.requests.filter(r => r.id !== requestId);
-      targetEditorState.selectedRequestId = targetEditorState.requests[0]?.id || '';
-      clearTestRequestResult();
-      ensureSelectedRequest();
+    if (!res.blocked) {
       toast('Request deleted', 'success');
-    } catch (err) { toast(err.message, 'error'); }
-  });
-
-  $('#btn-delete-target').addEventListener('click', async () => {
-    const id = $('#target-id').value;
-    if (!id) return;
-    if (!confirm('Delete this target? This cannot be undone.')) return;
-    try {
-      await API.call('delete_target', { id });
-      toast('Target deleted', 'success');
-      $('#target-form').style.display = 'none';
-      $('#btn-delete-target').style.display = 'none';
-      $('#target-id').value = '';
-      targetEditorState.targetId = '';
-      targetEditorState.requests = [];
-      targetEditorState.selectedRequestId = '';
-      loadTargetList();
-      if (wb.activeTargetId === id) {
-        wb.activeTargetId = null;
-        loadWorkbenchTargets();
+      if (deletingCurrent) {
+        requestEditor.currentId = '';
+        $('#request-form').style.display = 'none';
+        $('#request-welcome').style.display = '';
+        clearRequestTestResult();
       }
-    } catch (err) { toast(err.message, 'error'); }
-  });
+      await loadRequestList();
+      return;
+    }
+    // Show references dialog.
+    requestEditor.pendingDeleteId = id;
+    const summary = $('#req-delete-summary');
+    const refs = $('#req-delete-refs');
+    summary.textContent = `This request is referenced by ${res.references.length} item(s):`;
+    refs.innerHTML = '';
+    res.references.forEach(r => {
+      const li = document.createElement('li');
+      if (r.kind === 'target') {
+        li.textContent = `Target: ${r.name} (${r.id})`;
+      } else if (r.kind === 'scenario') {
+        li.textContent = `Scenario step: ${r.name} (${r.id}) → ${r.step_id}`;
+      } else {
+        li.textContent = JSON.stringify(r);
+      }
+      refs.appendChild(li);
+    });
+    $('#req-delete-dialog').style.display = 'flex';
+  }
+
+  if ($('#btn-req-delete')) {
+    $('#btn-req-delete').addEventListener('click', () => {
+      if (requestEditor.currentId) attemptDeleteRequest(requestEditor.currentId);
+    });
+  }
+  if ($('#btn-req-delete-cancel')) {
+    $('#btn-req-delete-cancel').addEventListener('click', () => {
+      $('#req-delete-dialog').style.display = 'none';
+      requestEditor.pendingDeleteId = '';
+    });
+  }
+  if ($('#btn-req-delete-confirm')) {
+    $('#btn-req-delete-confirm').addEventListener('click', async () => {
+      const id = requestEditor.pendingDeleteId;
+      if (!id) return;
+      try {
+        await API.call('delete_request_global', { id, force: true });
+        toast('Request deleted (with references cleaned)', 'success');
+        $('#req-delete-dialog').style.display = 'none';
+        requestEditor.pendingDeleteId = '';
+        if (requestEditor.currentId === id) {
+          requestEditor.currentId = '';
+          $('#request-form').style.display = 'none';
+          $('#request-welcome').style.display = '';
+          clearRequestTestResult();
+        }
+        await loadRequestList();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+  }
+
 
   // ── Shared prompt filter (used by library + picker) ──────────────
   function applyPromptFilter(prompts, owaspFilter, searchText) {
@@ -3818,9 +1433,15 @@ document.addEventListener('DOMContentLoaded', () => {
   let libraryFilter = { owasp: '', search: '' };
   let libraryDebounce = null;
 
+  // Last-known full prompt list. Populated by loadPrompts so report
+  // helpers like renderEngagementReport can resolve `prompt_id` →
+  // `owasp_ref` without an extra round-trip.
+  let cachedPrompts = [];
+
   async function loadPrompts() {
     try {
       const all = await API.call('list_prompts', {});
+      cachedPrompts = all;
       const prompts = applyPromptFilter(all, libraryFilter.owasp, libraryFilter.search);
       renderPrompts(prompts);
       $('#prompt-count').textContent = `${prompts.length} prompts`;
@@ -3840,11 +1461,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const row = document.createElement('div');
       row.className = 'prompt-row';
       row.dataset.id = p.id;
+      const displayName = p.name || p.id;
       row.innerHTML = `
         <div class="meta">
-          <span class="id">${esc(p.id)}</span>
-          <span class="owasp">${esc(p.owasp_ref)}</span>
-          <span class="owasp prompt-name">${esc(p.category || '')}</span>
+          <span class="prompt-name">${esc(displayName)}</span>
+          ${p.owasp_ref ? `<span class="owasp">${esc(p.owasp_ref)}</span>` : ''}
+          <span class="owasp">${esc(p.category || '')}</span>
           <span class="sev sev-${esc(sevKey)}">${esc(p.severity || '')}</span>
         </div>
         <div class="text">${esc(p.text)}</div>
@@ -3891,24 +1513,25 @@ document.addEventListener('DOMContentLoaded', () => {
     editingPromptId = promptId;
     const editorEl = $('#prompt-editor');
     editorEl.style.display = '';
+    const idHint = $('#pe-id-hint');
     if (promptId) {
       $('#editor-title').textContent = 'Edit Prompt';
-      $('#pe-id').readOnly = true;
       try {
-        const p = await API.call('get_prompt', { id: promptId });
-        if (!p) { toast('Prompt not found', 'error'); return; }
-        $('#pe-id').value = p.id;
-        $('#pe-text').value = p.text;
-        $('#pe-category').value = p.category;
-        $('#pe-owasp').value = p.owasp_ref;
-        $('#pe-severity').value = p.severity;
+        const found = await API.call('get_prompt', { id: promptId });
+        if (!found) { toast('Prompt not found', 'error'); return; }
+        const p = found.prompt;
+        $('#pe-name').value = p.name || p.id;
+        $('#pe-text').value = p.text || '';
+        $('#pe-category').value = found.category || '';
+        $('#pe-owasp').value = p.owasp_ref || '';
+        $('#pe-severity').value = (p.severity || 'LOW').toUpperCase();
         $('#pe-tags').value = (p.tags || []).join(', ');
-        $('#pe-source').value = p.source || '';
+        if (idHint) idHint.textContent = `id: ${p.id} (unchanged on save)`;
       } catch (err) { toast(err.message, 'error'); }
     } else {
       $('#editor-title').textContent = 'Add Prompt';
-      $('#pe-id').readOnly = false;
       $('#prompt-form').reset();
+      if (idHint) idHint.textContent = 'id is auto-derived from the name when you save.';
     }
   }
 
@@ -3919,28 +1542,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#prompt-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = {
-      id: $('#pe-id').value.trim(),
+    const name = $('#pe-name').value.trim();
+    if (!name) { toast('Name is required', 'error'); return; }
+    const category = $('#pe-category').value.trim();
+    if (!category) { toast('Category is required', 'error'); return; }
+
+    const dto = {
+      id: editingPromptId || '',
+      name,
+      category,
       text: $('#pe-text').value,
-      category: $('#pe-category').value,
-      owasp_ref: $('#pe-owasp').value,
       severity: $('#pe-severity').value,
-      tags: $('#pe-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       mode: 'single',
-      source: $('#pe-source').value.trim() || 'manual',
+      tags: $('#pe-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+      owasp_ref: $('#pe-owasp').value || null,
     };
     try {
       if (editingPromptId) {
-        await API.call('update_prompt', data);
+        await API.call('update_prompt', dto);
         toast('Prompt updated', 'success');
       } else {
-        await API.call('create_prompt', data);
-        toast('Prompt created', 'success');
+        const created = await API.call('create_prompt', dto);
+        toast(`Prompt created (id: ${created.id})`, 'success');
       }
       $('#prompt-editor').style.display = 'none';
       editingPromptId = null;
       loadPrompts();
-      if (wb.allPrompts.length) loadPickerPrompts(); // keep workbench picker in sync
     } catch (err) { toast(err.message, 'error'); }
   });
 
@@ -3950,7 +1577,6 @@ document.addEventListener('DOMContentLoaded', () => {
       await API.call('delete_prompt', { id });
       toast('Prompt deleted', 'success');
       loadPrompts();
-      if (wb.allPrompts.length) loadPickerPrompts(); // keep workbench picker in sync
     } catch (err) { toast(err.message, 'error'); }
   }
 
@@ -3988,19 +1614,35 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const scenarios = await API.call('list_scenarios', {});
       const ul = $('#scenario-list');
+      const empty = $('#scenario-list-empty');
       ul.innerHTML = '';
       scenarios.forEach(s => {
         const li = document.createElement('li');
-        li.textContent = s.name;
+        li.className = 'target-card-row';
         li.dataset.id = s.id;
         if (s.id === currentScenarioId) li.classList.add('active');
+        li.innerHTML = `
+          <div class="target-card-name">${esc(s.name || s.id)}</div>
+          <div class="target-card-url">${esc(s.id)}</div>`;
         li.addEventListener('click', () => openScenario(s.id));
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'btn-icon btn-row-delete';
+        deleteBtn.title = 'Delete scenario';
+        deleteBtn.setAttribute('aria-label', 'Delete scenario');
+        deleteBtn.innerHTML = ICONS.archive;
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteScenarioFromUi(s);
+        });
+        li.appendChild(deleteBtn);
         ul.appendChild(li);
       });
+      if (empty) empty.style.display = scenarios.length === 0 ? '' : 'none';
     } catch (err) { toast(err.message, 'error'); }
   }
 
-  $('#btn-new-scenario').addEventListener('click', async () => {
+  async function createNewScenario() {
     if (!dbOpen) { toast('Open an engagement first', 'error'); return; }
     try {
       const s = await API.call('create_scenario', { name: 'New Scenario' });
@@ -4008,7 +1650,10 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadScenarioList();
       openScenario(s.id);
     } catch (err) { toast(err.message, 'error'); }
-  });
+  }
+
+  $('#btn-new-scenario').addEventListener('click', createNewScenario);
+  $('#btn-scenario-get-started')?.addEventListener('click', createNewScenario);
 
   async function openScenario(scenarioId) {
     currentScenarioId = scenarioId;
@@ -4022,19 +1667,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Fill header fields
       $('#sc-name').value = s.name;
-      $('#sc-tags').value = (s.tags || []).join(', ');
-      $('#sc-repeat').value = s.repeat_count || 1;
+      $('#sc-repeat').value = s.repeat_count || s.repeat || 1;
 
-      // Load target dropdown
-      await loadTargetDropdown(s.target_id);
-
-      // Load steps
-      currentScenarioSteps = (s.steps || []).map(step => ({
-        ...step,
-        request_id: step.request_id || null,
-      }));
-      normalizeScenarioStepRequestsForTarget();
-      renderStepTimeline();
+      // Matrix-mode state. Read from the scenario YAML's matrix fields.
+      currentScenarioMatrix = {
+        request_ids: Array.isArray(s.request_ids) ? [...s.request_ids] : [],
+        owasp_refs: Array.isArray(s.library?.owasp_refs) ? [...s.library.owasp_refs] : [],
+        categories: Array.isArray(s.library?.categories) ? [...s.library.categories] : [],
+        shared_session: !!s.shared_session,
+      };
+      await renderScenarioMatrixUi();
 
       // Highlight in sidebar
       $$('#scenario-list li').forEach(li =>
@@ -4042,341 +1684,208 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { toast(err.message, 'error'); }
   }
 
-  async function loadTargetDropdown(selectedId) {
-    try {
-      const targets = await API.call('list_targets', {});
-      const sel = $('#sc-target');
-      sel.innerHTML = '<option value="">Select target...</option>';
-      targets.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.name;
-        sel.appendChild(opt);
-      });
-      if (selectedId) sel.value = selectedId;
-      await loadScenarioRequestOptions(sel.value || '');
-    } catch (err) { toast(`Failed to load targets: ${err.message}`, 'error'); }
-  }
-
-  async function loadScenarioRequestOptions(targetId) {
-    currentScenarioRequestOptions = [];
-    if (!targetId) return;
-
-    const requests = await API.call('list_target_requests', { target_id: targetId });
-    currentScenarioRequestOptions = requests.map((record) => ({
-      id: record.request?.id || '',
-      name: record.request?.name || record.request?.id || 'Unnamed request',
-      method: record.request?.method || 'POST',
-      url: record.request?.url || '',
-      primary: !!record.primary,
-    }));
-  }
-
-  function scenarioRequestLabel(requestId) {
-    if (!requestId) return 'Target default';
-    const request = currentScenarioRequestOptions.find((entry) => entry.id === requestId);
-    if (!request) return `Request ${requestId}`;
-    const meta = [request.method, (request.url || '').replace(/^https?:\/\//, '')]
-      .filter(Boolean)
-      .join(' ');
-    return meta ? `${request.name} · ${meta}` : request.name;
-  }
-
-  function normalizeScenarioStepRequestsForTarget() {
-    const validIds = new Set(currentScenarioRequestOptions.map((entry) => entry.id));
-    let cleared = 0;
-    currentScenarioSteps = currentScenarioSteps.map((step) => {
-      if (!step.request_id || validIds.has(step.request_id)) {
-        return step;
+  // ── Phase 2 matrix-mode editor helpers ────────────────────────────
+  async function renderScenarioMatrixUi() {
+    // Lazy-load global Requests + prompt index once per session.
+    if (currentScenarioMatrixGlobalRequests.length === 0) {
+      try {
+        currentScenarioMatrixGlobalRequests = await API.call('list_requests', {});
+      } catch (err) {
+        console.error('[matrix:list_requests]', err);
+        currentScenarioMatrixGlobalRequests = [];
       }
-      cleared += 1;
-      return { ...step, request_id: null };
-    });
-    if (cleared > 0) {
-      toast(`Cleared ${cleared} step request selection${cleared === 1 ? '' : 's'} that do not belong to the selected target.`, 'info');
     }
+    if (currentScenarioMatrixPromptIndex === null) {
+      try {
+        currentScenarioMatrixPromptIndex = await API.call('list_prompts', {});
+      } catch (err) {
+        console.error('[matrix:list_prompts]', err);
+        currentScenarioMatrixPromptIndex = [];
+      }
+    }
+    renderScenarioMatrixRequests();
+    renderScenarioMatrixOwasp();
+    renderScenarioMatrixCategories();
+    $('#sc-matrix-shared-session').checked = !!currentScenarioMatrix.shared_session;
+    updateMatrixPromptCounter();
   }
+
+  function renderScenarioMatrixRequests() {
+    const root = $('#sc-matrix-requests');
+    if (!root) return;
+    root.innerHTML = '';
+    const all = currentScenarioMatrixGlobalRequests || [];
+    if (all.length === 0) {
+      root.innerHTML =
+        '<div class="muted" style="padding:14px;font-size:12px;">' +
+        'No Requests defined yet. Build them in the Requests view.' +
+        '</div>';
+      return;
+    }
+    const checked = new Set(currentScenarioMatrix.request_ids);
+    all.forEach((req) => {
+      const row = document.createElement('div');
+      row.className = 'target-request-pick-row' + (checked.has(req.id) ? ' active' : '');
+      row.innerHTML = `
+        <label class="pick-checkbox">
+          <input type="checkbox" data-req-id="${esc(req.id)}" ${checked.has(req.id) ? 'checked' : ''}>
+          <span class="pick-name">${esc(req.name || req.id)}</span>
+          <span class="pick-meta">${esc((req.method || 'POST') + ' · ' + (req.url || '').replace(/^https?:\/\//, ''))}</span>
+        </label>
+      `;
+      row.querySelector('input[type=checkbox]').addEventListener('change', (e) => {
+        if (e.target.checked) {
+          if (!currentScenarioMatrix.request_ids.includes(req.id)) {
+            currentScenarioMatrix.request_ids.push(req.id);
+          }
+        } else {
+          currentScenarioMatrix.request_ids = currentScenarioMatrix.request_ids
+            .filter((id) => id !== req.id);
+        }
+        row.classList.toggle('active', e.target.checked);
+        updateMatrixPromptCounter();
+      });
+      root.appendChild(row);
+    });
+  }
+
+  function renderScenarioMatrixOwasp() {
+    const root = $('#sc-matrix-owasp');
+    if (!root) return;
+    root.innerHTML = '';
+    const refs = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10'];
+    refs.forEach((ref) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      const active = currentScenarioMatrix.owasp_refs.includes(ref);
+      chip.className = 'chip' + (active ? ' active' : '');
+      chip.dataset.owasp = ref;
+      chip.textContent = ref;
+      chip.addEventListener('click', () => {
+        if (currentScenarioMatrix.owasp_refs.includes(ref)) {
+          currentScenarioMatrix.owasp_refs = currentScenarioMatrix.owasp_refs
+            .filter((r) => r !== ref);
+        } else {
+          currentScenarioMatrix.owasp_refs.push(ref);
+        }
+        chip.classList.toggle('active');
+        updateMatrixPromptCounter();
+      });
+      root.appendChild(chip);
+    });
+  }
+
+  function renderScenarioMatrixCategories() {
+    const root = $('#sc-matrix-categories');
+    if (!root) return;
+    root.innerHTML = '';
+    const prompts = currentScenarioMatrixPromptIndex || [];
+    const categories = [...new Set(prompts.map((p) => String(p.category || '')))].filter(Boolean).sort();
+    if (categories.length === 0) {
+      root.innerHTML = '<span class="muted" style="font-size:11px;">No prompt categories on disk.</span>';
+      return;
+    }
+    categories.forEach((cat) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      const active = currentScenarioMatrix.categories.includes(cat);
+      chip.className = 'chip' + (active ? ' active' : '');
+      chip.dataset.category = cat;
+      chip.textContent = cat;
+      chip.addEventListener('click', () => {
+        if (currentScenarioMatrix.categories.includes(cat)) {
+          currentScenarioMatrix.categories = currentScenarioMatrix.categories
+            .filter((c) => c !== cat);
+        } else {
+          currentScenarioMatrix.categories.push(cat);
+        }
+        chip.classList.toggle('active');
+        updateMatrixPromptCounter();
+      });
+      root.appendChild(chip);
+    });
+  }
+
+  function updateMatrixPromptCounter() {
+    const out = $('#sc-matrix-prompt-counter');
+    if (!out) return;
+    const prompts = currentScenarioMatrixPromptIndex || [];
+    const matched = prompts.filter((p) => {
+      const owasp = String(p.owasp_ref || '');
+      const cat = String(p.category || '');
+      return (
+        currentScenarioMatrix.owasp_refs.includes(owasp) ||
+        currentScenarioMatrix.categories.includes(cat)
+      );
+    }).length;
+    const requestCount = currentScenarioMatrix.request_ids.length;
+    const total = matched * Math.max(1, requestCount);
+    out.textContent = `${matched} prompts × ${requestCount} request(s) = ${total} attempts (plus auth-chain prereqs).`;
+  }
+
+  // Listen on the shared-session checkbox.
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'sc-matrix-shared-session') {
+      currentScenarioMatrix.shared_session = !!e.target.checked;
+    }
+  });
 
   // ── Save scenario header ───────────────────────────────────────────
   $('#btn-save-scenario').addEventListener('click', async () => {
     if (!currentScenarioId) return;
 
-    // Collect sessions from steps
-    const sessions = [...new Set(currentScenarioSteps.map(s => s.session || 'A'))];
-    if (sessions.length === 0) sessions.push('A');
-
     const data = {
       id: currentScenarioId,
       name: $('#sc-name').value.trim() || 'Untitled',
-      target_id: $('#sc-target').value || null,
-      tags: $('#sc-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       repeat_count: parseInt($('#sc-repeat').value) || 1,
-      sessions: sessions,
+      // Matrix fields fed straight to the Scenario YAML.
+      request_ids: [...currentScenarioMatrix.request_ids],
+      library: {
+        owasp_refs: [...currentScenarioMatrix.owasp_refs],
+        categories: [...currentScenarioMatrix.categories],
+      },
+      shared_session: !!currentScenarioMatrix.shared_session,
     };
     try {
       await API.call('update_scenario', data);
-      // Save steps too
-      await API.call('save_steps', {
-        scenario_id: currentScenarioId,
-        steps: currentScenarioSteps.map(s => ({
-          id: s.id || null,
-          request_id: s.request_id || null,
-          session: s.session,
-          prompt_id: s.prompt_id || null,
-          prompt_text: s.prompt_text,
-          delay_ms: s.delay_ms || 0,
-        })),
-      });
       toast('Scenario saved', 'success');
       loadScenarioList();
     } catch (err) { toast(err.message, 'error'); }
   });
 
   // ── Delete scenario ────────────────────────────────────────────────
-  $('#btn-delete-scenario').addEventListener('click', async () => {
-    if (!currentScenarioId) return;
-    if (!confirm('Delete this scenario?')) return;
+  async function deleteScenarioFromUi(scenario) {
+    const id = typeof scenario === 'string' ? scenario : scenario?.id;
+    if (!id) return;
+    const label = typeof scenario === 'object' ? (scenario.name || scenario.id) : id;
+    if (!confirm(`Delete scenario "${label}"?`)) return;
     try {
-      await API.call('delete_scenario', { id: currentScenarioId });
-      currentScenarioId = null;
-      currentScenarioSteps = [];
-      $('#scenario-builder').style.display = 'none';
-      $('#scenario-empty').style.display = '';
+      await API.call('delete_scenario', { id });
+      if (currentScenarioId === id) {
+        currentScenarioId = null;
+        $('#scenario-builder').style.display = 'none';
+        $('#scenario-empty').style.display = '';
+      }
       toast('Scenario deleted', 'success');
       loadScenarioList();
     } catch (err) { toast(err.message, 'error'); }
-  });
-
-  // ── Step timeline rendering ────────────────────────────────────────
-  function renderStepTimeline() {
-    const container = $('#step-timeline');
-    container.innerHTML = '';
-    currentScenarioSteps.forEach((step, i) => {
-      const requestLabel = scenarioRequestLabel(step.request_id || null);
-      const row = document.createElement('div');
-      row.className = 'step-row';
-      row.innerHTML = `
-        <span class="step-num">${i + 1}</span>
-        <span class="step-session" data-session="${esc(step.session)}"></span>
-        <span class="step-session-label" data-session="${esc(step.session)}">${esc(step.session)}</span>
-        <span class="step-main">
-          <span class="step-request">${esc(requestLabel)}</span>
-          <span class="step-text">${esc(step.prompt_text)}</span>
-        </span>
-        <span class="step-actions">
-          <button class="step-edit" title="Edit">Ed</button>
-          <button class="step-up" title="Move up"${i === 0 ? ' disabled' : ''}>&#9650;</button>
-          <button class="step-down" title="Move down"${i === currentScenarioSteps.length - 1 ? ' disabled' : ''}>&#9660;</button>
-          <button class="step-del" title="Delete">&#10005;</button>
-        </span>`;
-      // Wire up buttons
-      row.querySelector('.step-edit').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openStepDialog(i).catch(err => toast(err.message, 'error'));
-      });
-      row.querySelector('.step-up').addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (i > 0) {
-          [currentScenarioSteps[i - 1], currentScenarioSteps[i]] =
-            [currentScenarioSteps[i], currentScenarioSteps[i - 1]];
-          renderStepTimeline();
-        }
-      });
-      row.querySelector('.step-down').addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (i < currentScenarioSteps.length - 1) {
-          [currentScenarioSteps[i], currentScenarioSteps[i + 1]] =
-            [currentScenarioSteps[i + 1], currentScenarioSteps[i]];
-          renderStepTimeline();
-        }
-      });
-      row.querySelector('.step-del').addEventListener('click', (e) => {
-        e.stopPropagation();
-        currentScenarioSteps.splice(i, 1);
-        renderStepTimeline();
-      });
-      container.appendChild(row);
-    });
   }
 
-  // ── Step dialog ────────────────────────────────────────────────────
-  $('#btn-add-step').addEventListener('click', () => {
-    openStepDialog(-1).catch(err => toast(err.message, 'error'));
-  });
-
-  async function openStepDialog(index) {
-    editingStepIndex = index;
-    $('#step-dialog-title').textContent = index >= 0 ? 'Edit Step' : 'Add Step';
-
-    // Populate session dropdown from current scenario sessions
-    const sessions = [...new Set(currentScenarioSteps.map(s => s.session))];
-    if (!sessions.includes('A')) sessions.unshift('A');
-    // Always offer next letter
-    const allLetters = 'ABCDEFGHIJ'.split('');
-    const nextLetter = allLetters.find(l => !sessions.includes(l));
-    if (nextLetter) sessions.push(nextLetter);
-
-    const sel = $('#step-session');
-    sel.innerHTML = '';
-    sessions.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = `Session ${s}`;
-      sel.appendChild(opt);
-    });
-
-    const targetId = $('#sc-target').value || '';
-    await loadScenarioRequestOptions(targetId);
-    normalizeScenarioStepRequestsForTarget();
-
-    const requestSelect = $('#step-request');
-    requestSelect.innerHTML = '';
-    const defaultOpt = document.createElement('option');
-    defaultOpt.value = '';
-    defaultOpt.textContent = targetId ? 'Target default request' : 'Select a target first';
-    requestSelect.appendChild(defaultOpt);
-    currentScenarioRequestOptions.forEach((request) => {
-      const opt = document.createElement('option');
-      opt.value = request.id;
-      opt.textContent = scenarioRequestLabel(request.id);
-      requestSelect.appendChild(opt);
-    });
-    requestSelect.disabled = !targetId;
-
-    // Load library prompts
-    const preselected = index >= 0 && currentScenarioSteps[index]?.prompt_id
-      ? [currentScenarioSteps[index].prompt_id]
-      : [];
-    loadLibraryChecklist(preselected);
-
-    if (index >= 0) {
-      const step = currentScenarioSteps[index];
-      sel.value = step.session;
-      if (step.prompt_id) {
-        $('#step-source-type').value = 'library';
-        $('#step-library-row').style.display = '';
-        $('#step-custom-row').style.display = 'none';
-      } else {
-        $('#step-source-type').value = 'custom';
-        $('#step-library-row').style.display = 'none';
-        $('#step-custom-row').style.display = '';
-      }
-      $('#step-request').value = step.request_id || '';
-      $('#step-prompt-text').value = step.prompt_text;
-      $('#step-delay').value = step.delay_ms || 0;
-    } else {
-      $('#step-form').reset();
-      $('#step-source-type').value = 'custom';
-      $('#step-library-row').style.display = 'none';
-      $('#step-custom-row').style.display = '';
-      $('#step-request').value = '';
-    }
-    $('#step-dialog').style.display = 'flex';
-  }
-
-  async function loadLibraryChecklist(selectedIds = []) {
-    try {
-      const prompts = await API.call('list_prompts', {});
-      const list = $('#step-library-list');
-      list.innerHTML = '';
-      const selected = new Set(selectedIds || []);
-      prompts.forEach(p => {
-        const row = document.createElement('label');
-        row.className = 'library-check-row';
-        row.innerHTML = `
-          <input type="checkbox" class="step-library-checkbox"
-                 value="${esc(p.id)}"
-                 data-text="${esc(p.text)}"
-                 ${selected.has(p.id) ? 'checked' : ''}>
-          <span><code>${esc(p.id)}</code> — ${esc(p.text.substring(0, 110))}</span>
-        `;
-        list.appendChild(row);
-      });
-    } catch (err) { toast(`Failed to load library: ${err.message}`, 'error'); }
-  }
-
-  $('#step-source-type').addEventListener('change', () => {
-    const isLibrary = $('#step-source-type').value === 'library';
-    $('#step-library-row').style.display = isLibrary ? '' : 'none';
-    $('#step-custom-row').style.display = isLibrary ? 'none' : '';
-  });
-
-  $('#sc-target').addEventListener('change', async () => {
-    try {
-      await loadScenarioRequestOptions($('#sc-target').value || '');
-      normalizeScenarioStepRequestsForTarget();
-      renderStepTimeline();
-    } catch (err) {
-      toast(`Failed to load target requests: ${err.message}`, 'error');
-    }
-  });
-
-  $('#step-library-select-all').addEventListener('click', () => {
-    $$('#step-library-list .step-library-checkbox').forEach(cb => { cb.checked = true; });
-  });
-
-  $('#step-library-clear').addEventListener('click', () => {
-    $$('#step-library-list .step-library-checkbox').forEach(cb => { cb.checked = false; });
-  });
-
-  $('#step-dialog-close').addEventListener('click', () => {
-    $('#step-dialog').style.display = 'none';
-  });
-  $('#step-cancel').addEventListener('click', () => {
-    $('#step-dialog').style.display = 'none';
-  });
-
-  $('#step-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const isLibrary = $('#step-source-type').value === 'library';
-
-    if (isLibrary) {
-      const session = $('#step-session').value;
-      const delayMs = parseInt($('#step-delay').value) || 0;
-      const selected = [...$$('#step-library-list .step-library-checkbox:checked')];
-      if (selected.length === 0) {
-        toast('Select at least one library prompt', 'error');
-        return;
-      }
-
-      const selectedSteps = selected.map(cb => ({
-        id: editingStepIndex >= 0 ? (currentScenarioSteps[editingStepIndex]?.id || null) : null,
-        request_id: $('#step-request').value || null,
-        session: session,
-        prompt_id: cb.value,
-        prompt_text: cb.dataset.text || '',
-        delay_ms: delayMs,
-      }));
-
-      if (editingStepIndex >= 0) {
-        currentScenarioSteps[editingStepIndex] = selectedSteps[0];
-      } else {
-        currentScenarioSteps.push(...selectedSteps);
-      }
-    } else {
-      const step = {
-        id: editingStepIndex >= 0 ? (currentScenarioSteps[editingStepIndex]?.id || null) : null,
-        request_id: $('#step-request').value || null,
-        session: $('#step-session').value,
-        prompt_id: null,
-        prompt_text: $('#step-prompt-text').value,
-        delay_ms: parseInt($('#step-delay').value) || 0,
-      };
-      if (editingStepIndex >= 0) {
-        currentScenarioSteps[editingStepIndex] = step;
-      } else {
-        currentScenarioSteps.push(step);
-      }
-    }
-    $('#step-dialog').style.display = 'none';
-    renderStepTimeline();
+  $('#btn-delete-scenario').addEventListener('click', async () => {
+    if (!currentScenarioId) return;
+    deleteScenarioFromUi(currentScenarioId);
   });
 
   // ── Run scenario ───────────────────────────────────────────────────
   $('#btn-run-scenario').addEventListener('click', async () => {
     if (!currentScenarioId) return;
-    if (!$('#sc-target').value) {
-      toast('Select a target first', 'error');
+    if (currentScenarioMatrix.request_ids.length === 0) {
+      toast('Pick at least one Request before running.', 'error');
+      return;
+    }
+    if (currentScenarioMatrix.owasp_refs.length === 0
+        && currentScenarioMatrix.categories.length === 0) {
+      toast('Pick at least one OWASP ref or category before running.', 'error');
       return;
     }
 
@@ -4454,6 +1963,13 @@ document.addEventListener('DOMContentLoaded', () => {
     $$('.eng-detail-panel').forEach((panel) => {
       panel.classList.toggle('active', panel.id === `eng-panel-${tab}`);
     });
+    const frame = document.getElementById('eng-report-frame');
+    if (frame) frame.style.display = tab === 'report' ? '' : 'none';
+    if (tab === 'report' && engagementDetail.activeRunId) {
+      const results = engagementDetail.resultsByRunId.get(engagementDetail.activeRunId) || [];
+      const run = engagementDetail.runs.find((item) => item.id === engagementDetail.activeRunId) || null;
+      renderEngagementReport(results, run);
+    }
   }
 
   $$('.eng-detail-tab').forEach((btn) => {
@@ -4487,26 +2003,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   }
 
-  function inferScenarioNameFromResults(results, targetId) {
-    const promptIds = results
-      .map(r => String(r.prompt_id || '').trim())
-      .filter(Boolean);
-    if (!promptIds.length) return '—';
-
-    const candidates = engagementDetail.scenarios
-      .filter(sc => !targetId || !sc.target_id || sc.target_id === targetId);
-
-    for (const sc of candidates) {
-      const scPromptIds = (sc.steps || [])
-        .map(s => String(s.prompt_id || '').trim())
-        .filter(Boolean);
-      if (scPromptIds.length && sequenceMatchesRepeated(promptIds, scPromptIds)) {
-        return sc.name;
-      }
-    }
-
-    if (promptIds.length === 1) return 'Workbench single-shot';
-    return 'Custom / Wizard run';
+  // Look up the Scenario name a run came from by reading the
+  // `scenario_id` recorded in the run header (set by matrix dispatcher).
+  // Returns '—' for ad-hoc runs (rerun path) or when the source
+  // scenario has been deleted.
+  function lookupScenarioNameForRun(run) {
+    const scenarioId = run?.scenario_id;
+    if (!scenarioId) return '—';
+    const found = (engagementDetail.scenarios || []).find(s => s.id === scenarioId);
+    return found?.name || `(deleted scenario: ${scenarioId})`;
   }
 
   async function hydrateEngagementDetailCatalogs() {
@@ -4602,6 +2107,9 @@ document.addEventListener('DOMContentLoaded', () => {
       coverage.innerHTML = '';
       preview.textContent = 'No report data yet.';
       preview.style.display = '';
+      engagementDetail.renderedReportSlug = null;
+      engagementDetail.renderedReportRunId = null;
+      engagementDetail.renderedReportHtml = null;
       const frame = document.getElementById('eng-report-frame');
       if (frame) frame.style.display = 'none';
       return;
@@ -4618,7 +2126,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     summary.textContent = `Run ${run?.id || '—'} · ${successful}/${total} successful · ${failed} failed · ${judged} judged`;
 
-    const owaspByPrompt = new Map((wb.allPrompts || []).map(p => [p.id, p.owasp_ref || null]));
+    const owaspByPrompt = new Map(cachedPrompts.map(p => [p.id, p.owasp_ref || null]));
     const counts = {};
     results.forEach((r) => {
       const ref = owaspByPrompt.get(r.prompt_id);
@@ -4643,12 +2151,36 @@ document.addEventListener('DOMContentLoaded', () => {
       `avg_latency_ms: ${Number.isFinite(avgLatency) ? avgLatency.toFixed(1) : 'n/a'}`,
     ].join('\n');
 
+    const frame = document.getElementById('eng-report-frame');
+    if (!$('#eng-panel-report')?.classList.contains('active')) {
+      if (frame) frame.style.display = 'none';
+      preview.style.display = '';
+      return;
+    }
+
     // If the analyzer has produced an HTML report for this run, replace
     // the textual snapshot with the rendered report. Reports live next
     // to verdicts in the engagement folder; absence is normal.
     if (run?.id && engagementDetail.slug) {
       tryRenderRunReportHtml(engagementDetail.slug, run.id, preview);
     }
+  }
+
+  function engagementVerdictBadgeHtml(result) {
+    const verdict = String(result?.judge_verdict || '').toUpperCase();
+    if (verdict === 'SUCCESS') {
+      return '<span class="verdict-badge verdict-success">success</span>';
+    }
+    if (verdict === 'FAIL') {
+      return '<span class="verdict-badge verdict-fail">fail</span>';
+    }
+    if (verdict === 'PARTIAL') {
+      return '<span class="verdict-badge verdict-partial">partial</span>';
+    }
+    if (verdict === 'UNCLEAR') {
+      return '<span class="verdict-badge verdict-pending">unclear</span>';
+    }
+    return '<span style="color:var(--text-3);">—</span>';
   }
 
   async function tryRenderRunReportHtml(engagementSlug, runId, preview) {
@@ -4662,6 +2194,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let frame = document.getElementById('eng-report-frame');
       if (!html) {
+        engagementDetail.renderedReportSlug = null;
+        engagementDetail.renderedReportRunId = null;
+        engagementDetail.renderedReportHtml = null;
         // No generated report — keep the textual snapshot, hide any old frame.
         if (frame) frame.style.display = 'none';
         preview.style.display = '';
@@ -4676,7 +2211,17 @@ document.addEventListener('DOMContentLoaded', () => {
         frame.setAttribute('sandbox', '');
         preview.parentNode.insertBefore(frame, preview);
       }
-      frame.srcdoc = html;
+      const reportChanged = (
+        engagementDetail.renderedReportSlug !== engagementSlug
+        || engagementDetail.renderedReportRunId !== runId
+        || engagementDetail.renderedReportHtml !== html
+      );
+      if (reportChanged) {
+        frame.srcdoc = html;
+        engagementDetail.renderedReportSlug = engagementSlug;
+        engagementDetail.renderedReportRunId = runId;
+        engagementDetail.renderedReportHtml = html;
+      }
       frame.style.display = '';
       preview.style.display = 'none';
     } catch (_) {
@@ -4687,7 +2232,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateEngagementHeader(run, results) {
     const target = resolveTargetFromResults(results);
     engagementDetail.targetMatch = target;
-    engagementDetail.scenarioName = inferScenarioNameFromResults(results, target.id);
+    engagementDetail.scenarioName = lookupScenarioNameForRun(run);
 
     const endCandidates = [...results]
       .map(r => r.received_at || r.sent_at || '')
@@ -4782,10 +2327,21 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>${esc(date)}</span>
             <span>${runs} run${runs !== 1 ? 's' : ''}</span>
             ${findings ? `<span style="color:var(--warn)">${findings} finding${findings !== 1 ? 's' : ''}</span>` : ''}
-          </div>`;
+          </div>
+          <button type="button"
+                  class="btn-icon btn-eng-delete"
+                  title="Delete engagement"
+                  aria-label="Delete engagement">${ICONS.archive}</button>`;
         card.addEventListener('click', () => {
           openEngagementDetail(eng, { syncRoute: true }).catch(err => toast(err.message, 'error'));
         });
+        const deleteBtn = card.querySelector('.btn-eng-delete');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteEngagementFromUi(eng);
+          });
+        }
         container.appendChild(card);
       });
 
@@ -4806,7 +2362,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  $('#btn-runs-new-engagement').addEventListener('click', openEngagementWizard);
+  $('#btn-runs-new-engagement').addEventListener('click', openEngagementDialog);
+
+  async function deleteEngagementFromUi(eng) {
+    if (!eng || !eng.slug) return;
+    const label = eng.name || eng.slug;
+    const msg =
+      `Permanently delete engagement "${label}"?\n\n` +
+      `This removes the engagement folder on disk: every run JSONL, every ` +
+      `verdict log, every response file, and every generated report. ` +
+      `The action cannot be undone.`;
+    if (!confirm(msg)) return;
+
+    try {
+      const res = await API.call('delete_engagement', { slug: eng.slug });
+      if (!res?.deleted) {
+        toast(`Engagement "${label}" was already gone on disk.`, 'info');
+      } else {
+        toast(`Engagement "${label}" deleted.`, 'success');
+      }
+
+      // Clear in-memory state for the engagement we just nuked.
+      if (engagementDetail.slug === eng.slug) {
+        engagementDetail.slug = null;
+        engagementDetail.name = '';
+        engagementDetail.activeRunId = null;
+        engagementDetail.runs = [];
+        engagementDetail.resultsByRunId = new Map();
+        $('#eng-detail').style.display = 'none';
+        clearEngagementRoute({ replace: true });
+      }
+      if (activeEngagementSlug === eng.slug) {
+        activeEngagementSlug = null;
+        dbOpen = false;
+        $('#db-label').textContent = 'no engagement';
+        $('#breadcrumb-engagement').textContent = 'no engagement open';
+        $('#engagement-dot').classList.remove('active');
+      }
+      // Also drop any archive shadow we kept for the row.
+      unarchiveEngagementSlug(eng.slug);
+
+      await loadEngagementList({ autoOpen: false });
+      await loadHomeRecentEngagements();
+    } catch (err) {
+      toast(err.message || String(err), 'error');
+    }
+  }
 
   API.onProgress((ev) => {
     if (!ev || !ev.run_id) return;
@@ -4899,7 +2500,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const status = String(state.status || '').toLowerCase();
-    const mode = state.error ? 'error' : (status === 'running' ? 'running' : 'done');
+    const isRunning = status === 'running' || status === 'starting';
+    const mode = isRunning ? 'running' : (state.error ? 'error' : 'done');
     box.className = `eng-live-activity ${mode}`;
 
     const parts = [
@@ -5039,17 +2641,32 @@ document.addEventListener('DOMContentLoaded', () => {
   // Cached per loadRuns call so we don't refetch per row. Refreshed on
   // each loadRuns invocation, which happens whenever the runs view is
   // re-rendered (incl. after install completes via checkAnalyzerCta).
-  let analyzerAvailability = { state: 'not_installed', installed: false };
+  let analyzerAvailability = { state: 'not_installed', installed: false, judge_mode: 'local' };
 
   async function refreshAnalyzerAvailability() {
     try {
-      analyzerAvailability = await API.call('get_analyzer_status');
+      const [status, settings] = await Promise.all([
+        API.call('get_analyzer_status'),
+        API.call('get_app_settings'),
+      ]);
+      analyzerAvailability = {
+        ...status,
+        judge_mode: settings?.analyzer?.judge_mode || 'local',
+        hosted_judge: settings?.analyzer?.hosted_judge || null,
+      };
     } catch (_) {
-      analyzerAvailability = { state: 'not_installed', installed: false };
+      analyzerAvailability = { state: 'not_installed', installed: false, judge_mode: 'local' };
     }
   }
 
   function analyzerUnavailableReason(status) {
+    if (status?.judge_mode === 'hosted') {
+      if (!status?.hosted_judge?.endpoint) return 'Hosted Judge is selected, but no endpoint is configured in Settings.';
+      if (!status?.hosted_judge?.deployment) return 'Hosted Judge is selected, but no deployment/model is configured in Settings.';
+      if (!status?.hosted_judge?.secret_stored) return 'Hosted Judge is selected, but no API key is stored in Settings.';
+      if (status?.hosted_judge?.keychain_available === false) return 'Hosted Judge requires an available OS keychain to store the API key.';
+      return null;
+    }
     switch (status?.state) {
       case 'installed': return null;
       case 'downloading': return 'Analyzer is downloading — try again after it finishes.';
@@ -5071,7 +2688,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // and disabled state belong to analyzeRun() until it finishes.
       if (btn.dataset.analyzing === 'true') return;
       btn.disabled = !!reason;
-      btn.title = reason || 'Run local analyzer on this run';
+      btn.title = reason || (analyzerAvailability.judge_mode === 'hosted'
+        ? 'Run Hosted Judge on this run'
+        : 'Run local analyzer on this run');
     });
   }
 
@@ -5095,7 +2714,9 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.dataset.analyzing = 'false';
       btn.disabled = false;
       btn.textContent = 'Analyze';
-      btn.title = 'Run local analyzer on this run';
+      btn.title = analyzerAvailability.judge_mode === 'hosted'
+        ? 'Run Hosted Judge on this run'
+        : 'Run local analyzer on this run';
     };
     if (btn) {
       // While analyzing, the button doubles as a Cancel button: enabled
@@ -5174,24 +2795,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const tr = document.createElement('tr');
         tr.className = 'clickable';
         tr.dataset.runId = r.id;
+        const isRunning = String(r.status || '').toLowerCase() === 'running';
+        // Icon-only action buttons. Tooltip via title attribute.
+        const stopBtnHtml = isRunning
+          ? `<button class="btn-icon btn-stop-run" title="Stop this run" aria-label="Stop">${ICONS.stop}</button>`
+          : '';
         tr.innerHTML = `
           <td style="font-family:var(--mono);font-size:11px;">${esc(r.id.substring(0, 8))}</td>
           <td><span class="run-status-badge ${esc(r.status)}">${esc(r.status)}</span></td>
           <td class="run-progress-value" style="font-family:var(--mono);font-size:11px;">${r.completed}/${r.total_prompts || '?'}</td>
           <td class="run-errors-value" style="font-family:var(--mono);font-size:11px;color:${r.errors > 0 ? 'var(--critical)' : 'var(--text-2)'};">${r.errors}</td>
           <td style="font-family:var(--mono);font-size:11px;">${esc(formatRunStarted(r.started_at))}</td>
-          <td>
-            <button class="btn-small btn-view-results">Results</button>
-            <button class="btn-small btn-analyze-run" title="Run local analyzer on this run">Analyze</button>
+          <td class="run-actions-cell">
+            ${stopBtnHtml}
+            <button class="btn-icon btn-rerun-run" title="Re-run with the same payloads"  aria-label="Re-run">${ICONS.rerun}</button>
+            <button class="btn-icon btn-analyze-run" title="Analyze this run" aria-label="Analyze">${ICONS.analyze}</button>
+            <button class="btn-icon btn-export-md-run"  title="Export Markdown report"  aria-label="Export MD">${ICONS.exportMd}</button>
+            <button class="btn-icon btn-export-pdf-run" title="Export PDF (via print)"  aria-label="Export PDF">${ICONS.exportPdf}</button>
+            <button class="btn-icon btn-delete-run" title="Delete run permanently (removes all files)"  aria-label="Delete">${ICONS.archive}</button>
           </td>`;
         tr.addEventListener('click', (e) => {
           if (e.target.closest('button')) return;
           loadRunResults(r.id, { engagementSlug, switchToResultsTab: false }).catch(err => toast(err.message, 'error'));
         });
-        tr.querySelector('.btn-view-results').addEventListener('click', (e) => {
-          e.stopPropagation();
-          loadRunResults(r.id, { engagementSlug, switchToResultsTab: true }).catch(err => toast(err.message, 'error'));
-        });
+
         const analyzeBtn = tr.querySelector('.btn-analyze-run');
         const reason = analyzerUnavailableReason(analyzerAvailability);
         if (reason) {
@@ -5209,6 +2836,29 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           analyzeRun({ engagementSlug, runId: r.id });
         });
+
+        // Wire the rest of the row's action buttons.
+        tr.querySelector('.btn-rerun-run')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          rerunRun(r.id);
+        });
+        tr.querySelector('.btn-stop-run')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          stopRun(r.id);
+        });
+        tr.querySelector('.btn-export-md-run')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          exportRunMd(r.id);
+        });
+        tr.querySelector('.btn-export-pdf-run')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          exportRunPdf(r.id);
+        });
+        tr.querySelector('.btn-delete-run')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteRunFromUi(r.id);
+        });
+
         tbody.appendChild(tr);
       });
 
@@ -5227,14 +2877,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadRunResults(runId, { engagementSlug = activeEngagementSlug, switchToResultsTab = false, suppressErrors = false } = {}) {
     try {
+      engagementDetail.activeRunId = runId;
+      markActiveRunRow(runId);
+      $('#run-results-section').style.display = '';
+      $('#run-results-title').textContent = `Results · ${runId}`;
+      const tbody = $('#results-tbody');
+      tbody.innerHTML = '<tr><td colspan="9" style="font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;padding:20px;">loading results…</td></tr>';
+      if (switchToResultsTab) {
+        setEngagementDetailTab('results');
+        $('#run-results-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+
       const results = await API.call('get_results', { engagement_slug: engagementSlug, run_id: runId });
       const diagnostics = await API.call('get_run_diagnostics', { engagement_slug: engagementSlug, run_id: runId });
-      engagementDetail.activeRunId = runId;
       engagementDetail.resultsByRunId.set(runId, results);
-      markActiveRunRow(runId);
-
-      $('#run-results-section').style.display = '';
-      const tbody = $('#results-tbody');
       tbody.innerHTML = '';
       results.forEach((r) => {
         const statusClass = r.error_message ? 'status-error' : 'status-ok';
@@ -5250,6 +2906,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>${esc(r.session_label || '-')}</td>
           <td><code>${esc(r.prompt_id)}</code></td>
           <td><span class="${statusClass}">${statusText}</span></td>
+          <td>${engagementVerdictBadgeHtml(r)}</td>
           <td><div class="cell-text">${esc(requestText || '-')}</div></td>
           <td><div class="cell-text">${esc(r.prompt_text)}</div></td>
           <td><div class="cell-text">${esc(r.response_text || (pending ? '(pending)' : ''))}</div></td>
@@ -5290,6 +2947,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>-</td>
           <td><code>-</code></td>
           <td><span class="${live?.error ? 'status-error' : 'status-ok'}">${live?.error ? 'ERROR' : 'PENDING'}</span></td>
+          <td><span style="color:var(--text-3);">—</span></td>
           <td><div class="cell-text">${esc(live?.request || diagnostics?.request_url || '-')}</div></td>
           <td><div class="cell-text">(attempt in progress)</div></td>
           <td><div class="cell-text">${esc(live?.error || diagMessage || '(waiting for response)')}</div></td>
@@ -5302,8 +2960,6 @@ document.addEventListener('DOMContentLoaded', () => {
       renderEngagementReport(results, runSummary);
       updateEngagementActionButtons(runSummary);
       startEngagementResultsPoll(engagementSlug, runId);
-
-      if (switchToResultsTab) setEngagementDetailTab('results');
     } catch (err) {
       if (!suppressErrors) toast(err.message, 'error');
     }
@@ -5544,18 +3200,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  $('#btn-eng-rerun')?.addEventListener('click', async () => {
-    const runId = engagementDetail.activeRunId;
-    if (!engagementDetail.slug || !runId) {
-      toast('Select a run first', 'info');
-      return;
-    }
+  // ── Per-run actions (used by row buttons) ─────────────────────────
+  // Each function takes an explicit runId so it can fire on any row, not
+  // just the currently selected one. Most need that run's results to be
+  // loaded into engagementDetail.resultsByRunId — they auto-load if missing.
+
+  async function ensureRunResultsLoaded(runId) {
+    if (!engagementDetail.slug || !runId) return;
+    if (engagementDetail.resultsByRunId.has(runId)) return;
+    await loadRunResults(runId, {
+      engagementSlug: engagementDetail.slug,
+      switchToResultsTab: false,
+    });
+  }
+
+  async function rerunRun(runId) {
+    if (!engagementDetail.slug || !runId) return;
     const targetId = engagementDetail.targetMatch?.id;
     if (!targetId) {
-      toast('Re-run requires a known target mapping. Select a run tied to an existing target URL.', 'error');
+      toast('Re-run requires a known target mapping. Open a run tied to an existing target URL.', 'error');
       return;
     }
-
+    await ensureRunResultsLoaded(runId);
     const source = engagementDetail.resultsByRunId.get(runId) || [];
     const payloads = source
       .filter(r => String(r.prompt_text || '').trim())
@@ -5564,14 +3230,10 @@ document.addEventListener('DOMContentLoaded', () => {
         payload_id: `rerun-${String(idx + 1).padStart(3, '0')}`,
         text: r.prompt_text,
       }));
-
     if (!payloads.length) {
       toast('No prompt payloads available for re-run', 'error');
       return;
     }
-
-    const btn = $('#btn-eng-rerun');
-    btn.disabled = true;
     try {
       const newRunId = await API.call('start_run', {
         engagement_slug: engagementDetail.slug,
@@ -5588,27 +3250,16 @@ document.addEventListener('DOMContentLoaded', () => {
       setEngagementDetailTab('results');
     } catch (err) {
       toast(err.message, 'error');
-    } finally {
-      btn.disabled = false;
     }
-  });
+  }
 
-  $('#btn-eng-stop')?.addEventListener('click', async () => {
-    const runId = engagementDetail.activeRunId;
-    if (!engagementDetail.slug || !runId) {
-      toast('Select a running run first', 'info');
-      return;
-    }
-
+  async function stopRun(runId) {
+    if (!engagementDetail.slug || !runId) return;
     const selectedRun = (engagementDetail.runs || []).find((run) => run.id === runId);
     if (String(selectedRun?.status || '').toLowerCase() !== 'running') {
-      toast('The selected run is no longer running', 'info');
-      updateEngagementActionButtons(selectedRun || null);
+      toast('That run is no longer running', 'info');
       return;
     }
-
-    const btn = $('#btn-eng-stop');
-    btn.disabled = true;
     try {
       const result = await API.call('stop_run', {
         engagement_slug: engagementDetail.slug,
@@ -5622,17 +3273,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     } catch (err) {
       toast(err.message, 'error');
-    } finally {
-      updateEngagementActionButtons();
     }
-  });
+  }
 
-  $('#btn-eng-export-md')?.addEventListener('click', async () => {
-    const runId = engagementDetail.activeRunId;
-    if (!runId) {
-      toast('Select a run first', 'info');
-      return;
-    }
+  async function exportRunMd(runId) {
+    if (!engagementDetail.slug || !runId) return;
+    await ensureRunResultsLoaded(runId);
     const results = engagementDetail.resultsByRunId.get(runId) || [];
     const run = engagementDetail.runs.find(r => r.id === runId) || null;
     const markdown = buildMarkdownReport(results, run);
@@ -5648,14 +3294,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       toast(err.message, 'error');
     }
-  });
+  }
 
-  $('#btn-eng-export-pdf')?.addEventListener('click', async () => {
-    const runId = engagementDetail.activeRunId;
-    if (!runId) {
-      toast('Select a run first', 'info');
-      return;
-    }
+  async function exportRunPdf(runId) {
+    if (!engagementDetail.slug || !runId) return;
+    await ensureRunResultsLoaded(runId);
     try {
       const results = engagementDetail.resultsByRunId.get(runId) || [];
       const run = engagementDetail.runs.find(r => r.id === runId) || null;
@@ -5664,33 +3307,53 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       toast(err.message, 'error');
     }
-  });
+  }
 
-  $('#btn-eng-archive')?.addEventListener('click', async () => {
-    const slug = engagementDetail.slug;
-    if (!slug) {
-      toast('Open an engagement first', 'info');
-      return;
+  async function deleteRunFromUi(runId) {
+    if (!engagementDetail.slug || !runId) return;
+
+    // Stronger confirm: this is irreversible.
+    const shortId = runId.substring(0, 8);
+    const msg = `Permanently delete run ${shortId}?\n\n` +
+      `This removes the run JSONL, its verdicts, every response file, and any generated report. ` +
+      `The action cannot be undone.`;
+    if (!confirm(msg)) return;
+
+    try {
+      const res = await API.call('delete_run', {
+        engagement_slug: engagementDetail.slug,
+        run_id: runId,
+      });
+      if (engagementDetail.activeRunId === runId) {
+        engagementDetail.activeRunId = null;
+        engagementDetail.resultsByRunId.delete(runId);
+        $('#run-results-section').style.display = 'none';
+      }
+      await loadRuns({
+        engagementSlug: engagementDetail.slug,
+        autoSelectFirst: false,
+      });
+      toast(res?.removed
+        ? `Run ${shortId} deleted (${res.removed} entries removed)`
+        : `Run ${shortId} had no on-disk artifacts`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
     }
-    if (!confirm(`Archive engagement "${engagementDetail.name}" in the UI list?`)) return;
-
-    archiveEngagementSlug(slug);
-    clearEngagementRoute({ replace: true });
-    engagementDetail.slug = null;
-    engagementDetail.activeRunId = null;
-    renderRunsViewEmptyState('Select an engagement to view its runs.');
-    await loadEngagementList({ autoOpen: false });
-    loadHomeRecentEngagements();
-    toast('Engagement archived from visible lists', 'success');
-  });
+  }
 
   // ── Result detail modal ────────────────────────────────────────────
   function showResultDetail(r) {
     const statusText = r.error_message ? 'ERROR' : (r.status_code || 'N/A');
+    const verdictText = String(r.judge_verdict || '').toUpperCase() || '—';
+    const confidenceText = r.judge_confidence != null
+      ? `${Math.round(Number(r.judge_confidence) * 100)}%`
+      : '—';
+    const judgeIdentity = parseJudgeIdentity(r.judge_model_used);
     const summaryBits = [
       `step ${r.step_order || '-'}`,
       `session ${r.session_label || '-'}`,
       `status ${statusText}`,
+      `verdict ${verdictText}`,
       r.latency_ms != null ? `${r.latency_ms}ms` : 'latency n/a',
     ];
 
@@ -5701,12 +3364,18 @@ document.addEventListener('DOMContentLoaded', () => {
       ['HTTP Method', r.request_method || '—'],
       ['Request URL', r.request_url || '—'],
       ['Status', String(statusText)],
+      ['Judge Verdict', verdictText],
+      ['Judge Confidence', confidenceText],
+      ['Judge Mode', judgeIdentity.mode],
+      ['Judge Provider', judgeIdentity.provider],
+      ['Judge Model', judgeIdentity.model],
       ['Latency', r.latency_ms != null ? `${r.latency_ms}ms` : '—'],
       ['Sent At', formatEngagementDateTime(r.sent_at || '')],
       ['Received At', formatEngagementDateTime(r.received_at || '')],
       ['Session', r.session_label || '—'],
       ['Step', r.step_order || '—'],
       ['Error', r.error_message || '—'],
+      ['Judge Reason', r.judge_reason || '—'],
     ];
 
     $('#detail-summary').textContent = summaryBits.join(' · ');
@@ -5773,29 +3442,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────
+  // The Workbench-specific bindings ('/' focus picker, Cmd/Ctrl+Enter to
+  // fire) were retired with the Workbench view in Phase 2F of
+  // docs/RefactorPlan.md.
   document.addEventListener('keydown', (e) => {
-    const tag = document.activeElement?.tagName;
-    const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-
-    // / → focus picker search (when workbench active and not in an input)
-    if (e.key === '/' && !inInput && $('#view-workbench').classList.contains('active')) {
-      e.preventDefault();
-      $('#picker-search').focus();
-    }
-
-    // Escape → close any open modal, blur picker search
     if (e.key === 'Escape') {
       document.querySelectorAll('.modal').forEach(m => { m.style.display = 'none'; });
-      if (document.activeElement === $('#picker-search')) {
-        $('#picker-search').blur();
-      }
-    }
-
-    // Cmd/Ctrl+Enter → fire prompt
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      if ($('#view-workbench').classList.contains('active')) {
-        e.preventDefault();
-        $('#btn-wb-fire').click();
+      const pickerSearch = $('#picker-search');
+      if (pickerSearch && document.activeElement === pickerSearch) {
+        pickerSearch.blur();
       }
     }
   });
@@ -5821,6 +3476,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (settingsNavBtn && settingsModal) {
     settingsNavBtn.addEventListener('click', () => {
       settingsModal.style.display = 'flex';
+      // The analyzer section refreshes its variant list off this event.
+      // We can't call refreshAnalyzerModal directly because it lives
+      // inside initAnalyzerUI's closure (and that init might have
+      // thrown — the whole point of this outer handler).
+      window.dispatchEvent(new CustomEvent('settings-modal-opened'));
     });
   }
   if (settingsCloseX && settingsModal) {
@@ -5858,23 +3518,216 @@ function initAnalyzerUI() {
   let selectedVariantId = null;
   let downloadUnlisten = null;
   let analyzerStatus = null;
+  let defaultJudgePromptTemplate = '';
+  let currentJudgeMode = 'local';
+  let currentSettingsView = 'general';
+  let currentAnalyzerSettingsView = 'prompt';
+  let hostedSecretStatus = {
+    secret_ref: 'HOSTED_JUDGE_API_KEY',
+    secret_stored: false,
+    keychain_available: true,
+  };
+
+  function renderSettingsView(view) {
+    currentSettingsView = ['general', 'logging', 'analyzer'].includes(view) ? view : 'general';
+    $$('.settings-nav-item').forEach((btn) => {
+      const isActive = btn.dataset.settingsView === currentSettingsView;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+    });
+    $$('.settings-view').forEach((panel) => {
+      panel.classList.toggle('active', panel.dataset.settingsView === currentSettingsView);
+    });
+  }
+
+  function renderAnalyzerSettingsView(view) {
+    currentAnalyzerSettingsView = ['prompt', 'local', 'hosted'].includes(view) ? view : 'prompt';
+    $$('.settings-subnav-item').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.analyzerView === currentAnalyzerSettingsView);
+    });
+    $$('.settings-subview').forEach((panel) => {
+      panel.classList.toggle('active', panel.dataset.analyzerView === currentAnalyzerSettingsView);
+    });
+  }
+
+  function renderJudgeModeSections(mode) {
+    currentJudgeMode = mode === 'hosted' ? 'hosted' : 'local';
+    const hostedTestBtn = $('#btn-settings-test-hosted-judge');
+    if (hostedTestBtn) hostedTestBtn.disabled = currentJudgeMode !== 'hosted';
+    const localDisabled = currentJudgeMode !== 'local';
+    ['btn-analyzer-install', 'btn-analyzer-repair', 'btn-analyzer-uninstall'].forEach((id) => {
+      const btn = $(`#${id}`);
+      if (!btn) return;
+      if (localDisabled) {
+        btn.dataset.disabledByJudgeMode = 'true';
+        btn.disabled = true;
+        btn.title = 'Local analyzer controls are inactive while Hosted Judge is selected.';
+      } else {
+        delete btn.dataset.disabledByJudgeMode;
+        btn.title = '';
+      }
+    });
+    updateHostedJudgeUiState();
+  }
+
+  function updateHostedSecretStatus(hosted) {
+    hostedSecretStatus = {
+      secret_ref: hosted?.secret_ref || 'HOSTED_JUDGE_API_KEY',
+      secret_stored: !!hosted?.secret_stored,
+      keychain_available: hosted?.keychain_available !== false,
+    };
+    updateHostedJudgeUiState();
+  }
+
+  function getHostedJudgeValidation() {
+    const endpoint = ($('#settings-hosted-endpoint')?.value || '').trim();
+    const deployment = ($('#settings-hosted-deployment')?.value || '').trim();
+    const secretRef = ($('#settings-hosted-secret-ref')?.value || '').trim() || 'HOSTED_JUDGE_API_KEY';
+    const typedApiKey = ($('#settings-hosted-api-key')?.value || '').trim();
+    const issues = [];
+    if (!endpoint) issues.push('Endpoint is required.');
+    if (!deployment) issues.push('Deployment / Model is required.');
+    if (!secretRef) issues.push('API key reference is required.');
+    if (!hostedSecretStatus.keychain_available) {
+      issues.push('OS keychain is not available.');
+    }
+    if (!hostedSecretStatus.secret_stored && !typedApiKey) {
+      issues.push('Store an API key or enter one before saving.');
+    }
+    return {
+      endpoint,
+      deployment,
+      secretRef,
+      typedApiKey,
+      issues,
+      ready: issues.length === 0,
+    };
+  }
+
+  function updateHostedJudgeUiState() {
+    const el = $('#settings-hosted-secret-status');
+    if (!el) return;
+    const hostedTestBtn = $('#btn-settings-test-hosted-judge');
+    const clearBtn = $('#btn-settings-clear-hosted-secret');
+    const validation = getHostedJudgeValidation();
+    if (clearBtn) clearBtn.disabled = !hostedSecretStatus.secret_stored;
+
+    if (currentJudgeMode !== 'hosted') {
+      el.innerHTML = 'Hosted Judge is currently inactive because Local Judge is selected.';
+      if (hostedTestBtn) hostedTestBtn.disabled = true;
+      return;
+    }
+
+    if (!hostedSecretStatus.keychain_available) {
+      el.innerHTML = 'OS keychain is not available. Hosted Judge cannot store or use an API key right now.';
+      if (hostedTestBtn) hostedTestBtn.disabled = true;
+      return;
+    }
+
+    if (validation.issues.length > 0) {
+      el.innerHTML = `Hosted Judge is not ready: ${esc(validation.issues.join(' '))}`;
+      if (hostedTestBtn) hostedTestBtn.disabled = true;
+      return;
+    }
+
+    if (hostedSecretStatus.secret_stored) {
+      el.innerHTML = `Hosted Judge is ready. API key stored in keychain for <code>${esc(validation.secretRef)}</code>. Leave the password field blank to keep it.`;
+    } else {
+      el.innerHTML = `Hosted Judge will be ready after saving the API key to <code>${esc(validation.secretRef)}</code>.`;
+    }
+    if (hostedTestBtn) hostedTestBtn.disabled = false;
+  }
+
+  async function refreshHostedSecretStatusFromUi() {
+    const secretRef = ($('#settings-hosted-secret-ref')?.value || '').trim() || 'HOSTED_JUDGE_API_KEY';
+    try {
+      const status = await API.call('secret_ref_status', { secret_ref: secretRef });
+      hostedSecretStatus = {
+        secret_ref: secretRef,
+        secret_stored: !!status?.stored_in_keychain,
+        keychain_available: status?.keychain_available !== false,
+      };
+    } catch (_) {
+      hostedSecretStatus = {
+        secret_ref: secretRef,
+        secret_stored: false,
+        keychain_available: false,
+      };
+    }
+    updateHostedJudgeUiState();
+  }
 
   function openSettingsModal() {
     $('#settings-modal').style.display = 'flex';
-    loadLoggingSettings().catch(err => {
-      $('#settings-logging-status').textContent = `Failed to load settings: ${err.message}`;
+    loadAppSettings().catch(err => {
+      $('#settings-save-status').textContent = `Failed to load settings: ${err.message}`;
     });
     refreshAnalyzerModal();
   }
 
-  async function loadLoggingSettings() {
+  // The sidebar's Settings nav button lives in the outer scope (see
+  // the resilience note around `settingsNavBtn`) and only sets display.
+  // Listen for its event here so the analyzer section actually
+  // populates when the user opens Settings from the sidebar — without
+  // it, the static "loading variants…" placeholder never gets replaced.
+  window.addEventListener('settings-modal-opened', () => {
+    loadAppSettings().catch(err => {
+      $('#settings-save-status').textContent = `Failed to load settings: ${err.message}`;
+    });
+    refreshAnalyzerModal();
+  });
+
+  function updateJudgePromptStatus(settings) {
+    const status = $('#settings-analyzer-prompt-status');
+    if (!status) return;
+    if (settings.analyzer?.uses_default_judge_prompt) {
+      status.innerHTML = 'Using the built-in default prompt for future Analyze and Judge actions.';
+    } else {
+      status.innerHTML = 'Using a custom global judge prompt for future Analyze and Judge actions.';
+    }
+  }
+
+  async function loadAppSettings() {
     const settings = await API.call('get_app_settings');
     $('#settings-app-version').value = settings.app_version || '0.4';
+    const theme = normalizeTheme(settings.ui?.theme || 'default');
+    $('#settings-theme').value = theme;
+    applyTheme(theme);
     $('#settings-logging-enabled').checked = !!settings.logging?.enabled;
     $('#settings-log-level').value = settings.logging?.level || 'info';
     $('#settings-body-logging-enabled').checked = !!settings.logging?.body_logging_enabled;
+    $('#settings-analyzer-judge-mode').value = settings.analyzer?.judge_mode || 'local';
+    defaultJudgePromptTemplate = settings.analyzer?.default_judge_prompt_template || '';
+    $('#settings-analyzer-judge-prompt').value =
+      settings.analyzer?.judge_prompt_template || defaultJudgePromptTemplate;
+    $('#settings-hosted-provider').value =
+      settings.analyzer?.hosted_judge?.provider || 'azure_openai';
+    $('#settings-hosted-endpoint').value =
+      settings.analyzer?.hosted_judge?.endpoint || '';
+    $('#settings-hosted-deployment').value =
+      settings.analyzer?.hosted_judge?.deployment || '';
+    $('#settings-hosted-api-style').value =
+      settings.analyzer?.hosted_judge?.api_style || 'auto';
+    $('#settings-hosted-api-version').value =
+      settings.analyzer?.hosted_judge?.api_version || '';
+    $('#settings-hosted-secret-ref').value =
+      settings.analyzer?.hosted_judge?.secret_ref || 'HOSTED_JUDGE_API_KEY';
+    $('#settings-hosted-api-key').value = '';
+    $('#settings-hosted-max-input-chars').value =
+      settings.analyzer?.hosted_judge?.max_input_chars || 24000;
+    $('#settings-hosted-max-output-tokens').value =
+      settings.analyzer?.hosted_judge?.max_output_tokens || 1200;
+    $('#settings-hosted-timeout-seconds').value =
+      settings.analyzer?.hosted_judge?.request_timeout_seconds || 60;
+    $('#settings-hosted-max-retries').value =
+      settings.analyzer?.hosted_judge?.max_retries || 1;
+    updateJudgePromptStatus(settings);
+    updateHostedSecretStatus(settings.analyzer?.hosted_judge || null);
+    renderJudgeModeSections(settings.analyzer?.judge_mode || 'local');
     $('#settings-logging-status').innerHTML =
-      'Logging changes are saved to <code>~/hamm0r/config.yaml</code>.';
+      'Logging changes apply after restarting the app.';
+    $('#settings-save-status').innerHTML =
+      'Settings are saved to <code>~/hamm0r/config.yaml</code>.';
   }
 
   async function refreshAnalyzerModal() {
@@ -5934,6 +3787,7 @@ function initAnalyzerUI() {
 
       const manifest = await API.call('fetch_analyzer_manifest');
       renderVariants(manifest.variants, hw);
+      renderJudgeModeSections(currentJudgeMode);
     } catch (err) {
       $('#analyzer-variants').innerHTML =
         `<div class="analyzer-loading" style="color:var(--red)">Failed to load: ${esc(err.message)}</div>`;
@@ -5988,7 +3842,9 @@ function initAnalyzerUI() {
     $('#analyzer-variants').querySelectorAll('.analyzer-variant').forEach(card => {
       card.classList.toggle('analyzer-variant-selected', card.dataset.variantId === id);
     });
-    $('#btn-analyzer-install').disabled = false;
+    if (currentJudgeMode === 'local') {
+      $('#btn-analyzer-install').disabled = false;
+    }
   }
 
   // ── Install (shared by Install + Repair buttons) ────────────────────
@@ -6084,28 +3940,182 @@ function initAnalyzerUI() {
     }
   });
 
-  $('#btn-settings-save').addEventListener('click', async () => {
-    const btn = $('#btn-settings-save');
+  $('#btn-settings-reset-analyzer-prompt').addEventListener('click', () => {
+    $('#settings-analyzer-judge-prompt').value = defaultJudgePromptTemplate;
+    $('#settings-analyzer-prompt-status').innerHTML =
+      'Reset to the built-in default prompt. Save Settings to persist it.';
+  });
+
+  $('#settings-analyzer-judge-mode').addEventListener('change', (event) => {
+    renderJudgeModeSections(event.target.value);
+    renderAnalyzerSettingsView(event.target.value === 'hosted' ? 'hosted' : 'local');
+  });
+
+  $$('.settings-nav-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      renderSettingsView(btn.dataset.settingsView);
+    });
+  });
+
+  $$('.settings-subnav-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      renderAnalyzerSettingsView(btn.dataset.analyzerView);
+    });
+  });
+
+  [
+    '#settings-hosted-endpoint',
+    '#settings-hosted-deployment',
+    '#settings-hosted-api-style',
+    '#settings-hosted-api-version',
+    '#settings-hosted-api-key',
+    '#settings-hosted-max-input-chars',
+    '#settings-hosted-max-output-tokens',
+    '#settings-hosted-timeout-seconds',
+    '#settings-hosted-max-retries',
+  ].forEach((selector) => {
+    $(selector)?.addEventListener('input', () => {
+      updateHostedJudgeUiState();
+    });
+  });
+
+  $('#settings-hosted-secret-ref')?.addEventListener('input', () => {
+    hostedSecretStatus = {
+      secret_ref: ($('#settings-hosted-secret-ref').value || '').trim() || 'HOSTED_JUDGE_API_KEY',
+      secret_stored: false,
+      keychain_available: hostedSecretStatus.keychain_available,
+    };
+    updateHostedJudgeUiState();
+  });
+  $('#settings-hosted-secret-ref')?.addEventListener('change', () => {
+    refreshHostedSecretStatusFromUi().catch(() => {});
+  });
+
+  $('#btn-settings-clear-hosted-secret').addEventListener('click', async () => {
+    const secretRef = ($('#settings-hosted-secret-ref').value || '').trim() || 'HOSTED_JUDGE_API_KEY';
+    try {
+      await API.call('forget_secret_ref', { secret_ref: secretRef });
+      $('#settings-hosted-api-key').value = '';
+      updateHostedSecretStatus({
+        secret_ref: secretRef,
+        secret_stored: false,
+        keychain_available: true,
+      });
+      toast('Hosted API key cleared from keychain.', 'success');
+    } catch (err) {
+      toast(`Could not clear hosted API key: ${err.message}`, 'error');
+    }
+  });
+
+  $('#btn-settings-test-hosted-judge').addEventListener('click', async () => {
+    const btn = $('#btn-settings-test-hosted-judge');
     btn.disabled = true;
     try {
-      await API.call('save_app_settings', {
+      const result = await API.call('test_hosted_judge');
+      $('#settings-hosted-secret-status').innerHTML =
+        `Hosted Judge test succeeded. Model: <code>${esc(result.model_used)}</code>. Verdict: <code>${esc(result.verdict)}</code>.`;
+      toast(`Hosted Judge test passed with ${result.model_used}.`, 'success');
+    } catch (err) {
+      $('#settings-hosted-secret-status').textContent = `Hosted Judge test failed: ${err.message}`;
+      toast(`Hosted Judge test failed: ${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  async function saveSettingsFromModal(triggerButton) {
+    const btn = triggerButton || $('#btn-settings-save');
+    btn.disabled = true;
+    try {
+      const secretRef = ($('#settings-hosted-secret-ref').value || '').trim() || 'HOSTED_JUDGE_API_KEY';
+      const hostedApiKey = $('#settings-hosted-api-key').value;
+      if (hostedApiKey) {
+        await API.call('set_secret_ref', {
+          secret_ref: secretRef,
+          token: hostedApiKey,
+        });
+        hostedSecretStatus.secret_stored = true;
+        hostedSecretStatus.secret_ref = secretRef;
+      }
+      const saved = await API.call('save_app_settings', {
         settings: {
+          analyzer: {
+            judge_mode: $('#settings-analyzer-judge-mode').value,
+            judge_prompt_template: $('#settings-analyzer-judge-prompt').value,
+            hosted_judge: {
+              provider: $('#settings-hosted-provider').value,
+              endpoint: $('#settings-hosted-endpoint').value,
+              deployment: $('#settings-hosted-deployment').value,
+              api_style: $('#settings-hosted-api-style').value,
+              api_version: $('#settings-hosted-api-version').value,
+              secret_ref: secretRef,
+              max_input_chars: Number($('#settings-hosted-max-input-chars').value || 24000),
+              max_output_tokens: Number($('#settings-hosted-max-output-tokens').value || 1200),
+              request_timeout_seconds: Number($('#settings-hosted-timeout-seconds').value || 60),
+              max_retries: Number($('#settings-hosted-max-retries').value || 1),
+            },
+          },
           logging: {
             enabled: $('#settings-logging-enabled').checked,
             level: $('#settings-log-level').value,
             body_logging_enabled: $('#settings-body-logging-enabled').checked,
           },
+          ui: {
+            theme: normalizeTheme($('#settings-theme').value),
+          },
         },
       });
+      const savedTheme = normalizeTheme(saved.ui?.theme || $('#settings-theme').value);
+      $('#settings-theme').value = savedTheme;
+      applyTheme(savedTheme);
+      defaultJudgePromptTemplate = saved.analyzer?.default_judge_prompt_template || defaultJudgePromptTemplate;
+      $('#settings-analyzer-judge-mode').value = saved.analyzer?.judge_mode || 'local';
+      $('#settings-analyzer-judge-prompt').value =
+        saved.analyzer?.judge_prompt_template || defaultJudgePromptTemplate;
+      $('#settings-hosted-provider').value = saved.analyzer?.hosted_judge?.provider || 'azure_openai';
+      $('#settings-hosted-endpoint').value = saved.analyzer?.hosted_judge?.endpoint || '';
+      $('#settings-hosted-deployment').value = saved.analyzer?.hosted_judge?.deployment || '';
+      $('#settings-hosted-api-style').value = saved.analyzer?.hosted_judge?.api_style || 'auto';
+      $('#settings-hosted-api-version').value = saved.analyzer?.hosted_judge?.api_version || '';
+      $('#settings-hosted-secret-ref').value = saved.analyzer?.hosted_judge?.secret_ref || secretRef;
+      $('#settings-hosted-api-key').value = '';
+      $('#settings-hosted-max-input-chars').value =
+        saved.analyzer?.hosted_judge?.max_input_chars || 24000;
+      $('#settings-hosted-max-output-tokens').value =
+        saved.analyzer?.hosted_judge?.max_output_tokens || 1200;
+      $('#settings-hosted-timeout-seconds').value =
+        saved.analyzer?.hosted_judge?.request_timeout_seconds || 60;
+      $('#settings-hosted-max-retries').value =
+        saved.analyzer?.hosted_judge?.max_retries || 1;
+      updateJudgePromptStatus(saved);
+      updateHostedSecretStatus(saved.analyzer?.hosted_judge || null);
+      renderJudgeModeSections(saved.analyzer?.judge_mode || 'local');
       $('#settings-logging-status').innerHTML =
-        'Saved to <code>~/hamm0r/config.yaml</code>. Restart the app to apply the new logging behavior.';
-      toast('Logging settings saved. Restart the app to apply them.', 'success');
+        'Logging changes apply after restarting the app.';
+      $('#settings-save-status').innerHTML =
+        'Saved to <code>~/hamm0r/config.yaml</code>. Judge changes apply to future Analyze and Judge actions immediately.';
+      window.dispatchEvent(new CustomEvent('analyzer-state-changed'));
+      toast('Settings saved. Restart the app only if you changed logging.', 'success');
     } catch (err) {
-      $('#settings-logging-status').textContent = `Save failed: ${err.message}`;
+      $('#settings-save-status').textContent = `Save failed: ${err.message}`;
       toast(`Saving settings failed: ${err.message}`, 'error');
     } finally {
       btn.disabled = false;
     }
+  }
+
+  $('#btn-settings-save')?.addEventListener('click', () => {
+    saveSettingsFromModal($('#btn-settings-save'));
+  });
+
+  $('#settings-theme')?.addEventListener('change', (event) => {
+    applyTheme(event.target.value);
+    $('#settings-save-status').innerHTML =
+      'Theme preview applied. Save Settings to persist it.';
+  });
+
+  $('#btn-settings-save-logging')?.addEventListener('click', () => {
+    saveSettingsFromModal($('#btn-settings-save-logging'));
   });
 
   // Open + close handlers for the settings modal live in the outer
@@ -6131,6 +4141,6 @@ function initAnalyzerUI() {
   // Check on first load
   if (window.__TAURI__) {
     checkAnalyzerCta();
-    loadLoggingSettings().catch(() => {});
+    loadAppSettings().catch(() => {});
   }
 }

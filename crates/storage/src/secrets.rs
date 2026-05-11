@@ -132,15 +132,18 @@ pub fn token_status(account: &str) -> Result<TokenStatus> {
     })
 }
 
-/// Resolve a token using the documented precedence: keychain first, then
-/// environment variable. Returns `Ok(None)` when neither source has a
-/// value, and treats an unreachable keychain backend as "no value" so the
-/// env var is consulted regardless. Used by the runner's auth layer.
+/// Resolve a token using the documented precedence: **environment variable
+/// first**, then the OS keychain. The env var wins by design — it matches
+/// the principle of least surprise (`export FOO=...` then fire a request
+/// uses that value) and it neutralises stale keychain entries left over
+/// from older versions of hamm0r that wrote tokens via UI flows that no
+/// longer exist. Returns `Ok(None)` when neither source has a value, and
+/// treats an unreachable keychain backend as "no value".
 pub fn resolve_token(account: &str) -> Result<Option<String>> {
-    if let Some(v) = get_token(account)? {
+    if let Ok(v) = std::env::var(account) {
         return Ok(Some(v));
     }
-    Ok(std::env::var(account).ok())
+    get_token(account)
 }
 
 #[cfg(test)]
@@ -174,23 +177,29 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn resolve_prefers_keychain_over_env() {
+    fn resolve_prefers_env_over_keychain() {
         let acct = "HAMM0R_TEST_PRECEDENCE";
         let _ = remove_token(acct);
 
-        std::env::set_var(acct, "from-env");
-        assert_eq!(resolve_token(acct).unwrap().as_deref(), Some("from-env"));
-
+        // Keychain only.
         set_token(acct, "from-keychain").unwrap();
         assert_eq!(
             resolve_token(acct).unwrap().as_deref(),
             Some("from-keychain")
         );
 
-        remove_token(acct).unwrap();
+        // Env var wins when both are set.
+        std::env::set_var(acct, "from-env");
         assert_eq!(resolve_token(acct).unwrap().as_deref(), Some("from-env"));
 
+        // Removing the env var falls back to the keychain.
         std::env::remove_var(acct);
+        assert_eq!(
+            resolve_token(acct).unwrap().as_deref(),
+            Some("from-keychain")
+        );
+
+        remove_token(acct).unwrap();
         assert!(resolve_token(acct).unwrap().is_none());
     }
 

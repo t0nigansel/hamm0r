@@ -71,6 +71,7 @@ mod tests {
             request_ids: vec!["openai-chat".into()],
             request_id: "openai-chat".into(),
             session_config: Default::default(),
+            auth_acquisition: Default::default(),
             notes: Some("Rate limit 10 req/s".into()),
         }
     }

@@ -64,4 +64,28 @@ mod tests {
         let loaded = load_or_default(&path, "ignored".to_owned()).unwrap();
         assert_eq!(loaded, config);
     }
+
+    #[test]
+    fn roundtrips_spirit_testing_theme() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yaml");
+        let mut config = AppConfig::defaults("C:/tmp/hamm0r".to_owned());
+        config.ui.theme = Theme::SpiritTesting;
+        save(&path, &config).unwrap();
+
+        let loaded = load_or_default(&path, "ignored".to_owned()).unwrap();
+        assert_eq!(loaded.ui.theme, Theme::SpiritTesting);
+    }
+
+    #[test]
+    fn roundtrips_testsolutions_theme() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yaml");
+        let mut config = AppConfig::defaults("C:/tmp/hamm0r".to_owned());
+        config.ui.theme = Theme::Testsolutions;
+        save(&path, &config).unwrap();
+
+        let loaded = load_or_default(&path, "ignored".to_owned()).unwrap();
+        assert_eq!(loaded.ui.theme, Theme::Testsolutions);
+    }
 }

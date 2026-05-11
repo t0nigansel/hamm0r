@@ -6,7 +6,8 @@ _One-pager. North star. If a decision is hard, this page decides it._
 
 **hamm0r is a local-first desktop tool that lets security engineers test
 LLM-based systems for OWASP-style attacks in five minutes, with no cloud
-account and no config files.**
+account required for the core workflow and no config files in the standard
+user journey.**
 
 ## Who it is for
 
@@ -56,11 +57,12 @@ engagement database. The user can inspect, export, and interpret it
 manually. This mode exists because not every run needs automated
 analysis — sometimes you just want the raw data.
 
-**Opt-in mode: analyz0r.** The user activates it once. An embedded LLM
-(Qwen, Gemma, DeepSeek — whatever is best at the time) is downloaded and
+**Opt-in mode: analyz0r.** The user activates it once. By default, an embedded
+LLM (Qwen, Gemma, DeepSeek — whatever is best at the time) is downloaded and
 runs locally. It reviews the recorded responses and produces verdicts and
-a structured report mapped to OWASP LLM Top 10. The analyzer never
-appears by default, never phones home, never leaves the machine.
+a structured report mapped to OWASP LLM Top 10. Users may also explicitly
+switch analyz0r to a hosted judge in Settings. The analyzer never appears
+by default, and the core product remains fully useful with no cloud account.
 
 The reason for two modes: **the tool is useful before the user commits
 to a 2 GB download.** Activation is an earned step, not a gate.
@@ -71,8 +73,9 @@ to a 2 GB download.** Activation is an earned step, not a gate.
   plugin system on day one. Clicks, not files.
 - **Not a benchmark tool.** hamm0r does not rank models. It tests a
   target against an attack library.
-- **Not a cloud service.** There is no hosted version planned. Data
-  residency is the product.
+- **Not a cloud service.** There is no hosted hamm0r product planned. The
+  core workflow is local-first, and hosted judging is an explicit analyzer
+  option rather than the product model.
 - **Not a replacement for manual review.** The analyzer produces
   findings. A human confirms them. The report is a starting point, not
   a verdict.
@@ -95,7 +98,7 @@ These are the rules for decisions when the answer is not obvious. They
 trump features, performance, and developer convenience.
 
 1. **Local beats clever.** If a feature requires a cloud call, it does
-   not ship in the default mode.
+   not ship in the default core mode.
 2. **Click beats config.** If the standard workflow requires editing a
    YAML file, we have failed.
 3. **Report beats dashboard.** The output is a shareable artifact (PDF,

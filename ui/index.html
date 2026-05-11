@@ -54,15 +54,14 @@
       </svg>
       <span class="label">Engagements</span>
     </button>
-    <button class="nav-item sidebar-item" data-view="view-targets" title="Targets">
+    <button class="nav-item sidebar-item" data-view="view-requests" title="Requests">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="22" x2="18" y1="12" y2="12" />
-        <line x1="6" x2="2" y1="12" y2="12" />
-        <line x1="12" x2="12" y1="6" y2="2" />
-        <line x1="12" x2="12" y1="22" y2="18" />
+        <path d="M4 6h16" />
+        <path d="M4 12h16" />
+        <path d="M4 18h10" />
+        <circle cx="18" cy="18" r="3" />
       </svg>
-      <span class="label">Targets</span>
+      <span class="label">Requests</span>
     </button>
     <button class="nav-item sidebar-item" data-view="view-library" title="Libraries">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -80,14 +79,6 @@
         <rect width="8" height="8" x="13" y="13" rx="2" />
       </svg>
       <span class="label">Scenarios</span>
-    </button>
-    <button class="nav-item sidebar-item" data-view="view-workbench" title="Workbench">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="M3 9h18" />
-        <path d="M9 21V9" />
-      </svg>
-      <span class="label">Workbench</span>
     </button>
     <div class="nav-spacer"></div>
     <button class="nav-item sidebar-item" data-nav="settings" title="Settings">
@@ -110,15 +101,15 @@
     <section id="view-home" class="view">
       <div class="landing-wrap">
         <div class="landing-cta-grid">
-          <button id="btn-home-start-engagement" class="landing-card landing-card-primary">
-            <span class="landing-eyebrow">Guided Flow</span>
-            <strong>Start Engagement</strong>
-            <span>Target + Scenario + Library in one guided flow.</span>
+          <button id="btn-home-run-scenario" class="landing-card landing-card-primary">
+            <span class="landing-eyebrow">Run</span>
+            <strong>Run a Scenario</strong>
+            <span>Pick a saved Scenario; fires into a fresh engagement.</span>
           </button>
-          <button id="btn-home-open-workbench" class="landing-card">
-            <span class="landing-eyebrow">Power User</span>
-            <strong>Open Workbench</strong>
-            <span>Free-play prompts against a target without wizard overhead.</span>
+          <button id="btn-home-open-scenarios" class="landing-card">
+            <span class="landing-eyebrow">Build</span>
+            <strong>Open Scenarios</strong>
+            <span>Compose a new Scenario — Requests × library.</span>
           </button>
         </div>
 
@@ -143,495 +134,221 @@
       </div>
     </section>
 
-    <!-- ==============================================================
-         T-06/07/08/09/10/11/12 · Workbench view (default active)
-         ============================================================== -->
-    <section id="view-workbench" class="view">
-
-      <!-- T-07 · Target bar -->
-      <div class="target-bar">
-        <button class="target-selector" id="wb-target-selector" type="button" title="Pick target">
-          <span class="status-dot" id="wb-status-dot"></span>
-          <span class="target-name" id="wb-target-name">Pick Target</span>
-          <span class="target-url" id="wb-target-url"></span>
-          <span class="chev">▾</span>
-        </button>
-        <div class="target-meta" id="wb-target-meta">
-          <span id="wb-meta-endpoint"><strong>—</strong></span>
-          <span>auth: <strong id="wb-meta-auth">—</strong></span>
-          <span>session: <strong id="wb-meta-session">—</strong></span>
-        </div>
-        <div class="target-bar-right">
-          <button class="btn btn-ghost" id="btn-wb-baseline">Set Baseline</button>
-          <button class="btn btn-ghost" id="btn-wb-judge-all">Judge All</button>
-          <button class="btn btn-ghost" id="btn-wb-promote" style="display:none" title="Turn this Workbench session into a tracked Engagement">Promote to Engagement</button>
-          <button class="btn btn-primary" id="btn-wb-fire">
-            <span>▶ Fire</span>
-            <span class="kbd">⌘↵</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- T-08/09/10 · Three-column split -->
-      <div class="split">
-
-        <!-- T-08 · Prompt picker (col 1) -->
-        <div class="picker">
-          <div class="picker-header">
-            <div class="picker-tabs">
-              <button class="picker-tab active" data-tab="library">Library</button>
-              <button class="picker-tab" data-tab="mutations">Mutations</button>
-              <button class="picker-tab" data-tab="history">History</button>
-            </div>
-            <div class="search-box">
-              <input type="text" id="picker-search" placeholder="filter prompts…">
-              <span class="kbd">/</span>
-            </div>
-            <div class="filter-chips" id="picker-chips">
-              <button class="chip active" data-owasp="">ALL</button>
-              <button class="chip" data-owasp="A01">A01</button>
-              <button class="chip" data-owasp="A02">A02</button>
-              <button class="chip" data-owasp="A03">A03</button>
-              <button class="chip" data-owasp="A04">A04</button>
-              <button class="chip" data-owasp="A05">A05</button>
-              <button class="chip" data-owasp="A06">A06</button>
-              <button class="chip" data-owasp="A07">A07</button>
-              <button class="chip" data-owasp="A08">A08</button>
-              <button class="chip" data-owasp="A09">A09</button>
-              <button class="chip" data-owasp="A10">A10</button>
-              <button class="chip" data-owasp="baseline">BASELINE</button>
-            </div>
-            <div class="coverage-bar">
-              <div class="label">
-                <span>OWASP Coverage</span>
-                <span id="picker-prompt-count">—</span>
-              </div>
-              <div class="coverage-grid" id="coverage-grid">
-                <div class="coverage-cell" data-owasp="A01" data-cov="none"><span class="cat">01</span></div>
-                <div class="coverage-cell" data-owasp="A02" data-cov="none"><span class="cat">02</span></div>
-                <div class="coverage-cell" data-owasp="A03" data-cov="none"><span class="cat">03</span></div>
-                <div class="coverage-cell" data-owasp="A04" data-cov="none"><span class="cat">04</span></div>
-                <div class="coverage-cell" data-owasp="A05" data-cov="none"><span class="cat">05</span></div>
-                <div class="coverage-cell" data-owasp="A06" data-cov="none"><span class="cat">06</span></div>
-                <div class="coverage-cell" data-owasp="A07" data-cov="none"><span class="cat">07</span></div>
-                <div class="coverage-cell" data-owasp="A08" data-cov="none"><span class="cat">08</span></div>
-                <div class="coverage-cell" data-owasp="A09" data-cov="none"><span class="cat">09</span></div>
-                <div class="coverage-cell" data-owasp="A10" data-cov="none"><span class="cat">10</span></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Prompt list (populated by JS) -->
-          <div class="prompt-list" id="picker-prompt-list">
-            <div style="padding:20px 14px; font-family:var(--mono); font-size:11px; color:var(--text-3); text-align:center;">
-              open an engagement to load prompts
-            </div>
-          </div>
-        </div>
-
-        <!-- T-09 · Workarea (col 2) -->
-        <div class="workarea">
-          <div class="prompt-editor">
-            <div class="editor-header">
-              <div class="editor-title">
-                <span>active</span>
-                <span class="active-id" id="wb-active-id">—</span>
-                <span class="active-sev" id="wb-active-sev"></span>
-              </div>
-              <div class="editor-actions-row">
-                <button class="mini-btn" id="btn-wb-save-as">save as new</button>
-                <button class="mini-btn" id="btn-wb-duplicate">duplicate</button>
-              </div>
-            </div>
-            <textarea class="editor-textarea" id="wb-prompt-textarea" placeholder="select a prompt from the library or type an attack prompt…"></textarea>
-            <div class="editor-footer">
-              <label class="mutation-toggle">
-                <input type="checkbox" id="wb-mutations-toggle">
-                <span>mutations</span>
-                <span class="mutation-count" id="wb-mutation-count"></span>
-              </label>
-              <span class="char-count" id="wb-char-count">0 chars</span>
-            </div>
-          </div>
-
-          <div class="response-stream" id="wb-response-stream">
-            <div class="response-empty" id="wb-response-empty">
-              <div class="response-empty-title">Pick Target</div>
-              <div class="response-empty-subtitle">Select a target to start working in Workbench.</div>
-              <div class="response-empty-actions">
-                <button class="btn btn-primary" id="wb-empty-pick-target">Pick Target</button>
-                <a href="#" class="response-empty-banner" id="wb-empty-start-engagement">Looking for guided testing? Start an Engagement →</a>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- T-10 · Detail pane (col 3) -->
-        <div class="detail">
-          <div class="detail-tabs">
-            <button class="detail-tab active" data-panel="diff">Diff</button>
-            <button class="detail-tab" data-panel="signals">Signals <span class="badge" id="signals-badge">0</span></button>
-            <button class="detail-tab" data-panel="raw">Raw</button>
-            <button class="detail-tab" data-panel="judge">Judge</button>
-          </div>
-          <div class="detail-content">
-            <div class="detail-panel active" id="detail-diff">
-              <div class="diff-empty">select a response card to compare with baseline</div>
-            </div>
-            <div class="detail-panel" id="detail-signals">
-              <div class="signals-list" id="signals-list">
-                <div style="color:var(--text-3);font-family:var(--mono);font-size:11px;text-align:center;padding:40px 20px;">
-                  no signals detected
-                </div>
-              </div>
-            </div>
-            <div class="detail-panel" id="detail-raw">
-              <pre class="raw-pre" id="detail-raw-pre">—</pre>
-            </div>
-            <div class="detail-panel" id="detail-judge">
-              <div class="judge-pending" id="judge-content">
-                run judge on a result to see verdict
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /.split -->
-
-      <!-- T-12 · Findings drawer -->
-      <div class="findings-drawer collapsed" id="findings-drawer">
-        <div class="findings-header" id="findings-header">
-          <div class="findings-title">
-            <span class="chev">▾</span>
-            <span>Findings</span>
-            <span class="findings-count" id="findings-count">0</span>
-          </div>
-          <div class="findings-header-right">
-            <span class="findings-stat findings-stat-crit"><strong id="findings-stat-crit">0</strong> critical</span>
-            <span class="findings-stat findings-stat-high"><strong id="findings-stat-high">0</strong> high</span>
-            <span class="findings-stat"><strong id="findings-stat-med">0</strong> medium</span>
-            <button class="btn btn-ghost" id="btn-export-pdf" style="padding:3px 10px;font-size:11px;" onclick="event.stopPropagation()">Export Report</button>
-          </div>
-        </div>
-        <div class="findings-body" id="findings-body">
-          <div style="padding:16px 20px; font-family:var(--mono); font-size:11px; color:var(--text-3);">
-            no findings yet — promote a response to add one
-          </div>
-        </div>
-      </div>
-
-    </section><!-- /#view-workbench -->
 
     <!-- ==============================================================
-         Targets view
+         Requests view — top-level Request management.
+         Independent of any Target. Lets the user create/edit/delete
+         a Request with a structured editor (headers, JSON body, auth)
+         or a raw-body textarea.
          ============================================================== -->
-    <section id="view-targets" class="view">
+    <section id="view-requests" class="view">
       <div class="view-layout">
-
         <div class="view-panel">
           <div class="view-panel-header">
-            <span>Targets</span>
-            <button id="btn-new-target" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;">+</button>
+            <span>Requests</span>
+            <button id="btn-new-request" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;">+</button>
           </div>
-          <ul id="target-list"></ul>
+          <ul id="request-list"></ul>
+          <div id="request-empty" class="muted" style="display:none;padding:14px;font-size:12px;">
+            No requests yet. Click <strong>+</strong> to create one.
+          </div>
         </div>
 
         <div class="view-content">
-          <div id="target-welcome" style="display:none; text-align:center; padding:3rem 2rem;">
-            <h2>Welcome to hamm0r</h2>
-            <p class="muted" style="margin:1rem 0;">AI Security Testing for LLM-based Systems</p>
-            <button id="btn-get-started" class="btn btn-primary" style="margin-top:1.5rem;">+ Create Your First Target</button>
+          <div id="request-welcome" style="display:none; text-align:center; padding:3rem 2rem;">
+            <h2>Requests</h2>
+            <p class="muted" style="margin:1rem 0;">
+              Reusable HTTP requests for your LLM endpoints. Use
+              <code>{{prompt}}</code> in the body to mark where attack payloads
+              get substituted at run time.
+            </p>
+            <button id="btn-request-get-started" class="btn btn-primary" style="margin-top:1.5rem;">+ Create your first request</button>
           </div>
 
-          <div id="target-content" style="display:none;">
-            <p class="muted" id="target-empty-msg" style="font-family:var(--mono);font-size:12px;color:var(--text-2);">Select a target from the list or create a new one.</p>
-          </div>
-
-          <form id="target-form" autocomplete="off" novalidate style="display:none">
-            <div id="target-editor-debug" class="target-editor-debug" style="display:none">
-              <div class="target-editor-debug-title">Target editor diagnostics</div>
-              <div id="target-editor-debug-status" class="target-editor-debug-status">Waiting for interaction…</div>
+          <form id="request-form" style="display:none">
+            <div class="form-row">
+              <label for="req-name">Name</label>
+              <input type="text" id="req-name" placeholder="e.g. OpenAI Chat Completion" required>
             </div>
-            <input type="hidden" id="target-id">
-            <input type="hidden" id="target-request-id">
-            <div class="form-grid-2">
-              <div class="form-row">
-                <label for="target-name">Name</label>
-                <input id="target-name" type="text" placeholder="e.g. Acme HR Chatbot" required>
-              </div>
-              <div class="form-row">
-                <label for="target-session-strategy">Session strategy</label>
-                <select id="target-session-strategy">
-                  <option value="none">None (stateless)</option>
-                  <option value="cookie">Cookie-based</option>
-                  <option value="header">Custom header</option>
-                  <option value="body_field">Body field</option>
+            <div class="form-row">
+              <label for="req-id">Id <span class="hint">(filename stem, kebab-case)</span></label>
+              <input type="text" id="req-id" placeholder="e.g. openai-chat-completion" required pattern="[a-z0-9][a-z0-9-]*">
+            </div>
+            <div class="form-row">
+              <label for="req-tag">Tag <span class="hint">(optional, free-text grouping label)</span></label>
+              <input type="text" id="req-tag" placeholder="e.g. acme-staging">
+            </div>
+            <div class="form-row form-row-inline">
+              <div style="flex:0 0 110px">
+                <label for="req-method">Method</label>
+                <select id="req-method">
+                  <option>POST</option>
+                  <option>GET</option>
+                  <option>PUT</option>
+                  <option>PATCH</option>
+                  <option>DELETE</option>
                 </select>
               </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-row" id="session-field-row" style="display:none">
-                <label for="target-session-field">Session field / header name</label>
-                <input id="target-session-field" type="text" placeholder="X-Conversation-Id">
-              </div>
-              <div class="form-row">
-                <label for="target-system-prompt">Target notes (optional)</label>
-                <textarea id="target-system-prompt" rows="3" placeholder="Notes about this system, auth, rate limits, test setup…"></textarea>
+              <div style="flex:1">
+                <label for="req-url">URL</label>
+                <input type="text" id="req-url" placeholder="https://api.example.com/v1/chat/completions" required>
               </div>
             </div>
 
-            <div class="target-requests-panel">
-              <div class="target-requests-header">
-                <div>
-                  <div class="target-requests-title">Requests</div>
-                  <div class="target-requests-subtitle">Multiple reusable requests per target.</div>
-                </div>
-                <button type="button" id="btn-new-request" class="btn btn-ghost">+ Request</button>
-              </div>
-              <div id="target-request-list" class="target-request-list"></div>
+            <div class="form-row">
+              <label>Headers</label>
+              <div id="req-headers"></div>
+              <button type="button" id="btn-req-add-header" class="btn btn-ghost" style="font-size:11px;padding:4px 10px;margin-top:4px;">+ Header</button>
             </div>
 
-            <div class="request-editor-header">
-              <div>
-                <div class="target-requests-title">Request Editor</div>
-                <div class="target-requests-subtitle">Edit the selected request.</div>
-              </div>
-              <button type="button" id="btn-import-curl" class="btn btn-ghost">Import curl</button>
-            </div>
-
-            <div class="form-grid-2">
-              <div class="form-row">
-                <label for="target-request-name">Request name</label>
-                <input id="target-request-name" type="text" placeholder="e.g. Analyze profile request" required>
-              </div>
-              <div class="form-row">
-                <label for="target-method">Method</label>
-                <select id="target-method">
-                  <option value="GET">GET</option>
-                  <option value="POST" selected>POST</option>
-                  <option value="PUT">PUT</option>
-                  <option value="PATCH">PATCH</option>
-                  <option value="DELETE">DELETE</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-row">
-                <label for="target-url">URL</label>
-                <input id="target-url" type="url" placeholder="https://api.example.com/v1/chat/completions" required>
-              </div>
-              <div class="form-row">
-                <label for="target-timeout-seconds">Timeout (seconds)</label>
-                <input id="target-timeout-seconds" type="number" min="1" step="1" value="30">
-              </div>
-            </div>
-            <div class="form-grid-2">
-              <div class="form-row">
-                <label for="target-endpoint">Adapter</label>
-                <select id="target-endpoint">
-                  <option value="openai_compat">OpenAI Compatible</option>
-                  <option value="custom_rest">Custom REST</option>
-                  <option value="raw_http">Raw HTTP</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <label for="target-auth-type">Auth</label>
-                <select id="target-auth-type">
-                  <option value="none">None</option>
-                  <option value="bearer">Bearer token</option>
-                  <option value="api_key">API key</option>
-                  <option value="basic">Basic auth</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-row" id="auth-value-row" style="display:none">
-              <label for="target-auth-value">Auth env var name</label>
-              <input id="target-auth-value" type="text" placeholder="e.g. OPENAI_API_KEY">
-            </div>
-            <div class="form-row auth-token-row" id="auth-token-row" style="display:none">
-              <label>Stored token</label>
-              <div class="auth-token-controls">
-                <span class="auth-token-status" id="auth-token-status" data-state="empty">Enter an env var name above</span>
-                <button type="button" class="btn btn-ghost btn-small" id="btn-auth-token-set">Set / Replace…</button>
-                <button type="button" class="btn btn-ghost btn-small" id="btn-auth-token-forget" style="display:none">Forget</button>
-              </div>
-              <small class="auth-token-help">
-                Token is stored in your OS credential vault (Windows Credential Manager / macOS Keychain / Linux Secret Service). If no token is stored, hamm0r reads the env var of the same name instead. The token never lands in <code>config.yaml</code>, run logs, or diagnostic exports.
-              </small>
-            </div>
-            <div class="form-row" id="auth-header-row" style="display:none">
-              <label for="target-auth-header">Auth header</label>
-              <input id="target-auth-header" type="text" placeholder="Authorization (default)">
-            </div>
-            <fieldset class="request-editor-group" id="target-auth-fetch-group" style="display:none">
-              <legend>Token acquisition</legend>
-              <div class="form-grid-2">
-                <div class="form-row">
-                  <label for="target-auth-source">Auth source</label>
-                  <select id="target-auth-source">
-                    <option value="manual">Manual / keychain</option>
-                    <option value="env_only">Env var only</option>
-                    <option value="http_login">HTTP login</option>
-                  </select>
-                </div>
-                <div class="form-row" id="target-auth-fetch-action-row" style="display:none">
-                  <label>&nbsp;</label>
-                  <button type="button" class="btn btn-ghost" id="btn-auth-fetch-token">Fetch token</button>
-                </div>
-              </div>
-              <div id="target-auth-http-config" style="display:none">
-                <div class="form-grid-2">
-                  <div class="form-row">
-                    <label for="target-auth-login-env">Login env var name</label>
-                    <input id="target-auth-login-env" type="text" placeholder="e.g. PROFILER_LOGIN">
-                  </div>
-                  <div class="form-row">
-                    <label for="target-auth-password-env">Password env var name</label>
-                    <input id="target-auth-password-env" type="text" placeholder="e.g. PROFILER_PASSWORD">
-                  </div>
-                </div>
-                <div class="form-grid-2">
-                  <div class="form-row">
-                    <label for="target-auth-login-url">Login URL</label>
-                    <input id="target-auth-login-url" type="url" placeholder="https://api.example.com/auth/login">
-                  </div>
-                  <div class="form-row">
-                    <label for="target-auth-login-method">Login method</label>
-                    <select id="target-auth-login-method">
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="PATCH">PATCH</option>
-                      <option value="GET">GET</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="form-grid-2">
-                  <div class="form-row">
-                    <label for="target-auth-login-timeout">Login timeout (seconds)</label>
-                    <input id="target-auth-login-timeout" type="number" min="1" step="1" value="60">
-                  </div>
-                  <div class="form-row">
-                    <label for="target-auth-token-path">Token JSONPath</label>
-                    <input id="target-auth-token-path" type="text" placeholder="$.jwToken">
-                  </div>
-                </div>
-                <div class="form-row">
-                  <label for="target-auth-login-headers">Login headers</label>
-                  <textarea id="target-auth-login-headers" rows="4" placeholder="Content-Type: application/json"></textarea>
-                </div>
-                <div class="form-row">
-                  <label for="target-auth-body-template">Login body template</label>
-                  <textarea id="target-auth-body-template" rows="6" placeholder='{"email":"{{login}}","password":"{{password}}"}'></textarea>
+            <div class="form-row">
+              <label>Auth</label>
+              <select id="req-auth-type">
+                <option value="none">None</option>
+                <option value="bearer">Bearer (env var)</option>
+                <option value="custom-header">Custom header (env var)</option>
+              </select>
+              <div id="req-auth-bearer" style="display:none;margin-top:6px;">
+                <input type="text" id="req-auth-token-env" placeholder="env var name e.g. OPENAI_API_KEY">
+                <div class="auth-token-controls" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                  <span class="auth-token-status" id="req-auth-token-status" data-state="empty">Enter an env var name above</span>
+                  <button type="button" class="btn btn-ghost btn-small" id="btn-req-auth-token-set">Set / Replace…</button>
+                  <button type="button" class="btn btn-ghost btn-small" id="btn-req-auth-token-forget" style="display:none">Forget</button>
                 </div>
                 <small class="auth-token-help">
-                  Credentials are read from the configured env vars at fetch time. Only the acquired bearer token is stored in the OS keychain under the auth env var above.
+                  hamm0r resolves this env var <strong>first</strong>; if it
+                  isn't set, it falls back to a value stored in the OS
+                  credential vault under the same name. For tokens that must
+                  be fetched per run, model the login as a separate Request
+                  with <code>response.bind: bearer_token</code> and reference
+                  it from this Request's headers as
+                  <code>{{login_id.bearer_token}}</code>.
                 </small>
               </div>
-            </fieldset>
+              <div id="req-auth-custom" style="display:none;margin-top:6px;display:flex;gap:6px;">
+                <input type="text" id="req-auth-header-name" placeholder="Header name e.g. X-Api-Key">
+                <input type="text" id="req-auth-value-env" placeholder="env var name">
+              </div>
+            </div>
 
-            <fieldset class="request-editor-group">
-              <legend>Headers</legend>
-              <div class="form-grid-2">
-                <div class="form-row">
-                  <label for="target-headers-mode">Header editor</label>
-                  <select id="target-headers-mode">
-                    <option value="structured">Structured</option>
-                    <option value="raw">Raw</option>
-                  </select>
-                </div>
-                <div class="form-row">
-                  <label for="target-content-type">Content-Type hint</label>
-                  <input id="target-content-type" type="text" placeholder="application/json">
-                </div>
+            <div class="form-row">
+              <label>Body</label>
+              <div class="tab-bar" id="req-body-tabs">
+                <button type="button" class="tab tab-active" data-body-tab="structured">Structured (JSON)</button>
+                <button type="button" class="tab" data-body-tab="raw">Raw</button>
               </div>
-              <div id="target-headers-structured">
-                <div id="target-header-rows" class="header-row-list"></div>
-                <button type="button" id="btn-add-header-row" class="btn btn-ghost">+ Header</button>
+              <div id="req-body-structured" class="body-pane">
+                <textarea id="req-body-json" rows="10" spellcheck="false"
+                  placeholder='{"model":"gpt-4","messages":[{"role":"user","content":"{{prompt}}"}]}'></textarea>
+                <div class="hint" id="req-body-json-hint">JSON. Use <code>{{prompt}}</code> as the payload placeholder.</div>
               </div>
-              <div id="target-headers-raw" style="display:none">
-                <div class="form-row">
-                  <label for="target-headers-raw-text">Raw headers</label>
-                  <textarea id="target-headers-raw-text" rows="6" placeholder="Accept: application/json&#10;X-Custom: demo"></textarea>
-                </div>
+              <div id="req-body-raw" class="body-pane" style="display:none;">
+                <textarea id="req-body-raw-text" rows="10" spellcheck="false"
+                  placeholder="Paste body verbatim. Use {{prompt}} where the payload should appear."></textarea>
+                <div class="hint">Bytes are sent as-is, after <code>{{prompt}}</code> substitution. No JSON parsing.</div>
               </div>
-            </fieldset>
+              <div class="hint" id="req-prompt-detector"></div>
+            </div>
 
-            <fieldset class="request-editor-group">
-              <legend>Body</legend>
-              <div class="form-grid-2">
+            <div class="form-row">
+              <label for="req-extract-type">Response extract</label>
+              <select id="req-extract-type">
+                <option value="raw">Raw body</option>
+                <option value="jsonpath">JSONPath</option>
+                <option value="regex">Regex</option>
+              </select>
+              <input type="text" id="req-extract-path" placeholder="$.choices[0].message.content"
+                style="margin-top:6px;display:none;">
+            </div>
+
+            <div class="form-row">
+              <label for="req-bind">
+                Bind extracted value as
+                <span class="hint">(optional — names the response value for auth chains)</span>
+              </label>
+              <input type="text" id="req-bind" placeholder="e.g. bearer_token" pattern="[a-zA-Z][a-zA-Z0-9_-]*">
+              <div class="hint">
+                When set, other Requests can reference this value via
+                <code>&#123;&#123;<em>request_id</em>.<em>bind</em>&#125;&#125;</code> in URL,
+                headers, or body. Example: a login Request binds <code>bearer_token</code>;
+                a chat Request puts <code>Authorization: Bearer &#123;&#123;login.bearer_token&#125;&#125;</code>
+                in its headers. The runner fires the login Request first, captures the value, and
+                injects it into the chat Request.
+              </div>
+            </div>
+
+            <div class="form-row form-row-inline">
+              <div style="flex:0 0 160px">
+                <label for="req-timeout">Timeout (s)</label>
+                <input type="number" id="req-timeout" min="1" max="600" value="30">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label for="req-test-prompt">Test payload / <code>{{prompt}}</code></label>
+              <textarea id="req-test-prompt" rows="4" spellcheck="false" placeholder="Optional test text used for {{prompt}} substitution when you fire the request."></textarea>
+              <div class="hint">This is only used for request testing and is never persisted.</div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" id="btn-req-save" class="btn btn-primary">Save</button>
+              <button type="button" id="btn-req-fire" class="btn btn-ghost">Fire request</button>
+              <button type="button" id="btn-req-cancel" class="btn btn-ghost">Cancel</button>
+              <span style="flex:1"></span>
+              <button type="button" id="btn-req-delete" class="btn btn-ghost danger" style="display:none;">Delete</button>
+            </div>
+
+            <div id="req-test-result" class="target-test-result" style="display:none;margin-top:1rem;">
+              <div class="target-test-meta">
+                <span>Status: <strong id="req-test-status">—</strong></span>
+                <span>Duration: <strong id="req-test-duration">—</strong></span>
+              </div>
+              <div class="form-grid-2" style="margin-top:0.75rem;">
                 <div class="form-row">
-                  <label for="target-body-format">Body format</label>
-                  <select id="target-body-format">
-                    <option value="json">JSON</option>
-                    <option value="text">Text</option>
-                    <option value="form">Form</option>
-                  </select>
+                  <label for="req-test-request-line">Request</label>
+                  <input id="req-test-request-line" type="text" readonly>
                 </div>
                 <div class="form-row">
-                  <label for="target-body-template-note">Prompt placeholder</label>
-                  <input id="target-body-template-note" type="text" value="{{prompt}}" readonly>
+                  <label for="req-test-request-headers">Request headers</label>
+                  <textarea id="req-test-request-headers" rows="6" readonly></textarea>
                 </div>
               </div>
               <div class="form-row">
-                <label for="target-body-text">Body content</label>
-                <textarea id="target-body-text" rows="10" placeholder='{"message":"{{prompt}}"}'></textarea>
+                <label for="req-test-request-body">Request body</label>
+                <textarea id="req-test-request-body" rows="10" readonly></textarea>
               </div>
-            </fieldset>
-
-            <fieldset class="request-editor-group">
-              <legend>Response Parsing</legend>
               <div class="form-grid-2">
                 <div class="form-row">
-                  <label for="target-response-extract-type">Extract mode</label>
-                  <select id="target-response-extract-type">
-                    <option value="raw">Raw body</option>
-                    <option value="jsonpath">JSONPath</option>
-                    <option value="regex">Regex</option>
-                  </select>
+                  <label for="req-test-response-headers">Response headers</label>
+                  <textarea id="req-test-response-headers" rows="6" readonly></textarea>
                 </div>
-                <div class="form-row" id="target-response-extract-value-row">
-                  <label for="target-response-extract-value">Extract value</label>
-                  <input id="target-response-extract-value" type="text" placeholder="$.response">
+                <div class="form-row">
+                  <label for="req-test-response-extracted">Extracted response</label>
+                  <textarea id="req-test-response-extracted" rows="6" readonly></textarea>
                 </div>
               </div>
-            </fieldset>
-            <fieldset class="request-editor-group">
-              <legend>Test Request</legend>
               <div class="form-row">
-                <label for="target-test-prompt">Prompt test value (optional)</label>
-                <textarea id="target-test-prompt" rows="4" placeholder="Used for {{prompt}} during a test request."></textarea>
+                <label for="req-test-response-raw">Raw response</label>
+                <textarea id="req-test-response-raw" rows="10" readonly></textarea>
               </div>
-              <div class="editor-actions">
-                <button type="button" id="btn-test-request" class="btn btn-ghost">Test Request</button>
-              </div>
-              <div id="target-test-result" class="target-test-result" style="display:none">
-                <div class="target-test-meta">
-                  <span>Status: <strong id="target-test-status">—</strong></span>
-                  <span>Duration: <strong id="target-test-duration">—</strong></span>
-                </div>
-                <div class="form-row">
-                  <label for="target-test-response-headers">Response headers</label>
-                  <textarea id="target-test-response-headers" rows="6" readonly></textarea>
-                </div>
-                <div class="form-row">
-                  <label for="target-test-response-extracted">Extracted response</label>
-                  <textarea id="target-test-response-extracted" rows="6" readonly></textarea>
-                </div>
-                <div class="form-row">
-                  <label for="target-test-response-raw">Raw response</label>
-                  <textarea id="target-test-response-raw" rows="10" readonly></textarea>
-                </div>
-              </div>
-            </fieldset>
-            <div class="editor-actions">
-              <button type="submit" id="btn-save-target" class="btn btn-primary">Save</button>
-              <button type="button" id="btn-delete-request" class="btn btn-ghost" style="display:none">Delete Request</button>
-              <button type="button" id="btn-delete-target" class="btn btn-danger" style="display:none">Delete</button>
             </div>
           </form>
         </div><!-- /.view-content -->
       </div><!-- /.view-layout -->
     </section>
+
+    <!-- Delete confirmation dialog (references) -->
+    <div id="req-delete-dialog" class="dialog" style="display:none;">
+      <div class="dialog-content">
+        <h3>Delete this request?</h3>
+        <p id="req-delete-summary"></p>
+        <ul id="req-delete-refs"></ul>
+        <div class="form-actions">
+          <button type="button" id="btn-req-delete-confirm" class="btn btn-primary danger">Delete anyway</button>
+          <button type="button" id="btn-req-delete-cancel" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ==============================================================
          T-22 · Library view (reskinned)
@@ -682,8 +399,9 @@
             <h3 id="editor-title">Add Prompt</h3>
             <form id="prompt-form" autocomplete="off">
               <div class="form-row">
-                <label for="pe-id">ID</label>
-                <input id="pe-id" type="text" placeholder="A01-018" required>
+                <label for="pe-name">Name</label>
+                <input id="pe-name" type="text" placeholder="Ignore previous instructions" required>
+                <small class="hint" id="pe-id-hint">id is auto-derived from the name when you save.</small>
               </div>
               <div class="form-row">
                 <label for="pe-text">Text</label>
@@ -692,22 +410,20 @@
               <div class="form-grid-2">
                 <div class="form-row">
                   <label for="pe-category">Category</label>
-                  <select id="pe-category" required>
-                    <option value="prompt_injection">prompt_injection</option>
-                    <option value="memory_poisoning">memory_poisoning</option>
-                    <option value="identity_confusion">identity_confusion</option>
-                    <option value="privilege_escalation">privilege_escalation</option>
-                    <option value="excessive_agency">excessive_agency</option>
-                    <option value="data_exfiltration">data_exfiltration</option>
-                    <option value="misleading_content">misleading_content</option>
-                    <option value="supply_chain">supply_chain</option>
-                    <option value="misinformation">misinformation</option>
-                    <option value="unbounded_consumption">unbounded_consumption</option>
-                  </select>
+                  <input id="pe-category" type="text" list="pe-category-options" placeholder="injection-classics" required>
+                  <datalist id="pe-category-options">
+                    <option value="injection-classics"></option>
+                    <option value="exfil"></option>
+                    <option value="baselines"></option>
+                    <option value="memory-poisoning"></option>
+                    <option value="excessive-agency"></option>
+                  </datalist>
+                  <small class="hint">Filename (kebab-case) under <code>~/hamm0r/prompts/</code>. Type to pick or add.</small>
                 </div>
                 <div class="form-row">
                   <label for="pe-owasp">OWASP Ref</label>
-                  <select id="pe-owasp" required>
+                  <select id="pe-owasp">
+                    <option value="">— none —</option>
                     <option value="A01">A01</option><option value="A02">A02</option>
                     <option value="A03">A03</option><option value="A04">A04</option>
                     <option value="A05">A05</option><option value="A06">A06</option>
@@ -724,12 +440,8 @@
                 </div>
                 <div class="form-row">
                   <label for="pe-tags">Tags (comma-separated)</label>
-                  <input id="pe-tags" type="text" placeholder="direct, role_override">
+                  <input id="pe-tags" type="text" placeholder="direct, role-override">
                 </div>
-              </div>
-              <div class="form-row">
-                <label for="pe-source">Source</label>
-                <input id="pe-source" type="text" placeholder="internal">
               </div>
               <div class="editor-actions">
                 <button type="submit" class="btn btn-primary" id="pe-submit">Save</button>
@@ -754,11 +466,25 @@
             <button id="btn-new-scenario" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;">+</button>
           </div>
           <ul id="scenario-list"></ul>
+          <div id="scenario-list-empty" class="muted" style="display:none;padding:14px;font-size:12px;">
+            No scenarios yet. Click <strong>+</strong> to create one.
+          </div>
         </div>
 
         <div class="view-content">
-          <div id="scenario-empty" class="muted" style="font-family:var(--mono);font-size:12px;">
-            Select a scenario from the list or create a new one.
+          <div id="scenario-empty" style="text-align:center;padding:3rem 2rem;">
+            <h2>Scenarios</h2>
+            <p class="muted" style="margin:1rem 0;">
+              A Scenario fires a Cartesian product of <strong>Requests</strong>
+              (from the Requests view) × a <strong>library subset</strong>
+              (OWASP refs and/or prompt categories). Auth-chain prerequisites
+              declared via the <code>bind</code> field on Requests are
+              resolved automatically.
+            </p>
+            <p class="muted" style="margin:0.5rem 0 1.5rem 0;font-size:12px;">
+              Pick a scenario from the list, or click below to start a new one.
+            </p>
+            <button id="btn-scenario-get-started" class="btn btn-primary">+ Create your first scenario</button>
           </div>
 
           <div id="scenario-builder" style="display:none">
@@ -767,16 +493,6 @@
                 <div class="form-row">
                   <label for="sc-name">Scenario name</label>
                   <input id="sc-name" type="text" placeholder="Memory poisoning cross-session">
-                </div>
-                <div class="form-row">
-                  <label for="sc-target">Target</label>
-                  <select id="sc-target"><option value="">Select target…</option></select>
-                </div>
-              </div>
-              <div class="form-grid-2">
-                <div class="form-row">
-                  <label for="sc-tags">Tags</label>
-                  <input id="sc-tags" type="text" placeholder="injection, exfil">
                 </div>
                 <div class="form-row">
                   <label for="sc-repeat">Repeat</label>
@@ -793,9 +509,41 @@
               </div>
             </div>
 
-            <h3>Steps</h3>
-            <div id="step-timeline"></div>
-            <button id="btn-add-step" class="btn btn-ghost" style="margin-top:0.5rem">+ Add Step</button>
+            <p class="hint" style="margin-bottom:8px;">
+              A Scenario fires a Cartesian product of <strong>Requests</strong>
+              (from the Requests view) × a <strong>library subset</strong>
+              (selected below). Auth-chain prerequisites are resolved
+              automatically via the <code>bind</code> field on Requests.
+            </p>
+            <div class="form-row">
+              <label>Requests</label>
+              <div id="sc-matrix-requests" class="target-request-picker"></div>
+              <div class="hint">
+                Pick the Requests to fire. Each selected Request is fired
+                against every prompt in the library subset.
+              </div>
+            </div>
+            <div class="form-row">
+              <label>OWASP refs</label>
+              <div id="sc-matrix-owasp" class="filter-chips"></div>
+            </div>
+            <div class="form-row">
+              <label>Categories</label>
+              <div id="sc-matrix-categories" class="filter-chips"></div>
+              <div class="hint" id="sc-matrix-prompt-counter">0 prompts will be fired.</div>
+            </div>
+            <div class="form-row">
+              <label class="pick-checkbox" style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+                <input type="checkbox" id="sc-matrix-shared-session">
+                <span>
+                  Shared session
+                  <span class="hint" style="font-weight:normal;">
+                    (one HTTP client + one bind cache for the whole run; auth
+                    prereqs fire once)
+                  </span>
+                </span>
+              </label>
+            </div>
 
             <div class="run-controls">
               <button id="btn-run-scenario" class="btn btn-danger btn-large">▶ Run Scenario</button>
@@ -848,13 +596,6 @@
                 <h2 id="eng-detail-title">Engagement Detail</h2>
                 <div class="eng-detail-slug" id="eng-detail-slug">/engagements/—</div>
               </div>
-              <div class="eng-detail-actions">
-                <button id="btn-eng-rerun" class="btn btn-primary">Re-run</button>
-                <button id="btn-eng-stop" class="btn btn-ghost" disabled>Stop</button>
-                <button id="btn-eng-export-md" class="btn btn-ghost">Export MD</button>
-                <button id="btn-eng-export-pdf" class="btn btn-ghost">Export PDF</button>
-                <button id="btn-eng-archive" class="btn btn-ghost">Archive</button>
-              </div>
             </div>
 
             <div class="eng-detail-meta">
@@ -888,12 +629,13 @@
                 </div>
 
                 <div id="run-results-section" style="display:none">
-                  <h3 style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin:1.5rem 0 0.75rem;color:var(--text-2);">Results</h3>
+                  <h3 id="run-results-title" style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin:1.5rem 0 0.75rem;color:var(--text-2);">Results</h3>
                   <div class="table-wrap">
                     <table id="results-table">
                       <thead>
                         <tr>
                           <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
+                          <th>Verdict</th>
                           <th class="col-wide">Request</th>
                           <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
                           <th>Latency</th>
@@ -927,53 +669,6 @@
 
   </div><!-- /.main -->
 </div><!-- /.app -->
-
-<!-- ================================================================
-     Add step dialog
-     ================================================================ -->
-<div id="step-dialog" class="modal" style="display:none">
-  <div class="modal-content modal-small">
-    <button class="modal-close" id="step-dialog-close">&times;</button>
-    <h3 id="step-dialog-title" style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Add Step</h3>
-    <form id="step-form" autocomplete="off">
-      <div class="form-row">
-        <label for="step-session">Session</label>
-        <select id="step-session"></select>
-      </div>
-      <div class="form-row">
-        <label for="step-request">Request</label>
-        <select id="step-request"></select>
-      </div>
-      <div class="form-row">
-        <label for="step-source-type">Prompt source</label>
-        <select id="step-source-type">
-          <option value="custom">Custom text</option>
-          <option value="library">From library</option>
-        </select>
-      </div>
-      <div class="form-row" id="step-library-row" style="display:none">
-        <label>Library prompts</label>
-        <div class="library-picker-actions">
-          <button type="button" id="step-library-select-all" class="btn btn-ghost btn-small">Select all</button>
-          <button type="button" id="step-library-clear" class="btn btn-ghost btn-small">Clear</button>
-        </div>
-        <div id="step-library-list" class="library-checklist"></div>
-      </div>
-      <div class="form-row" id="step-custom-row">
-        <label for="step-prompt-text">Prompt text</label>
-        <textarea id="step-prompt-text" rows="4"></textarea>
-      </div>
-      <div class="form-row">
-        <label for="step-delay">Delay (ms)</label>
-        <input id="step-delay" type="number" min="0" value="0">
-      </div>
-      <div class="editor-actions">
-        <button type="submit" class="btn btn-primary">Save Step</button>
-        <button type="button" id="step-cancel" class="btn btn-ghost">Cancel</button>
-      </div>
-    </form>
-  </div>
-</div>
 
 <!-- ================================================================
      Result detail modal
@@ -1056,165 +751,6 @@
 </div>
 
 <!-- ================================================================
-     Workbench target picker
-     ================================================================ -->
-<div id="wb-target-dialog" class="modal" style="display:none">
-  <div class="modal-content modal-small">
-    <button class="modal-close" id="wb-target-dialog-close">&times;</button>
-    <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Pick Target</h3>
-    <div id="wb-target-dialog-list" class="engagement-list">
-      <div class="eng-list-empty">loading…</div>
-    </div>
-    <div class="editor-actions" style="margin-top:1rem;">
-      <button type="button" id="wb-target-manage" class="btn btn-ghost">Manage Targets</button>
-      <button type="button" id="wb-target-dialog-cancel" class="btn btn-ghost">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- ================================================================
-     Engagement wizard
-     ================================================================ -->
-<div id="wizard-modal" class="modal" style="display:none">
-  <div class="modal-content wizard-modal">
-    <button class="modal-close" id="wizard-close">&times;</button>
-    <h3 class="modal-heading">New Engagement Wizard</h3>
-
-    <div class="wizard-progress" id="wizard-progress">
-      <span class="wizard-progress-item active" data-step="1">1 · Target</span>
-      <span class="wizard-progress-item" data-step="2">2 · Scenario</span>
-      <span class="wizard-progress-item" data-step="3">3 · Library</span>
-      <span class="wizard-progress-item" data-step="4">4 · Review &amp; Fire</span>
-    </div>
-
-    <div class="wizard-body">
-      <section class="wizard-step active" id="wizard-step-1">
-        <div class="wizard-row">
-          <label>Target mode</label>
-          <div class="wizard-toggle">
-            <button type="button" class="wizard-toggle-btn active" id="wizard-target-mode-existing">Use Existing</button>
-            <button type="button" class="wizard-toggle-btn" id="wizard-target-mode-new">Create New</button>
-          </div>
-        </div>
-
-        <div id="wizard-existing-row">
-          <div class="wizard-row">
-            <label for="wizard-existing-target">Existing target</label>
-            <select id="wizard-existing-target"></select>
-          </div>
-        </div>
-
-        <div id="wizard-new-row" style="display:none">
-          <div class="form-grid-2">
-            <div class="wizard-row">
-              <label for="wizard-new-target-name">Name</label>
-              <input id="wizard-new-target-name" type="text" placeholder="Acme Chatbot">
-            </div>
-            <div class="wizard-row">
-              <label for="wizard-new-base-url">Base URL</label>
-              <input id="wizard-new-base-url" type="text" inputmode="url" placeholder="https://api.example.com/v1/chat/completions">
-            </div>
-          </div>
-          <div class="form-grid-2">
-            <div class="wizard-row">
-              <label for="wizard-new-protocol">Protocol</label>
-              <select id="wizard-new-protocol">
-                <option value="openai_compat">openai_compat</option>
-                <option value="anthropic">anthropic</option>
-                <option value="custom">custom</option>
-              </select>
-            </div>
-            <div class="wizard-row">
-              <label for="wizard-new-auth">Auth</label>
-              <select id="wizard-new-auth">
-                <option value="none">none</option>
-                <option value="bearer">bearer</option>
-                <option value="api_key">api_key</option>
-                <option value="custom_header">custom_header</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-grid-2">
-            <div class="wizard-row" id="wizard-new-auth-env-row" style="display:none">
-              <label for="wizard-new-auth-env">Auth env var</label>
-              <input id="wizard-new-auth-env" type="text" placeholder="OPENAI_API_KEY">
-            </div>
-            <div class="wizard-row" id="wizard-new-auth-header-row" style="display:none">
-              <label for="wizard-new-auth-header">Custom header</label>
-              <input id="wizard-new-auth-header" type="text" placeholder="X-API-Key">
-            </div>
-          </div>
-          <div class="form-grid-2">
-            <div class="wizard-row">
-              <label for="wizard-new-session">Session handling</label>
-              <select id="wizard-new-session">
-                <option value="none">none</option>
-                <option value="cookie">cookie</option>
-                <option value="header">header</option>
-                <option value="body_field">body_field</option>
-              </select>
-            </div>
-            <div class="wizard-row" id="wizard-new-session-row" style="display:none">
-              <label for="wizard-new-session-field">Session field/header name</label>
-              <input id="wizard-new-session-field" type="text" placeholder="X-Session-Id">
-            </div>
-          </div>
-          <div class="form-grid-2">
-            <div class="wizard-row">
-              <label for="wizard-new-timeout">HTTP timeout (seconds)</label>
-              <input id="wizard-new-timeout" type="number" min="1" max="600" step="1" placeholder="30">
-            </div>
-          </div>
-        </div>
-
-        <div class="wizard-actions-inline">
-          <button type="button" class="btn btn-ghost" id="wizard-test-connection">Test connection</button>
-          <span id="wizard-test-status" class="wizard-inline-note">Run a target check before continuing.</span>
-        </div>
-      </section>
-
-      <section class="wizard-step" id="wizard-step-2">
-        <div id="wizard-scenario-cards" class="wizard-scenario-grid"></div>
-      </section>
-
-      <section class="wizard-step" id="wizard-step-3">
-        <div class="wizard-row">
-          <label>OWASP libraries</label>
-          <div id="wizard-lib-owasp" class="wizard-chip-grid"></div>
-        </div>
-        <div class="wizard-row">
-          <label>Custom libraries</label>
-          <div id="wizard-lib-custom" class="wizard-chip-grid"></div>
-        </div>
-        <div class="wizard-summary-line" id="wizard-lib-counter">0 prompts selected, 0 judged</div>
-        <div id="wizard-lib-preview" class="wizard-lib-preview"></div>
-      </section>
-
-      <section class="wizard-step" id="wizard-step-4">
-        <div id="wizard-review-list" class="wizard-review"></div>
-        <div class="wizard-row">
-          <label for="wizard-engagement-name">Engagement name</label>
-          <input id="wizard-engagement-name" type="text" placeholder="Acme quick scan Q2">
-        </div>
-        <label class="wizard-checkbox-row">
-          <input id="wizard-save-template" type="checkbox">
-          <span>Save as Template (scenario preset)</span>
-        </label>
-      </section>
-    </div>
-
-    <div class="wizard-footer">
-      <button type="button" class="btn btn-ghost" id="wizard-cancel">Cancel</button>
-      <div class="wizard-footer-right">
-        <button type="button" class="btn btn-ghost" id="wizard-prev">Back</button>
-        <button type="button" class="btn btn-primary" id="wizard-next">Continue</button>
-        <button type="button" class="btn btn-primary" id="wizard-fire" style="display:none">▶ Fire</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================================================================
      New engagement dialog
      ================================================================ -->
 <div id="engagement-dialog" class="modal" style="display:none">
@@ -1249,6 +785,59 @@
   </div>
 </div>
 
+<!-- ================================================================
+     Run a Scenario picker (Home → Run a Scenario CTA)
+     ================================================================ -->
+<div id="run-scenario-picker" class="modal" style="display:none">
+  <div class="modal-content modal-eng">
+    <button class="modal-close" id="run-scenario-picker-close">&times;</button>
+    <h3 class="modal-heading">Pick a Scenario to run</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 1rem 0;">
+      Picking a Scenario creates a fresh engagement named after it and
+      fires the run immediately.
+    </p>
+    <div id="run-scenario-picker-list" class="engagement-list">
+      <div class="eng-list-empty">loading…</div>
+    </div>
+    <div class="editor-actions" style="margin-top:1rem;">
+      <button type="button" id="run-scenario-picker-cancel" class="btn btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     Bearer-token keychain modal (Request editor → Set / Replace…)
+     ================================================================ -->
+<div id="req-auth-token-modal" class="modal" style="display:none">
+  <div class="modal-content modal-small">
+    <button class="modal-close" id="req-auth-token-modal-close">&times;</button>
+    <h3 class="modal-heading">Store bearer token</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 1rem 0;">
+      Stored in the OS credential vault under the env-var name shown
+      below. The plaintext value never lands in <code>config.yaml</code>,
+      run logs, or any engagement file. The runner reads the
+      <strong>env var first</strong>; the keychain is only consulted when
+      the env var is unset.
+    </p>
+    <div class="form-row">
+      <label for="req-auth-token-env-display">Env var (account)</label>
+      <input id="req-auth-token-env-display" type="text" readonly>
+    </div>
+    <div class="form-row">
+      <label for="req-auth-token-input">Token</label>
+      <input id="req-auth-token-input" type="password" autocomplete="off" spellcheck="false" placeholder="ey…">
+      <label class="pick-checkbox" style="margin-top:6px;display:flex;gap:6px;align-items:center;cursor:pointer;font-size:11px;">
+        <input id="req-auth-token-reveal" type="checkbox">
+        <span>Show value while typing</span>
+      </label>
+    </div>
+    <div class="editor-actions" style="margin-top:1rem;">
+      <button type="button" id="req-auth-token-save" class="btn btn-primary">Save to keychain</button>
+      <button type="button" id="req-auth-token-cancel" class="btn btn-ghost">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast notifications -->
 <div id="toast-container"></div>
 
@@ -1259,126 +848,240 @@
   <div class="modal-content modal-settings">
     <button class="modal-close" id="settings-modal-close">&times;</button>
     <h3 class="modal-heading">Settings</h3>
+    <div class="settings-layout">
+      <aside class="settings-nav" aria-label="Settings sections">
+        <button type="button" class="settings-nav-item active" data-settings-view="general">General</button>
+        <button type="button" class="settings-nav-item" data-settings-view="logging">Logging</button>
+        <button type="button" class="settings-nav-item" data-settings-view="analyzer">Analyz0r</button>
+      </aside>
 
-    <section class="settings-section">
-      <div class="settings-section-head">
-        <h4 class="settings-section-title">General</h4>
-        <span class="settings-section-note">App-wide preferences</span>
-      </div>
-      <div class="settings-grid">
-        <div class="settings-field">
-          <label for="settings-app-version">App version</label>
-          <input id="settings-app-version" type="text" value="—" readonly>
-        </div>
-      </div>
-      <div class="settings-inline-note">
-        Configuration lives in <code>~/hamm0r/config.yaml</code>.
-      </div>
-    </section>
+      <div class="settings-content">
+        <section class="settings-view active" id="settings-view-general" data-settings-view="general">
+          <section class="settings-section">
+            <div class="settings-section-head">
+              <h4 class="settings-section-title">General</h4>
+              <span class="settings-section-note">App-wide preferences</span>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-field">
+                <label for="settings-app-version">App version</label>
+                <input id="settings-app-version" type="text" value="—" readonly>
+              </div>
+            </div>
+            <div class="settings-inline-note">
+              Configuration lives in <code>~/hamm0r/config.yaml</code>.
+            </div>
+          </section>
 
-    <section class="settings-section settings-section-divider">
-      <div class="settings-section-head">
-        <h4 class="settings-section-title">Appearance</h4>
-        <span class="settings-section-note">Theme &amp; profile</span>
-      </div>
-      <div class="settings-grid">
-        <div class="settings-field">
-          <label for="settings-theme">Theme</label>
-          <select id="settings-theme" disabled>
-            <option value="default">hamm0r (default)</option>
-            <option value="spirit">Spirit Testing</option>
-            <option value="testsolutions">TestSolutions</option>
-          </select>
-        </div>
-      </div>
-      <div class="settings-inline-note">
-        Alternate themes are not implemented yet — the picker is reserved for the upcoming theming work.
-      </div>
-    </section>
+          <section class="settings-section settings-section-divider">
+            <div class="settings-section-head">
+              <h4 class="settings-section-title">Appearance</h4>
+              <span class="settings-section-note">Theme &amp; profile</span>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-field">
+                <label for="settings-theme">Theme</label>
+                <select id="settings-theme">
+                  <option value="default">hamm0r (default)</option>
+                  <option value="spirit_testing">Spirit Testing</option>
+                  <option value="testsolutions">TestSolutions</option>
+                </select>
+              </div>
+            </div>
+            <div class="settings-inline-note">
+              Theme changes are saved to <code>~/hamm0r/config.yaml</code>.
+            </div>
+          </section>
+        </section>
 
-    <section class="settings-section settings-section-divider">
-      <div class="settings-section-head">
-        <h4 class="settings-section-title">Logging</h4>
-        <span class="settings-section-note">Applied after app restart</span>
-      </div>
-      <div class="settings-grid">
-        <label class="settings-toggle-row">
-          <input id="settings-logging-enabled" type="checkbox">
-          <span>
-            <strong>Write application logs</strong>
-            <small>Stores logs under <code>~/hamm0r/logs/</code>.</small>
-          </span>
-        </label>
-        <div class="settings-field">
-          <label for="settings-log-level">Log level</label>
-          <select id="settings-log-level">
-            <option value="error">error</option>
-            <option value="info">info</option>
-            <option value="debug">debug</option>
-          </select>
-        </div>
-        <label class="settings-toggle-row">
-          <input id="settings-body-logging-enabled" type="checkbox">
-          <span>
-            <strong>Log request/response bodies</strong>
-            <small>Large bodies above 500 KB are replaced by a size notice.</small>
-          </span>
-        </label>
-      </div>
-      <div class="settings-inline-note" id="settings-logging-status">
-        Logging changes are saved to <code>~/hamm0r/config.yaml</code>.
-      </div>
-      <div class="editor-actions settings-actions">
-        <button id="btn-settings-save" class="btn btn-primary">Save Logging Settings</button>
-      </div>
-    </section>
+        <section class="settings-view" id="settings-view-logging" data-settings-view="logging">
+          <section class="settings-section">
+            <div class="settings-section-head">
+              <h4 class="settings-section-title">Logging</h4>
+              <span class="settings-section-note">Applied after app restart</span>
+            </div>
+            <div class="settings-grid">
+              <label class="settings-toggle-row">
+                <input id="settings-logging-enabled" type="checkbox">
+                <span>
+                  <strong>Write application logs</strong>
+                  <small>Stores logs under <code>~/hamm0r/logs/</code>.</small>
+                </span>
+              </label>
+              <div class="settings-field">
+                <label for="settings-log-level">Log level</label>
+                <select id="settings-log-level">
+                  <option value="error">error</option>
+                  <option value="info">info</option>
+                  <option value="debug">debug</option>
+                </select>
+              </div>
+              <label class="settings-toggle-row">
+                <input id="settings-body-logging-enabled" type="checkbox">
+                <span>
+                  <strong>Log request/response bodies</strong>
+                  <small>Large bodies above 500 KB are replaced by a size notice.</small>
+                </span>
+              </label>
+            </div>
+            <div class="settings-inline-note" id="settings-logging-status">
+              Logging changes are saved to <code>~/hamm0r/config.yaml</code>.
+            </div>
+          </section>
+        </section>
 
-    <section class="settings-section settings-section-divider">
-      <div class="settings-section-head">
-        <h4 class="settings-section-title">Analyz0r</h4>
-      </div>
-      <p class="analyzer-intro">
-      The local LLM judge evaluates attack responses on-device. No data leaves your machine.
-      The model (~1.9 GB) is downloaded once and stored in <code>~/hamm0r/analyzer/models/</code>.
-    </p>
+        <section class="settings-view" id="settings-view-analyzer" data-settings-view="analyzer">
+          <section class="settings-section">
+            <div class="settings-section-head">
+              <h4 class="settings-section-title">Analyz0r</h4>
+              <span class="settings-section-note">Global judge configuration</span>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-field">
+                <label for="settings-analyzer-judge-mode">Judge mode</label>
+                <select id="settings-analyzer-judge-mode">
+                  <option value="local">Local Judge</option>
+                  <option value="hosted">Hosted Judge</option>
+                </select>
+              </div>
+            </div>
+            <p class="analyzer-intro">
+              Choose whether analyz0r judges runs with the local model bundle or a hosted LLM.
+              The local model (~1.9 GB) is stored in <code>~/hamm0r/analyzer/models/</code>.
+            </p>
 
-    <!-- Status bar -->
-    <div class="analyzer-status-row" id="analyzer-status-row">
-      <span class="analyzer-hw-badge" id="analyzer-hw-badge">detecting…</span>
-      <span class="analyzer-install-badge" id="analyzer-install-badge">not installed</span>
+            <div class="settings-subnav" aria-label="Analyz0r sections">
+              <button type="button" class="settings-subnav-item active" data-analyzer-view="prompt">Prompt</button>
+              <button type="button" class="settings-subnav-item" data-analyzer-view="local">Local Judge</button>
+              <button type="button" class="settings-subnav-item" data-analyzer-view="hosted">Hosted Judge</button>
+            </div>
+
+            <div class="settings-subview active" id="settings-analyzer-prompt-section" data-analyzer-view="prompt">
+              <div class="settings-grid">
+                <div class="settings-field">
+                  <label for="settings-analyzer-judge-prompt">Judge prompt template</label>
+                  <textarea id="settings-analyzer-judge-prompt" rows="14" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <div class="settings-inline-note" id="settings-analyzer-prompt-status">
+                This prompt is used for future Analyze and Judge actions in both Local Judge and Hosted Judge mode.
+              </div>
+              <div class="editor-actions settings-actions">
+                <button id="btn-settings-reset-analyzer-prompt" class="btn btn-ghost" type="button">Reset Judge Prompt</button>
+              </div>
+            </div>
+
+            <div class="settings-subview" id="settings-local-judge-section" data-analyzer-view="local">
+              <p class="analyzer-intro">
+                The local judge evaluates attack responses on-device. Install the local analyzer bundle to enable full local analysis.
+              </p>
+
+              <div class="analyzer-status-row" id="analyzer-status-row">
+                <span class="analyzer-hw-badge" id="analyzer-hw-badge">detecting…</span>
+                <span class="analyzer-install-badge" id="analyzer-install-badge">not installed</span>
+              </div>
+
+              <div id="analyzer-variants" class="analyzer-variants">
+                <div class="analyzer-loading">loading variants…</div>
+              </div>
+
+              <div id="analyzer-download-section" style="display:none">
+                <div class="analyzer-progress-label">
+                  <span id="analyzer-progress-text">Downloading…</span>
+                  <span id="analyzer-progress-pct">0%</span>
+                </div>
+                <div class="progress-bar-wrap">
+                  <div class="progress-bar" id="analyzer-progress-bar" style="width:0%"></div>
+                </div>
+                <div class="analyzer-progress-bytes" id="analyzer-progress-bytes"></div>
+              </div>
+
+              <div class="editor-actions" style="margin-top:1.2rem">
+                <button id="btn-analyzer-install" class="btn btn-primary" disabled>Download &amp; Install</button>
+                <button id="btn-analyzer-repair" class="btn btn-primary" style="display:none">Repair install</button>
+                <button id="btn-analyzer-uninstall" class="btn btn-danger" style="display:none">Remove Model</button>
+              </div>
+            </div>
+
+            <div class="settings-subview" id="settings-hosted-judge-section" data-analyzer-view="hosted">
+              <div class="settings-grid">
+                <div class="settings-field">
+                  <label for="settings-hosted-provider">Hosted provider</label>
+                  <select id="settings-hosted-provider">
+                    <option value="azure_openai">Azure OpenAI</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-api-style">API style</label>
+                  <select id="settings-hosted-api-style">
+                    <option value="auto">auto</option>
+                    <option value="chat_completions">chat_completions</option>
+                    <option value="responses">responses</option>
+                  </select>
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-endpoint">Endpoint</label>
+                  <input id="settings-hosted-endpoint" type="text" placeholder="https://your-resource.openai.azure.com">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-deployment">Deployment / Model</label>
+                  <input id="settings-hosted-deployment" type="text" placeholder="gpt-5.2-chat">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-api-version">API version</label>
+                  <input id="settings-hosted-api-version" type="text" placeholder="2024-10-21">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-secret-ref">API key reference</label>
+                  <input id="settings-hosted-secret-ref" type="text" placeholder="HOSTED_JUDGE_API_KEY">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-api-key">API key</label>
+                  <input id="settings-hosted-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep the stored key">
+                </div>
+              </div>
+              <div class="settings-inline-note" id="settings-hosted-secret-status">
+                Hosted Judge validation will appear here.
+              </div>
+              <div class="editor-actions settings-actions">
+                <button id="btn-settings-clear-hosted-secret" class="btn btn-ghost" type="button">Clear Hosted API Key</button>
+                <button id="btn-settings-test-hosted-judge" class="btn btn-ghost" type="button">Test Hosted Judge</button>
+              </div>
+              <div class="settings-grid" style="margin-top:1rem;">
+                <div class="settings-field">
+                  <label for="settings-hosted-max-input-chars">Max input chars</label>
+                  <input id="settings-hosted-max-input-chars" type="number" min="1000" step="100">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-max-output-tokens">Max output tokens</label>
+                  <input id="settings-hosted-max-output-tokens" type="number" min="1" step="1">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-timeout-seconds">Request timeout (seconds)</label>
+                  <input id="settings-hosted-timeout-seconds" type="number" min="1" step="1">
+                </div>
+                <div class="settings-field">
+                  <label for="settings-hosted-max-retries">Max retries</label>
+                  <input id="settings-hosted-max-retries" type="number" min="0" step="1">
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </div>
     </div>
 
-    <!-- Variant list (populated by JS) -->
-    <div id="analyzer-variants" class="analyzer-variants">
-      <div class="analyzer-loading">loading variants…</div>
+    <div class="settings-inline-note" id="settings-save-status">
+      Settings are saved to <code>~/hamm0r/config.yaml</code>.
     </div>
-
-    <!-- Download progress -->
-    <div id="analyzer-download-section" style="display:none">
-      <div class="analyzer-progress-label">
-        <span id="analyzer-progress-text">Downloading…</span>
-        <span id="analyzer-progress-pct">0%</span>
-      </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar" id="analyzer-progress-bar" style="width:0%"></div>
-      </div>
-      <div class="analyzer-progress-bytes" id="analyzer-progress-bytes"></div>
-    </div>
-
-    <div class="editor-actions" style="margin-top:1.2rem">
-      <button id="btn-analyzer-install" class="btn btn-primary" disabled>Download &amp; Install</button>
-      <button id="btn-analyzer-repair" class="btn btn-primary" style="display:none">Repair install</button>
-      <button id="btn-analyzer-uninstall" class="btn btn-danger" style="display:none">Remove Model</button>
-    </div>
-    </section>
-
-    <div class="editor-actions" style="margin-top:1.2rem">
+    <div class="editor-actions settings-actions settings-footer-actions">
+      <button id="btn-settings-save" class="btn btn-primary" type="button">Save</button>
       <button id="settings-modal-cancel" class="btn btn-ghost">Close</button>
     </div>
   </div>
 </div>
 
-<script src="js/api.js?v=20260504b"></script>
-<script src="js/app.js?v=20260504b"></script>
+<script src="js/api.js?v=20260511b"></script>
+<script src="js/app.js?v=20260511b"></script>
 </body>
 </html>

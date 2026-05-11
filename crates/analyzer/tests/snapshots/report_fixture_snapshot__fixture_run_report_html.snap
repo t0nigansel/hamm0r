@@ -1,5 +1,6 @@
 ---
 source: crates/analyzer/tests/report_fixture_snapshot.rs
+assertion_line: 81
 expression: html
 ---
 <!doctype html>
@@ -59,6 +60,9 @@ expression: html
         <span>started: <strong class="mono">2026-04-26T10:00:00Z</strong></span>
         <span>finished: <strong class="mono">2026-04-26T10:01:45Z</strong></span>
         <span>generated: <strong class="mono">2026-04-26T10:02:00Z</strong></span>
+        <span>judge mode: <strong>Local</strong></span>
+        <span>judge provider: <strong>Heuristic</strong></span>
+        <span>judge model: <strong class="mono">heuristic-v0</strong></span>
       </div>
       <div class="grid">
         <div class="card"><div class="k">attempts</div><div class="v">2</div></div>

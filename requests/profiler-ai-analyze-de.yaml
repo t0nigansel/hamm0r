@@ -1,0 +1,24 @@
+version: 1
+id: profiler-ai-analyze-de
+name: "Profiler AI Analyze (DE)"
+method: POST
+url: "https://profiler-test.spirit-indianer.com/api/berater/5c583309b8056a406869b2d2/ai-analyze"
+auth:
+  type: bearer
+  token_env: PROFILER_BEARER_TOKEN
+headers:
+  sec-ch-ua-platform: "\"Windows\""
+  Referer: "https://profiler-test.spirit-indianer.com/aiProfileMatching/5c583309b8056a406869b2d2"
+  sec-ch-ua: "\"Google Chrome\";v=\"147\", \"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"147\""
+  sec-ch-ua-mobile: "?0"
+  User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+  Accept: "application/json, text/plain, */*"
+  Content-Type: "application/json"
+body:
+  format: raw
+  content: '{"sanitizedProfile":"{{prompt}}","job":"Einleitung\r\n\r\nEin Partnerunternehmen aus der Energiewirtschaft sucht zum nächstmöglichen Zeitpunkt einen Testmanager (m/w/d) in 80% Remote und 20% vor Ort in Frankfurt am Main!\r\n\r\n·       Start: 09.02.2026\r\n\r\n·       Ende: 31.12.2026 (Verlängerung möglich)\r\n\r\n·       Freelancing, jedoch nur sozialversicherungspflichtig Angestellte Personen werden berücksichtigt werden können\r\n\r\n·       80% remote / 20% in Frankfurt am Main\r\n\r\n·       Bewerbungen gerne mit 2 Stundensätzen (remote/vor Ort)\r\n\r\n·        \r\n\r\nIhre Aufgaben\r\n\r\n·       Erstellung von Testkonzepten, Weiterentwicklung Teststrategien entsprechend der Qualitätsziele\r\n\r\n·       Entwicklung von Testplänen,-zeitplänen, Testverantwortlichkeiten , Testphasen und -methodiken\r\n\r\n·       Unterstützung bei der Testfallerstellung der Testkoordinatoren\r\n\r\n·       Einrichtung Testumgebung, Testdatenmanagement \r\n\r\n·       Identifizierung und Eskalation von Testproblemen und -risiken \r\n\r\n·       Überwachung und Kontrolle der Qualität der Testprozesse und-ergebnisse\r\n\r\n·       Identifizierung und Planung von Testdurchführungen im Release \r\n\r\n·       Testbezogene Kommunikation an Stakeholder, Projektleiter, Linienführung\r\n\r\n·       Durchführung und Weiterentwicklung der Testautomation. \r\n\r\n·       Testmanagementreporting\r\n\r\nUnsere Anforderungen\r\n\r\n·       Langjährige Erfahrung in der Durchführung vom Testmanagement mit dem Solution Manager 7.2 \r\n\r\n·       Langjährige Erfahrung als Testmanager im SAP-Umfeld, idealerweise im Rahmen von S/4HANA Einführungs-und Transformationsprojekten\r\n\r\n·       Sehr gute Kenntnisse der Prozesse, Strukturen und Abläufen im SAP Solution Manager insbesondere im Testmanagement\r\n\r\n·       Sehr gute Kenntnisse in agilen Methoden sowie dem Testdaten Management\r\n\r\n·       Hohes Maß an Motivation zur schnellen, gemeinsamen und adäquaten Lösungsfindung fachlicher und technischer Problemstellungen\r\n\r\n·       Erfahrungen im Releasemanagement und dem Transportmanagement von Vorteil\r\n\r\n·       Sehr gute Kommunikationsfähigkeiten und Erfahrung im verantwortungsvollen und zuverlässigen Umgang mit Kunden\r\n\r\n·       Selbständiges und eigenverantwortliches Arbeiten im Team unter Berücksichtigung von Budget- und Zeitvorgaben\r\n\r\n·       Verständnis für prozessuale und architektonische Zusammenhänge im Kontext Testmanagement\r\n\r\n·       Fundierte Kenntisse in verschiedenen Testmanagement-Tools (SolMan, Jira, etc.) und in der Testautomation mit Test Pilot\r\n\r\n·       Deutsch als Muttersprache oder verhandlungssichere Kommunikationsfähigkeiten in deutscher Sprache (Sprachlevel: C2 nach GER)\r\n\r\nWir bieten Ihnen\r\n\r\n·       Attraktive Möglichkeiten zur Verkürzung Ihres persönlichen Zahlungszieles\r\n\r\n·       Keine zeitraubende Rechnungserstellung mehr nötig\r\n\r\n·       Schnelle, zuverlässige Honorarzahlung\r\n\r\n·       Projektverträge mittels elektronischer Signatur abschließen\r\n\r\n \r\n\r\nIch freue mich über Vorschläge und versuche auch telefonisch Sie zu erreichen.\r\n\r\n \r\n\r\nViele Grüße aus Köln","language":"de"}'
+response:
+  extract:
+    type: raw
+timeout_seconds: 50
+adapter: raw-http

@@ -21,6 +21,11 @@ serde_json.workspace = true
 storage = { path = "../storage" }
 sha2 = "0.10"
 minijinja = "2"
+# Blocking HTTP for the Ollama dev backend. Pipeline is sync, so we use
+# reqwest::blocking rather than the async client core uses elsewhere.
+# rustls-tls because Ollama is plaintext on localhost but we may also
+# point at remote endpoints during development.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 llama-cpp-2 = { version = "0.1", features = ["metal", "sampler"], optional = true }

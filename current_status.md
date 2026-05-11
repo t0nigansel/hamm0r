@@ -1,168 +1,62 @@
 # Current Status
 
-Last updated: 2026-05-02
+Last updated: 2026-05-11
 
-## Context
+This file is a one-page snapshot of where the codebase sits. The full
+narrative lives in [`docs/RefactorPlan.md`](docs/RefactorPlan.md).
 
-We are debugging the **Targets** page in the Tauri app.
+## Where we are
 
-User-visible symptoms:
-- `Save Target + Request` appears to do nothing
-- `+ Header` appears to do nothing
-- Repro case used repeatedly: open the old target/profile `Profiler`, add one
-  character to the body content, click save, reload target, change is gone
+The Phase 2 refactor (collapse 5 concepts down to 4 primitives) is
+**effectively done**. The sidebar is `Home · Requests · Prompts ·
+Scenarios · Engagements · Settings`. Targets, the Workbench view, and
+the Engagement Wizard are gone from the UI and (mostly) from the
+backend.
 
-The user starts the app successfully from Git Bash with:
+Matrix Scenarios — N Requests × a library subset, fired as a Cartesian
+product, with auth-chain prerequisites resolved from
+`Request.response.bind` — are the only Scenario mode. The legacy
+step-based execution path has been retired in the runner, storage
+schema, command layer, and UI.
 
-```bash
-/c/Users/Gansel/.cargo/bin/cargo.exe tauri dev
-```
+## What works end-to-end today
 
-This does launch the current app window.
+- **Requests** view: full CRUD, structured + raw body editor, bearer
+  token storage in the OS keychain (env-var-first precedence — see
+  [`docs/Architecture.md`](docs/Architecture.md)), per-row Test
+  Request button.
+- **Prompts / Library** view: full CRUD. Name + auto-derived id +
+  category + severity + OWASP ref + free-form tags. Bundled starter
+  library seeded on first launch.
+- **Scenarios** view: matrix editor (Request multi-select, OWASP chips,
+  category chips, shared-session toggle, live prompt counter).
+- **Engagements** view: list, open, per-row delete (refuses while a run
+  is active). Run table with rerun, stop, delete, analyze, export-MD /
+  export-PDF buttons. Engagement detail header shows the source
+  Scenario name (resolved from `RunHeader.scenario_id`).
+- **Home** view: recent engagements, "Run a Scenario" modal picker,
+  "Open Scenarios" CTA.
+- **Settings**: General · Logging · Analyz0r (with Prompt / Local Judge /
+  Hosted Judge sub-tabs). Hosted-Judge mode stores the API key in the
+  OS keychain.
+- **Analyzer**: opt-in install flow that fetches a per-OS bundle, both
+  local-judge (llama-cpp-2 + GGUF) and hosted-judge (Azure OpenAI)
+  paths work end-to-end.
 
-## Important Findings
+## Test status
 
-### 1. This does **not** currently look like a backend/storage bug
+`cargo test --workspace`: **162 passing**, zero warnings, zero failures.
 
-We added diagnostic logging for the target editor save flow.
+UI is not under automated test yet — the Playwright spec for the
+auth-chain matrix flow is the only meaningful piece still tracked in
+the work-list.
 
-Expected log lines would be emitted under component `target-editor` when:
-- `+ Header` is clicked
-- save starts
-- validation passes
-- `save_target_meta` is called
-- `save_request` is called
+## What's still open
 
-Actual result from the user's log:
+See the work-list at the bottom of
+[`docs/RefactorPlan.md`](docs/RefactorPlan.md). One meaningful item:
 
-```text
-[2026-05-02T11:10:57Z] [info] [app] [app_session_id=app-27132-1777720257971] Application startup
-[2026-05-02T11:10:57Z] [info] [tauri] [app_session_id=app-27132-1777720257971] Tauri setup completed
-[2026-05-02T11:10:57Z] [info] [app] [app_session_id=app-27132-1777720257971] UI ready
-```
+- **End-to-end Playwright spec** for the auth-chain matrix flow. Closes
+  the Phase 2 Definition of Done.
 
-There are **no** `target-editor` log lines at all.
-
-That means the click/save flow is not reaching the instrumented JS path.
-
-### 2. Because of that, several earlier hypotheses are now unlikely
-
-These are likely **not** the primary cause:
-- YAML write failure
-- `save_request` backend bug
-- `save_target_meta` backend bug
-- storage-layer persistence bug
-- JSON body parse failure inside the save path
-
-If the save path had started, we would have seen at least one
-`target-editor` log line.
-
-### 3. The problem is now believed to be earlier than save logic
-
-Most plausible remaining causes:
-
-1. The running window is still not executing the current `ui/js/app.js`
-   despite restart / asset version bump
-2. Clicks are not reaching the target editor controls on the Targets page
-   (layout / hit-testing / overlay / interaction issue)
-
-At this point, the second option is the stronger suspect.
-
-## Relevant Files
-
-### Frontend
-
-- `ui/index.html`
-- `ui/js/app.js`
-- `ui/js/api.js`
-- `ui/style.css`
-
-### Backend logging support added for debugging
-
-- `crates/hamm0r/src/commands.rs`
-- `crates/hamm0r/src/main.rs`
-
-## Changes Already Made In This Session
-
-### Target editor / save-path attempts
-
-- Added explicit request draft reconstruction with `ensureCurrentRequestDraft()`
-- Added clearer validation before save
-- Added asset version bump in `ui/index.html`
-- Added `novalidate` to `#target-form`
-- Added delegated click/submit handling attempts
-- Added target-editor diagnostic logging via a new Tauri command
-
-### Logging command added
-
-New command:
-- `log_ui_debug`
-
-Purpose:
-- log frontend save/click flow safely without body contents
-
-### Current diagnostic result
-
-The diagnostic command works in principle, but **no target-editor events were
-logged from the user's click attempts**.
-
-## Files Modified During Investigation
-
-These files were touched while debugging this issue:
-
-- `ui/index.html`
-- `ui/js/app.js`
-- `ui/js/api.js`
-- `crates/hamm0r/src/commands.rs`
-- `crates/hamm0r/src/main.rs`
-
-There are also many other repo changes from prior work in this branch/worktree.
-Do **not** assume a clean working tree.
-
-## State Of The User Data Used For Repro
-
-Target file:
-- `C:\Users\Gansel\hamm0r\targets\profiler-molg8vnq.yaml`
-
-Request file:
-- `C:\Users\Gansel\hamm0r\requests\profiler-molg8vnq.yaml`
-
-Current target YAML is minimal and old-style:
-
-```yaml
-version: 1
-id: profiler-molg8vnq
-name: Profiler
-request_id: profiler-molg8vnq
-```
-
-This may matter because the bug is repeatedly reproduced with an **older**
-target/profile rather than a freshly created one.
-
-## What The Next Session Should Do First
-
-1. Read this file.
-2. Do **not** start by changing backend persistence.
-3. Focus on the **Targets view interaction layer**:
-   - whether clicks reach the buttons
-   - whether the current `app.js` is truly loaded
-   - whether something in layout/CSS blocks pointer interaction
-4. Verify at runtime whether the target editor controls are hit-testable.
-
-## Suggested Next Technical Step
-
-The next session should perform a **focused runtime/UI interaction diagnosis**,
-not another broad save-path refactor.
-
-Best next step:
-- instrument the Targets page with unmistakable visible diagnostics
-  (for example temporary UI text mutation on button click, or a minimal
-  top-level click tracer for the target editor area)
-- or inspect the interaction/hit-test behavior directly if runtime tooling is
-  available
-
-The key question to answer first is:
-
-> Are clicks on `#btn-add-header-row` and the target form area actually
-> reaching the frontend code in the running app window?
-
+Smaller polish items live in [`docs/ToDo.md`](docs/ToDo.md).

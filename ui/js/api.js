@@ -81,17 +81,6 @@ const API = (() => {
     return {
       ...s,
       repeat_count: s.repeat || 1,
-      tags: [],
-      sessions: [...new Set((s.steps || []).map(step => step.session || 'A'))],
-      steps: (s.steps || []).map(step => ({
-        id: step.id,
-        request_id: step.request_id || null,
-        session: step.session || 'A',
-        prompt_id: step.prompt_id || null,
-        prompt_category: step.prompt_category || null,
-        prompt_text: step.prompt_text || '',
-        delay_ms: 0,
-      })),
     };
   }
 
@@ -111,6 +100,13 @@ const API = (() => {
       const meta = await invoke('create_engagement', { name });
       _engCache[meta.slug] = meta;
       return meta;
+    },
+
+    async delete_engagement({ slug }) {
+      const result = await invoke('delete_engagement', { slug });
+      delete _engCache[slug];
+      if (_activeSlug === slug) _activeSlug = null;
+      return result;
     },
 
     // open_db is a client-side-only concept: no Rust call needed.
@@ -152,33 +148,6 @@ const API = (() => {
       return targets.find(t => t.id === id) || null;
     },
 
-    async get_target_meta({ id }) {
-      return invoke('get_target_meta', { id });
-    },
-
-    async save_target(dto) {
-      return invoke('save_target', { dto });
-    },
-
-    async test_target_connection({ dto, prompt_text }) {
-      return invoke('test_target_connection', {
-        dto,
-        promptText: prompt_text || null,
-      });
-    },
-
-    async acquire_target_auth({ dto }) {
-      return invoke('acquire_target_auth', { dto });
-    },
-
-    async save_target_meta(dto) {
-      return invoke('save_target_meta', { dto });
-    },
-
-    async delete_target({ id }) {
-      return invoke('delete_target', { id });
-    },
-
     // ── Bearer token (OS keychain) ───────────────────────────────────
     // The plaintext token only crosses this boundary on `set_bearer_token`.
     // No command returns the stored value — the runner reads it directly
@@ -196,20 +165,47 @@ const API = (() => {
       return invoke('bearer_token_status', { var: varName });
     },
 
+    async set_secret_ref({ secret_ref, token }) {
+      return invoke('set_secret_ref', { secretRef: secret_ref, token });
+    },
+
+    async forget_secret_ref({ secret_ref }) {
+      return invoke('forget_secret_ref', { secretRef: secret_ref });
+    },
+
+    async secret_ref_status({ secret_ref }) {
+      return invoke('secret_ref_status', { secretRef: secret_ref });
+    },
+
     async get_request({ id }) {
       return invoke('get_request', { id });
     },
 
-    async list_target_requests({ target_id }) {
-      return invoke('list_target_requests', { targetId: target_id });
+    // ── Top-level Requests (independent of Target) ───────────────────
+    // Backs the new "Requests" menu item.
+
+    async list_requests() {
+      const map = await invoke('list_requests');
+      return Object.values(map).sort((a, b) =>
+        (a.name || a.id || '').localeCompare(b.name || b.id || ''));
     },
 
-    async save_request({ target_id, request }) {
-      return invoke('save_request', { targetId: target_id, request });
+    async save_request_global({ request }) {
+      return invoke('save_request_global', { request });
     },
 
-    async delete_request({ target_id, id }) {
-      return invoke('delete_request', { targetId: target_id, id });
+    async list_request_references({ id }) {
+      return invoke('list_request_references', { id });
+    },
+
+    /**
+     * Delete a Request file. Returns:
+     *   { blocked: true,  references: [...] }  // confirmation needed
+     *   { blocked: false, references: [] }     // deleted
+     * Pass force=true after the user confirms in the references dialog.
+     */
+    async delete_request_global({ id, force = false }) {
+      return invoke('delete_request_global', { id, force: !!force });
     },
 
     async test_request({ request, session_strategy, session_field, prompt_text }) {
@@ -258,36 +254,21 @@ const API = (() => {
       const updated = {
         ...current,
         name: data.name || current.name || 'Untitled',
-        target_id: data.target_id || '',
         repeat: Math.max(1, Number(data.repeat_count || current.repeat || 1)),
       };
+      if (Array.isArray(data.request_ids)) {
+        updated.request_ids = data.request_ids;
+      }
+      if (data.library && typeof data.library === 'object') {
+        updated.library = {
+          owasp_refs: Array.isArray(data.library.owasp_refs) ? data.library.owasp_refs : [],
+          categories: Array.isArray(data.library.categories) ? data.library.categories : [],
+        };
+      }
+      if (typeof data.shared_session === 'boolean') {
+        updated.shared_session = data.shared_session;
+      }
       const saved = await invoke('save_scenario', { scenario: updated });
-      return toUiScenario(saved);
-    },
-
-    async save_steps({ scenario_id, steps }) {
-      const current = await invoke('get_scenario', { id: scenario_id });
-      if (!current) throw new Error(`Scenario '${scenario_id}' not found`);
-
-      const promptIndex = new Map();
-      const prompts = await handlers.list_prompts();
-      prompts.forEach(p => {
-        if (!promptIndex.has(p.id)) promptIndex.set(p.id, p.category || null);
-      });
-
-      const normalizedSteps = (steps || []).map((step, idx) => ({
-        id: step.id || `step-${String(idx + 1).padStart(3, '0')}`,
-        request_id: step.request_id || null,
-        prompt_category:
-          step.prompt_category || (step.prompt_id ? (promptIndex.get(step.prompt_id) || null) : null),
-        prompt_id: step.prompt_id || null,
-        prompt_text: step.prompt_text || '',
-        session: step.session || 'A',
-      }));
-
-      const saved = await invoke('save_scenario', {
-        scenario: { ...current, steps: normalizedSteps },
-      });
       return toUiScenario(saved);
     },
 
@@ -297,37 +278,6 @@ const API = (() => {
     },
 
     // ── Run / fire ───────────────────────────────────────────────────
-
-    async fire_prompt({ target_id, prompt_text, prompt_id }) {
-      if (!_activeSlug) throw new Error('No engagement open. Open or create one first.');
-
-      const run_id = await invoke('start_transient_scenario_run', {
-        engagementSlug: _activeSlug,
-        targetId: target_id,
-        promptText: prompt_text,
-        promptId: prompt_id || null,
-      });
-
-      const progress = await waitForRunCompletion(run_id);
-      if (progress.error) {
-        return { run_id, response_text: '', status: 0, duration_ms: 0, error: progress.error };
-      }
-
-      const body = await invoke('read_response_body', {
-        engagementSlug: _activeSlug,
-        runId: run_id,
-        seq: 1,
-      });
-
-      return {
-        run_id,
-        result_id: `${run_id}-1`,
-        response_text: body || '',
-        status: progress.status,
-        duration_ms: 0,
-        error: null,
-      };
-    },
 
     async start_scenario({ scenario_id }) {
       if (!_activeSlug) throw new Error('No engagement open. Open or create one first.');
@@ -347,6 +297,14 @@ const API = (() => {
       if (!run_id) throw new Error('No run selected to stop.');
       return invoke('stop_run', {
         engagementSlug: engagement_slug || _activeSlug || null,
+        runId: run_id,
+      });
+    },
+
+    async delete_run({ engagement_slug, run_id }) {
+      if (!run_id) throw new Error('No run id provided to delete.');
+      return invoke('delete_run', {
+        engagementSlug: engagement_slug || _activeSlug,
         runId: run_id,
       });
     },
@@ -492,6 +450,10 @@ const API = (() => {
       });
     },
 
+    async test_hosted_judge() {
+      return invoke('test_hosted_judge');
+    },
+
     async cancel_analysis({ run_id }) {
       return invoke('cancel_analysis', { runId: run_id });
     },
@@ -546,12 +508,27 @@ const API = (() => {
       return handlers.generate_report({ run_id });
     },
 
-    // ── Stubs for library-editing commands (not in M4 scope) ─────────
+    // ── Prompt CRUD ─────────────────────────────────────────────────
+    // The DTO matches the Rust `PromptDto`: name, category, text,
+    // severity, mode, tags, owasp_ref. id is empty on create and stable
+    // (auto-slugged) thereafter.
 
-    async create_prompt() { throw new Error('Prompt editing coming in a future milestone'); },
-    async update_prompt() { throw new Error('Prompt editing coming in a future milestone'); },
-    async delete_prompt() { throw new Error('Prompt editing coming in a future milestone'); },
-    async get_prompt() { throw new Error('Prompt editing coming in a future milestone'); },
+    async create_prompt(dto) {
+      return invoke('create_prompt', { dto });
+    },
+
+    async update_prompt(dto) {
+      return invoke('update_prompt', { dto });
+    },
+
+    async delete_prompt({ id }) {
+      return invoke('delete_prompt', { id });
+    },
+
+    async get_prompt({ id }) {
+      return invoke('get_prompt', { id });
+    },
+
     async import_csv() { throw new Error('CSV import coming in a future milestone'); },
     async seed_library() { return { seeded: 0 }; },
     async get_mutations() { return []; },

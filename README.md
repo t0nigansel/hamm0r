@@ -10,9 +10,9 @@ Local-first AI security testing tool for LLM-based systems.
 - **Local-first**: no cloud calls, no external DB, air-gap friendly
 - **Single binary**: Rust + Tauri 2 — no Python runtime, no Node, no sidecar
 - **Engagement folders**: each engagement is a directory under `~/hamm0r/engagements/<slug>/` containing plain YAML/JSONL files you own
-- **Scenario builder**: multi-step, multi-session attack flows with independent iterations
+- **Matrix Scenarios**: pick N Requests × a prompt-library subset (OWASP refs + categories), fire as a Cartesian product. Auth-chain prerequisites declared via `Request.response.bind` resolve automatically.
 - **OWASP coverage**: prompts tagged to OWASP Top 10 for LLM Applications 2025
-- **Analyzer (opt-in)**: local LLM judge (llama-cpp-2 + GGUF) — downloaded on first activation, never required for core use
+- **Analyzer (opt-in)**: local LLM judge (llama-cpp-2 + GGUF) — downloaded on first activation, never required for core use. Hosted-judge mode (Azure OpenAI) supported as an alternative.
 - **HTML reports**: single self-contained file, opens in any browser, no rendering dependency
 
 ## Architecture
@@ -24,6 +24,7 @@ crates/
   storage/   File I/O layer — YAML configs, JSONL run logs
   analyzer/  Local LLM judge (opt-in, off by default)
 prompts/     Bundled starter attack library (YAML)
+requests/    Bundled starter request templates (YAML)
 ```
 
 The active desktop app lives in `crates/hamm0r/`.
@@ -33,17 +34,22 @@ User data layout (`~/hamm0r/`):
 ```text
 ~/hamm0r/
   prompts/            ← YAML prompt library (one file per category)
-  targets/            ← YAML target configs
   requests/           ← YAML request templates
-  scenarios/          ← YAML scenario definitions
+  scenarios/          ← YAML matrix-Scenario definitions
   engagements/
     <slug>/
-      meta.yaml
-      run-NNN.jsonl         ← append-only run log
-      run-NNN.verdicts.jsonl  ← analyzer output (when present)
-      run-NNN-<attempt>.txt   ← raw response bodies
-  analyzer/           ← downloaded model + runtime (opt-in)
+      engagement.yaml
+      runs/
+        run-NNN.jsonl            ← append-only run log (header + attempts + footer)
+        run-NNN.verdicts.jsonl   ← analyzer output (when present)
+      responses/<run>/<seq>.txt  ← raw response bodies, one per attempt
+      reports/report-<run>.html  ← single self-contained HTML report
+  analyzer/           ← downloaded analyz0r bundle (opt-in)
 ```
+
+`~/hamm0r/targets/` may also exist on long-lived installs — it's a legacy
+location read for back-compat. Targets are no longer a user-facing
+concept; the same data now lives under `requests/` and `scenarios/`.
 
 ## How to Install
 
@@ -76,8 +82,9 @@ cd crates/hamm0r
 PATH=~/.cargo/bin:$PATH cargo tauri dev
 ```
 
-The app window opens as a native Tauri desktop app. The starter prompt library
-is seeded into `~/hamm0r/` on first launch.
+The app window opens as a native Tauri desktop app. Missing starter prompts and
+starter request templates are seeded into `~/hamm0r/` on startup without
+overwriting your existing files.
 
 If `cargo` is already on your `PATH`, you can simply run:
 
@@ -138,10 +145,22 @@ The installer is placed in `crates/hamm0r/target/release/bundle/`.
 
 ## Workflow
 
-1. **Targets** — add the LLM endpoint you want to test (URL, auth header, session strategy)
-2. **Scenarios** — pick prompts from the library or write your own, chain them into multi-step flows
-3. **Run** — fire the scenario; responses are written to the engagement folder in real time
-4. **Analyze** *(optional)* — activate the analyzer to get per-response verdicts and an HTML report
+1. **Requests** — define one or more HTTP requests against your LLM
+   endpoints (URL, headers, auth, body). Use `{{prompt}}` in the body
+   to mark where attack payloads get substituted at fire time. If
+   authentication needs a per-run login, model the login as a separate
+   Request with `response.bind: bearer_token` and reference it from the
+   chat Request's headers as `{{login_id.bearer_token}}`.
+2. **Prompts** — the bundled OWASP-tagged library lives under
+   `~/hamm0r/prompts/`. Add or edit prompts in the Library view.
+3. **Scenarios** — pick the Requests you want to fire and a library
+   subset (OWASP refs and/or categories). hamm0r runs the Cartesian
+   product as one engagement.
+4. **Fire** — Home → "Run a Scenario", or open a Scenario and click Run.
+   Responses stream into the engagement folder in real time.
+5. **Analyze** *(optional)* — activate the analyzer (Settings → Analyz0r)
+   for per-response verdicts and an HTML report. Local-judge and
+   hosted-judge modes are both supported.
 
 ## Analyzer (optional LLM judging)
 

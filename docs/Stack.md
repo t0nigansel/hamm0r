@@ -143,8 +143,10 @@ described in [`docs/analyzorPlan.md`](analyzorPlan.md). There is no
 longer a `--features analyzer` Cargo gate; the analyzer is delivered
 as runtime install metadata, not as a build mode.
 
-**Do not use**: `ollama` as a third-party sidecar, `candle` (revisit
-later — see Architecture D-1), any cloud inference API.
+**Do not use**: `ollama` as a third-party sidecar in production, `candle`
+(revisit later — see Architecture D-1), or any cloud inference API in
+core or runner. Hosted inference is allowed only for the explicit
+analyzer-side `Hosted Judge` mode.
 
 ## HTML reports (analyzer only)
 

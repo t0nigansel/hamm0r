@@ -10,6 +10,7 @@ use crate::session::SessionStrategy;
 use crate::template;
 
 /// The result of one HTTP exchange.
+#[derive(Debug)]
 pub struct AdapterResponse {
     pub status: u16,
     pub response_headers: HashMap<String, String>,
@@ -121,15 +122,61 @@ pub async fn execute_with_session(
     session_strategy: &SessionStrategy,
     session_value: &str,
 ) -> Result<AdapterResponse, RunnerError> {
+    execute_with_session_and_binds(
+        http,
+        request,
+        payload,
+        session_strategy,
+        session_value,
+        &template::BindCache::new(),
+    )
+    .await
+}
+
+/// Phase 2 of docs/RefactorPlan.md: same as `execute_with_session` but also
+/// substitutes `{{<request_id>.<bind_name>}}` references using the provided
+/// bind cache. Used by auth-chain firing in the deps module.
+pub async fn execute_with_session_and_binds(
+    http: &reqwest::Client,
+    request: &Request,
+    payload: &str,
+    session_strategy: &SessionStrategy,
+    session_value: &str,
+    binds: &template::BindCache,
+) -> Result<AdapterResponse, RunnerError> {
     match request.adapter {
         AdapterType::CustomRest => {
-            execute_custom_rest(http, request, payload, session_strategy, session_value).await
+            execute_custom_rest(
+                http,
+                request,
+                payload,
+                session_strategy,
+                session_value,
+                binds,
+            )
+            .await
         }
         AdapterType::OpenAiCompat => {
-            execute_openai_compat(http, request, payload, session_strategy, session_value).await
+            execute_openai_compat(
+                http,
+                request,
+                payload,
+                session_strategy,
+                session_value,
+                binds,
+            )
+            .await
         }
         AdapterType::RawHttp => {
-            execute_raw_http(http, request, payload, session_strategy, session_value).await
+            execute_raw_http(
+                http,
+                request,
+                payload,
+                session_strategy,
+                session_value,
+                binds,
+            )
+            .await
         }
     }
 }
@@ -142,8 +189,10 @@ async fn execute_custom_rest(
     payload: &str,
     session_strategy: &SessionStrategy,
     session_value: &str,
+    binds: &template::BindCache,
 ) -> Result<AdapterResponse, RunnerError> {
-    let mut rendered_headers = template::render_headers(&request.headers, payload)?;
+    let url_rendered = template::render_with(&request.url, payload, binds)?;
+    let mut rendered_headers = template::render_headers_with(&request.headers, payload, binds)?;
     apply_session_header(&mut rendered_headers, session_strategy, session_value);
 
     let mut builder = http
@@ -154,7 +203,7 @@ async fn execute_custom_rest(
                 .map_err(|_| RunnerError::Extraction {
                     reason: format!("invalid HTTP method: {}", request.method),
                 })?,
-            &request.url,
+            &url_rendered,
         )
         .headers(to_header_map(&rendered_headers)?);
 
@@ -171,7 +220,7 @@ async fn execute_custom_rest(
             let body_str = serde_json::to_string(&body).map_err(|e| RunnerError::Extraction {
                 reason: e.to_string(),
             })?;
-            let rendered = template::render(&body_str, payload)?;
+            let rendered = template::render_with(&body_str, payload, binds)?;
             let json: serde_json::Value =
                 serde_json::from_str(&rendered).map_err(|e| RunnerError::Extraction {
                     reason: e.to_string(),
@@ -184,12 +233,12 @@ async fn execute_custom_rest(
                     reason: e.to_string(),
                 }
             })?;
-            let rendered = template::render(&body_str, payload)?;
+            let rendered = template::render_with(&body_str, payload, binds)?;
             builder.body(rendered)
         }
-        BodyFormat::Text => {
+        BodyFormat::Text | BodyFormat::Raw => {
             let text = request.body.content.as_str().unwrap_or_default().to_owned();
-            let rendered = template::render(&text, payload)?;
+            let rendered = template::render_with(&text, payload, binds)?;
             builder.body(rendered)
         }
     };
@@ -205,6 +254,7 @@ async fn execute_openai_compat(
     payload: &str,
     session_strategy: &SessionStrategy,
     session_value: &str,
+    binds: &template::BindCache,
 ) -> Result<AdapterResponse, RunnerError> {
     // Merge the request body content with the payload substituted into the
     // messages array. If content already has `messages`, honour that structure;
@@ -215,7 +265,7 @@ async fn execute_openai_compat(
         let msgs_str = serde_json::to_string(messages).map_err(|e| RunnerError::Extraction {
             reason: e.to_string(),
         })?;
-        let rendered = template::render(&msgs_str, payload)?;
+        let rendered = template::render_with(&msgs_str, payload, binds)?;
         *messages = serde_json::from_str(&rendered).map_err(|e| RunnerError::Extraction {
             reason: e.to_string(),
         })?;
@@ -225,7 +275,8 @@ async fn execute_openai_compat(
 
     body = inject_session_body_field(body, session_strategy, session_value);
 
-    let mut rendered_headers = template::render_headers(&request.headers, payload)?;
+    let url_rendered = template::render_with(&request.url, payload, binds)?;
+    let mut rendered_headers = template::render_headers_with(&request.headers, payload, binds)?;
     apply_session_header(&mut rendered_headers, session_strategy, session_value);
     let mut builder = http
         .request(
@@ -235,7 +286,7 @@ async fn execute_openai_compat(
                 .map_err(|_| RunnerError::Extraction {
                     reason: format!("invalid HTTP method: {}", request.method),
                 })?,
-            &request.url,
+            &url_rendered,
         )
         .headers(to_header_map(&rendered_headers)?)
         .json(&body);
@@ -253,13 +304,15 @@ async fn execute_raw_http(
     payload: &str,
     session_strategy: &SessionStrategy,
     session_value: &str,
+    binds: &template::BindCache,
 ) -> Result<AdapterResponse, RunnerError> {
     let body_str = match &request.body.content {
-        serde_json::Value::String(s) => template::render(s, payload)?,
-        other => template::render(&other.to_string(), payload)?,
+        serde_json::Value::String(s) => template::render_with(s, payload, binds)?,
+        other => template::render_with(&other.to_string(), payload, binds)?,
     };
 
-    let mut rendered_headers = template::render_headers(&request.headers, payload)?;
+    let url_rendered = template::render_with(&request.url, payload, binds)?;
+    let mut rendered_headers = template::render_headers_with(&request.headers, payload, binds)?;
     apply_session_header(&mut rendered_headers, session_strategy, session_value);
     let mut builder = http
         .request(
@@ -269,7 +322,7 @@ async fn execute_raw_http(
                 .map_err(|_| RunnerError::Extraction {
                     reason: format!("invalid HTTP method: {}", request.method),
                 })?,
-            &request.url,
+            &url_rendered,
         )
         .headers(to_header_map(&rendered_headers)?)
         .body(body_str);

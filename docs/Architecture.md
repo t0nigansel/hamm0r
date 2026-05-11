@@ -147,8 +147,8 @@ stable subcommand contract (`judge-result`, `judge-run`,
 `tokio::process::Command` and parses progress events line by line.
 See [`crates/analyzor-cli/src/main.rs`](../crates/analyzor-cli/src/main.rs).
 
-**Must not:** modify run JSONL files written by the runner, make cloud
-calls, be linked into the default core build, or share a Rust address
+**Must not:** modify run JSONL files written by the runner, be linked into
+the default core build, or share a Rust address
 space with core (boundary is the subprocess + the on-disk artifacts).
 
 ### `prompts/` (repo), `~/hamm0r/prompts/` (user)
@@ -157,6 +157,10 @@ In the repo: the curated starter library that ships with hamm0r. On
 first run, it is copied into the user's `~/hamm0r/prompts/` folder,
 after which the user owns it. Subsequent updates to the starter library
 are offered as additions, never forced — the user's copy is sacred.
+
+Bundled starter Request templates follow the same rule: missing files
+from the repo's `requests/` folder are copied into
+`~/hamm0r/requests/`, while existing user files are left untouched.
 
 ---
 
@@ -244,12 +248,12 @@ Walking through the five-minute promise, step by step:
    analyzer is installed — click "Analyze."
 
 5. **Analyzer executes (optional).**
-   Core launches the installed `analyz0r` binary as a subprocess. It
-   reads `run-NNN.jsonl` and the corresponding response files, asks
-   its local LLM for a verdict against the OWASP category each attack
-   targets, and writes `run-NNN.verdicts.jsonl`. Core then invokes
-   the binary's `generate-report` subcommand to render the HTML
-   report.
+   Core launches the analyzer path selected in Settings. In local mode,
+   this is the installed `analyz0r` binary plus a local model bundle. In
+   Hosted Judge mode, the analyzer uses the configured hosted provider for
+   verdict generation. In both cases the analyzer reads `run-NNN.jsonl`
+   and the corresponding response files, writes `run-NNN.verdicts.jsonl`,
+   and then renders the HTML report.
 
 6. **User reads the report.**
    The report is a single self-contained HTML file in
@@ -294,22 +298,25 @@ env var that shadows it (e.g. `token_env: "PROFILER_BEARER_TOKEN"`).
 At request time the runner resolves the value via `storage::secrets`,
 which checks two sources in order:
 
-1. **OS keychain** — Windows Credential Manager, macOS Keychain, or
+1. **Environment variable** — `std::env::var(name)`. The primary
+   source: `export FOO=...` in the shell that launches hamm0r and
+   fire a request uses that value, no UI dance required.
+2. **OS keychain** — Windows Credential Manager, macOS Keychain, or
    Linux Secret Service, queried under service `"hamm0r"` with the
-   env-var name as the account. Populated when the user pastes a
-   token into the Target editor.
-2. **Environment variable** — `std::env::var(name)`, the original
-   mechanism. Still works when no keychain entry is set.
+   env-var name as the account. Used as a fallback when the env var
+   is unset; also retains values written by older versions of hamm0r
+   that exposed a "Set / Replace" UI (since removed). The keychain
+   path stays in the resolver to avoid breaking those existing
+   installs.
 
 If neither has a value, the runner returns `MissingEnvVar` and the UI
-shows a hint pointing the user at both options.
+shows a hint pointing the user at the env var.
 
-The plaintext token crosses the JS→Rust bridge exactly once per
-save, via the `set_bearer_token` Tauri command. No command exposes
-the stored value back to the UI; the renderer shows status only
-("stored in keychain", "using env var", "not set"). The runner reads
-the value directly from `storage::secrets` — it never travels
-through the command layer.
+The env-var-first precedence is deliberate: it matches the principle
+of least surprise and it neutralises stale keychain entries left over
+from past UI flows. Plaintext tokens are never written into config,
+into run logs, or into any artifact under
+`~/hamm0r/engagements/`.
 
 Diagnostic exports redact the env-var name only, never include
 keychain values, and never read environment variables.

@@ -1,11 +1,27 @@
 use std::path::Path;
 
-use anyhow::Context as _;
+use anyhow::{anyhow, Context as _};
 
 use crate::types::EngagementMeta;
 use crate::write::atomic_write;
 
 const ENGAGEMENT_YAML: &str = "engagement.yaml";
+
+/// Reject slugs that could escape the engagements directory or that are
+/// obviously bogus. Keeps `engagements::delete` safe even if a caller
+/// forgets to validate upstream.
+fn ensure_safe_slug(slug: &str) -> anyhow::Result<()> {
+    let trimmed = slug.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("engagement slug must not be empty"));
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return Err(anyhow!(
+            "engagement slug '{slug}' is not a valid folder name"
+        ));
+    }
+    Ok(())
+}
 
 /// Create a new engagement folder and write its `engagement.yaml`.
 ///
@@ -64,6 +80,25 @@ pub fn list(engagements_dir: &Path) -> anyhow::Result<Vec<EngagementMeta>> {
     Ok(results)
 }
 
+/// Permanently remove an engagement folder. Idempotent — succeeds when
+/// the folder isn't there. Refuses path-traversal slugs.
+///
+/// Removes everything under `<engagements_dir>/<slug>/`: the run JSONLs,
+/// verdict logs, response files, generated reports, and the
+/// `engagement.yaml` itself. The caller (Tauri command layer) is
+/// responsible for refusing the call while any run inside the
+/// engagement is still active.
+pub fn delete(engagements_dir: &Path, slug: &str) -> anyhow::Result<bool> {
+    ensure_safe_slug(slug)?;
+    let root = engagements_dir.join(slug);
+    if !root.exists() {
+        return Ok(false);
+    }
+    std::fs::remove_dir_all(&root)
+        .with_context(|| format!("cannot remove engagement folder {}", root.display()))?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +154,30 @@ mod tests {
     fn list_empty_dir() {
         let dir = TempDir::new().unwrap();
         assert!(list(dir.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_removes_folder_and_is_idempotent() {
+        let dir = TempDir::new().unwrap();
+        let meta = sample_meta("2026-05-11-acme");
+        create(dir.path(), &meta).unwrap();
+        assert!(dir.path().join(&meta.slug).is_dir());
+
+        assert!(delete(dir.path(), &meta.slug).unwrap());
+        assert!(!dir.path().join(&meta.slug).exists());
+
+        // Second call is a no-op.
+        assert!(!delete(dir.path(), &meta.slug).unwrap());
+        assert!(list(dir.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_rejects_path_traversal() {
+        let dir = TempDir::new().unwrap();
+        assert!(delete(dir.path(), "").is_err());
+        assert!(delete(dir.path(), "..").is_err());
+        assert!(delete(dir.path(), "../escape").is_err());
+        assert!(delete(dir.path(), "a/b").is_err());
+        assert!(delete(dir.path(), r"a\b").is_err());
     }
 }

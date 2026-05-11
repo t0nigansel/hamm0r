@@ -1,8 +1,10 @@
 pub mod analyzer_install;
 pub mod engagements;
 pub mod logs;
+pub mod migrations;
 pub mod paths;
 pub mod prompts;
+pub mod reports;
 pub mod requests;
 pub mod runs;
 pub mod scenarios;

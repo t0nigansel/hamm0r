@@ -24,6 +24,7 @@ pub struct ReportBuildInput {
     pub generated_at: String,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
+    pub judge_model: Option<String>,
     pub attempts: Vec<ReportAttempt>,
     pub verdicts: Vec<VerdictEntry>,
 }
@@ -35,10 +36,18 @@ pub struct ReportData {
     pub generated_at: String,
     pub started_at: String,
     pub finished_at: String,
+    pub judge: ReportJudgeInfo,
     pub summary: ReportSummary,
     pub groups_by_category: Vec<ReportGroup>,
     pub groups_by_owasp: Vec<ReportGroup>,
     pub evidence_rows: Vec<ReportEvidenceRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ReportJudgeInfo {
+    pub mode: String,
+    pub provider: String,
+    pub model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -192,6 +201,7 @@ pub fn build_report_data(input: ReportBuildInput) -> ReportData {
         generated_at: input.generated_at,
         started_at: input.started_at.unwrap_or_else(|| "-".to_owned()),
         finished_at: input.finished_at.unwrap_or_else(|| "-".to_owned()),
+        judge: parse_judge_info(input.judge_model.as_deref()),
         summary,
         groups_by_category,
         groups_by_owasp,
@@ -300,6 +310,36 @@ fn trim_excerpt(input: &str, max_chars: usize) -> String {
     out
 }
 
+fn parse_judge_info(model: Option<&str>) -> ReportJudgeInfo {
+    let raw = model.unwrap_or("unknown").trim();
+    if let Some(deployment) = raw.strip_prefix("azure_openai:") {
+        return ReportJudgeInfo {
+            mode: "Hosted".to_owned(),
+            provider: "Azure OpenAI".to_owned(),
+            model: deployment.to_owned(),
+        };
+    }
+    if let Some(model_name) = raw.strip_prefix("ollama:") {
+        return ReportJudgeInfo {
+            mode: "Local".to_owned(),
+            provider: "Ollama".to_owned(),
+            model: model_name.to_owned(),
+        };
+    }
+    if raw.starts_with("heuristic-") {
+        return ReportJudgeInfo {
+            mode: "Local".to_owned(),
+            provider: "Heuristic".to_owned(),
+            model: raw.to_owned(),
+        };
+    }
+    ReportJudgeInfo {
+        mode: "Local".to_owned(),
+        provider: "Local Model".to_owned(),
+        model: raw.to_owned(),
+    }
+}
+
 const REPORT_TEMPLATE: &str = r#"<!doctype html>
 <html lang="en">
 <head>
@@ -357,6 +397,9 @@ const REPORT_TEMPLATE: &str = r#"<!doctype html>
         <span>started: <strong class="mono">{{ started_at }}</strong></span>
         <span>finished: <strong class="mono">{{ finished_at }}</strong></span>
         <span>generated: <strong class="mono">{{ generated_at }}</strong></span>
+        <span>judge mode: <strong>{{ judge.mode }}</strong></span>
+        <span>judge provider: <strong>{{ judge.provider }}</strong></span>
+        <span>judge model: <strong class="mono">{{ judge.model }}</strong></span>
       </div>
       <div class="grid">
         <div class="card"><div class="k">attempts</div><div class="v">{{ summary.attempts_total }}</div></div>
@@ -480,6 +523,7 @@ mod tests {
             generated_at: "2026-04-26T10:02:00Z".into(),
             started_at: Some("2026-04-26T10:00:00Z".into()),
             finished_at: Some("2026-04-26T10:01:45Z".into()),
+            judge_model: Some("heuristic-v0".into()),
             attempts: vec![
                 ReportAttempt {
                     seq: 1,

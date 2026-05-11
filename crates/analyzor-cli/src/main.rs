@@ -36,13 +36,12 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use analyzer::pipeline::{
-    self, JudgeOneOptions, JudgeRunOptions, Progress,
-};
+use analyzer::pipeline::{self, JudgeOneOptions, JudgeRunOptions, OllamaConfig, Progress};
 use clap::{Parser, Subcommand};
 use serde_json::json;
 
 const ANALYZER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const ANALYZOR_JUDGE_PROMPT_TEMPLATE_ENV: &str = "HAMM0R_ANALYZOR_JUDGE_PROMPT_TEMPLATE";
 
 const EXIT_OK: u8 = 0;
 const EXIT_PIPELINE_ERROR: u8 = 3;
@@ -94,9 +93,21 @@ struct JudgeRunArgs {
     prompts_dir: PathBuf,
     #[arg(long)]
     run: String,
-    /// Path to a `.gguf` model file. If omitted, the heuristic judge is used.
+    /// Path to a `.gguf` model file. If omitted (and no Ollama URL is
+    /// set), the heuristic judge is used.
     #[arg(long)]
     model: Option<PathBuf>,
+    /// Dev-only Ollama base URL (e.g. `http://localhost:11434`). When
+    /// set, judges run against Ollama instead of loading a local GGUF.
+    /// Takes precedence over `--model`. Architecturally divergent —
+    /// production builds use the in-process LLM. See
+    /// `docs/analyzorPlan.md`.
+    #[arg(long)]
+    ollama_url: Option<String>,
+    /// Ollama model tag, e.g. `qwen2.5:3b`. Required when `--ollama-url`
+    /// is set.
+    #[arg(long)]
+    ollama_model: Option<String>,
     #[arg(long)]
     force: bool,
 }
@@ -138,18 +149,24 @@ fn run_judge_result(args: JudgeResultArgs) -> anyhow::Result<()> {
              not yet wired. Omit --model to use the heuristic judge."
         );
     }
+    let judge_prompt_template = std::env::var(ANALYZOR_JUDGE_PROMPT_TEMPLATE_ENV).ok();
 
     let outcome = pipeline::judge_one_heuristic(&JudgeOneOptions {
         engagement_dir: &args.engagement_dir,
         prompts_dir: &args.prompts_dir,
         run_id: &args.run,
         seq: args.seq,
+        judge_prompt_template: judge_prompt_template.as_deref(),
         analyzer_version: ANALYZER_VERSION,
         force: args.force,
     })?;
 
     let entry = outcome.entry();
-    let status = if outcome.was_judged() { "judged" } else { "skipped" };
+    let status = if outcome.was_judged() {
+        "judged"
+    } else {
+        "skipped"
+    };
 
     emit(json!({
         "event": "result",
@@ -168,6 +185,7 @@ fn run_judge_result(args: JudgeResultArgs) -> anyhow::Result<()> {
 
 fn run_judge_run(args: JudgeRunArgs) -> anyhow::Result<()> {
     let run_id = args.run.clone();
+    let judge_prompt_template = std::env::var(ANALYZOR_JUDGE_PROMPT_TEMPLATE_ENV).ok();
     let mut on_progress = |p: Progress| {
         // Best-effort emission; ignore broken-pipe etc. so the run keeps going.
         let _ = emit(json!({
@@ -179,12 +197,24 @@ fn run_judge_run(args: JudgeRunArgs) -> anyhow::Result<()> {
         }));
     };
 
+    // Validate the Ollama flags as a pair so an incomplete invocation
+    // fails loudly here rather than half-deep inside the pipeline.
+    let ollama_cfg = match (args.ollama_url.as_deref(), args.ollama_model.as_deref()) {
+        (Some(url), Some(model)) => Some(OllamaConfig { url, model }),
+        (Some(_), None) => anyhow::bail!("--ollama-url requires --ollama-model"),
+        (None, Some(_)) => anyhow::bail!("--ollama-model requires --ollama-url"),
+        (None, None) => None,
+    };
+
     let summary = pipeline::judge_run(
         &JudgeRunOptions {
             engagement_dir: &args.engagement_dir,
             prompts_dir: &args.prompts_dir,
             run_id: &run_id,
+            judge_prompt_template: judge_prompt_template.as_deref(),
             model_path: args.model.as_deref(),
+            ollama: ollama_cfg,
+            hosted: None,
             analyzer_version: ANALYZER_VERSION,
             force: args.force,
         },

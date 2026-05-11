@@ -13,7 +13,9 @@ pub fn write_markdown_report(
     run_id: &str,
     markdown: &str,
 ) -> anyhow::Result<PathBuf> {
-    let path = engagement_dir.join("reports").join(format!("report-{run_id}.md"));
+    let path = engagement_dir
+        .join("reports")
+        .join(format!("report-{run_id}.md"));
     atomic_write(&path, markdown.as_bytes())
         .with_context(|| format!("cannot write markdown report: {}", path.display()))?;
     Ok(path)

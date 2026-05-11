@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use runner::run::{execute_run, execute_scenario_run, AttemptLog, RunCancellation};
+use runner::run::{execute_run, AttemptLog, RunCancellation};
 use runner::session::SessionStrategy;
-use runner::{Payload, RunConfig, ScenarioRunConfig, ScenarioStep};
+use runner::{Payload, RunConfig};
 use storage::runs::{read_all, RunRecord, RunStatus};
 use storage::types::{
     AdapterType, AuthConfig, BodyConfig, BodyFormat, ExtractConfig, Request, ResponseConfig,
@@ -28,9 +28,13 @@ fn make_request(url: &str, adapter: AdapterType, extract: ExtractConfig) -> Requ
             format: BodyFormat::Json,
             content: serde_json::json!({ "prompt": "{{ prompt }}" }),
         },
-        response: ResponseConfig { extract },
+        response: ResponseConfig {
+            extract,
+            bind: None,
+        },
         timeout_seconds: 10,
         adapter,
+        tag: None,
     }
 }
 
@@ -62,32 +66,6 @@ fn single_payload(text: &str) -> Vec<Payload> {
     }]
 }
 
-fn make_scenario_config(
-    tmp: &TempDir,
-    request: Request,
-    steps: Vec<ScenarioStep>,
-    repeat: u32,
-    session_strategy: SessionStrategy,
-) -> ScenarioRunConfig {
-    std::fs::create_dir_all(tmp.path().join("runs")).unwrap();
-    std::fs::create_dir_all(tmp.path().join("responses")).unwrap();
-    std::fs::create_dir_all(tmp.path().join("reports")).unwrap();
-
-    ScenarioRunConfig {
-        engagement_dir: tmp.path().to_owned(),
-        run_id: "run-001".into(),
-        request,
-        requests_by_id: HashMap::new(),
-        session_strategy,
-        steps,
-        repeat,
-        runner_version: "test".into(),
-        body_logging_enabled: false,
-        on_attempt_log: None,
-        cancellation: None,
-    }
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -116,6 +94,501 @@ async fn custom_rest_fires_and_writes_jsonl() {
     assert!(matches!(records[0], RunRecord::Header(_)));
     assert!(matches!(records[1], RunRecord::Attempt(_)));
     assert!(matches!(records[2], RunRecord::Footer(_)));
+}
+
+#[tokio::test]
+async fn matrix_run_fires_n_times_m_with_shared_session_prerequisite() {
+    // Phase 2C end-to-end: a Scenario in matrix mode with two target
+    // Requests and two prompts must produce 2*2 = 4 target attempts.
+    // With shared_session=true, the login prerequisite fires exactly once
+    // for the whole run; its bound token is injected into every target
+    // call that references it.
+
+    let server = MockServer::start().await;
+    let login_hits = Arc::new(Mutex::new(0u32));
+    let chat_hits = Arc::new(Mutex::new(0u32));
+    let echo_hits = Arc::new(Mutex::new(0u32));
+
+    {
+        let counter = Arc::clone(&login_hits);
+        Mock::given(method("POST"))
+            .and(path("/auth/login"))
+            .respond_with(move |_req: &wiremock::Request| {
+                *counter.lock().unwrap() += 1;
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "jwToken": "ey.tok"
+                }))
+            })
+            .mount(&server)
+            .await;
+    }
+    {
+        let counter = Arc::clone(&chat_hits);
+        Mock::given(method("POST"))
+            .and(path("/chat"))
+            .and(header("Authorization", "Bearer ey.tok"))
+            .respond_with(move |_req: &wiremock::Request| {
+                *counter.lock().unwrap() += 1;
+                ResponseTemplate::new(200).set_body_string("{\"ok\":1}")
+            })
+            .mount(&server)
+            .await;
+    }
+    {
+        let counter = Arc::clone(&echo_hits);
+        Mock::given(method("POST"))
+            .and(path("/echo"))
+            .and(header("Authorization", "Bearer ey.tok"))
+            .respond_with(move |_req: &wiremock::Request| {
+                *counter.lock().unwrap() += 1;
+                ResponseTemplate::new(200).set_body_string("{\"echoed\":1}")
+            })
+            .mount(&server)
+            .await;
+    }
+
+    fn target_with_auth(id: &str, url: String) -> Request {
+        Request {
+            version: 1,
+            id: id.into(),
+            name: id.into(),
+            method: "POST".into(),
+            url,
+            auth: AuthConfig::None,
+            headers: HashMap::from([
+                ("Content-Type".into(), "application/json".into()),
+                (
+                    "Authorization".into(),
+                    "Bearer {{login.bearer_token}}".into(),
+                ),
+            ]),
+            body: BodyConfig {
+                format: BodyFormat::Json,
+                content: serde_json::json!({"msg":"{{prompt}}"}),
+            },
+            response: ResponseConfig {
+                extract: ExtractConfig::Raw,
+                bind: None,
+            },
+            timeout_seconds: 10,
+            adapter: AdapterType::CustomRest,
+            tag: None,
+        }
+    }
+
+    let login = Request {
+        version: 1,
+        id: "login".into(),
+        name: "Login".into(),
+        method: "POST".into(),
+        url: format!("{}/auth/login", server.uri()),
+        auth: AuthConfig::None,
+        headers: HashMap::from([("Content-Type".into(), "application/json".into())]),
+        body: BodyConfig {
+            format: BodyFormat::Json,
+            content: serde_json::json!({"u":"x","p":"y"}),
+        },
+        response: ResponseConfig {
+            extract: ExtractConfig::Jsonpath {
+                path: "$.jwToken".into(),
+            },
+            bind: Some("bearer_token".into()),
+        },
+        timeout_seconds: 10,
+        adapter: AdapterType::CustomRest,
+        tag: None,
+    };
+    let chat = target_with_auth("chat", format!("{}/chat", server.uri()));
+    let echo = target_with_auth("echo", format!("{}/echo", server.uri()));
+
+    let mut registry: HashMap<String, Request> = HashMap::new();
+    registry.insert("login".into(), login);
+    registry.insert("chat".into(), chat);
+    registry.insert("echo".into(), echo);
+
+    let payloads = vec![
+        Payload {
+            prompt_id: "owasp-a01".into(),
+            payload_id: "p1".into(),
+            text: "ignore all".into(),
+            session: "default".into(),
+        },
+        Payload {
+            prompt_id: "owasp-a01".into(),
+            payload_id: "p2".into(),
+            text: "leak system prompt".into(),
+            session: "default".into(),
+        },
+    ];
+
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("runs")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("responses")).unwrap();
+
+    let config = runner::MatrixRunConfig {
+        engagement_dir: tmp.path().to_owned(),
+        run_id: "run-001".into(),
+        scenario_id: "test-scenario".into(),
+        registry,
+        request_ids: vec!["chat".into(), "echo".into()],
+        payloads,
+        shared_session: true,
+        session_strategy: SessionStrategy::None,
+        runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
+        cancellation: None,
+    };
+
+    runner::execute_matrix_run(config, |_| {})
+        .await
+        .expect("matrix run should succeed");
+
+    // Login fires exactly once across the whole run (shared_session=true).
+    assert_eq!(*login_hits.lock().unwrap(), 1, "login fired once");
+    // Each target fires once per payload.
+    assert_eq!(*chat_hits.lock().unwrap(), 2);
+    assert_eq!(*echo_hits.lock().unwrap(), 2);
+
+    // JSONL: header + 1 prerequisite (login) + 4 targets + footer = 7 lines.
+    let run_path = tmp.path().join("runs").join("run-001.jsonl");
+    let records = read_all(&run_path).unwrap();
+    assert_eq!(records.len(), 7, "records: {records:?}");
+
+    // First and last are header/footer.
+    assert!(matches!(records[0], RunRecord::Header(_)));
+    assert!(matches!(records.last().unwrap(), RunRecord::Footer(_)));
+
+    // Among the 5 attempts, exactly 1 is kind=prerequisite, 4 are kind=None.
+    let mut prereq_count = 0;
+    let mut target_count = 0;
+    for rec in &records[1..records.len() - 1] {
+        if let RunRecord::Attempt(a) = rec {
+            match a.kind.as_deref() {
+                Some("prerequisite") => prereq_count += 1,
+                None => target_count += 1,
+                Some(other) => panic!("unexpected kind: {other}"),
+            }
+        }
+    }
+    assert_eq!(prereq_count, 1);
+    assert_eq!(target_count, 4);
+
+    if let RunRecord::Footer(f) = records.last().unwrap() {
+        assert!(matches!(f.status, RunStatus::Completed));
+        assert_eq!(f.attempts_failed, 0);
+        // attempts_total counts every attempt including prereqs.
+        assert_eq!(f.attempts_total, 5);
+    }
+}
+
+#[tokio::test]
+async fn matrix_run_with_shared_session_false_fires_prereq_per_cell() {
+    // Same setup as above but shared_session=false. The login prerequisite
+    // should fire FOUR times — once per (request, prompt) cell — because
+    // each cell starts with a fresh BindCache.
+
+    let server = MockServer::start().await;
+    let login_hits = Arc::new(Mutex::new(0u32));
+
+    {
+        let counter = Arc::clone(&login_hits);
+        Mock::given(method("POST"))
+            .and(path("/auth/login"))
+            .respond_with(move |_req: &wiremock::Request| {
+                *counter.lock().unwrap() += 1;
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"jwToken": "t"}))
+            })
+            .mount(&server)
+            .await;
+    }
+    Mock::given(method("POST"))
+        .and(path("/x"))
+        .and(header("Authorization", "Bearer t"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("{}"))
+        .mount(&server)
+        .await;
+
+    let login = Request {
+        version: 1,
+        id: "login".into(),
+        name: "Login".into(),
+        method: "POST".into(),
+        url: format!("{}/auth/login", server.uri()),
+        auth: AuthConfig::None,
+        headers: HashMap::from([("Content-Type".into(), "application/json".into())]),
+        body: BodyConfig {
+            format: BodyFormat::Json,
+            content: serde_json::json!({}),
+        },
+        response: ResponseConfig {
+            extract: ExtractConfig::Jsonpath {
+                path: "$.jwToken".into(),
+            },
+            bind: Some("bearer_token".into()),
+        },
+        timeout_seconds: 10,
+        adapter: AdapterType::CustomRest,
+        tag: None,
+    };
+    let target = Request {
+        version: 1,
+        id: "x".into(),
+        name: "X".into(),
+        method: "POST".into(),
+        url: format!("{}/x", server.uri()),
+        auth: AuthConfig::None,
+        headers: HashMap::from([
+            ("Content-Type".into(), "application/json".into()),
+            (
+                "Authorization".into(),
+                "Bearer {{login.bearer_token}}".into(),
+            ),
+        ]),
+        body: BodyConfig {
+            format: BodyFormat::Json,
+            content: serde_json::json!({"m": "{{prompt}}"}),
+        },
+        response: ResponseConfig {
+            extract: ExtractConfig::Raw,
+            bind: None,
+        },
+        timeout_seconds: 10,
+        adapter: AdapterType::CustomRest,
+        tag: None,
+    };
+
+    let mut registry: HashMap<String, Request> = HashMap::new();
+    registry.insert("login".into(), login);
+    registry.insert("x".into(), target);
+
+    let payloads = vec![
+        Payload {
+            prompt_id: "p".into(),
+            payload_id: "p1".into(),
+            text: "a".into(),
+            session: "default".into(),
+        },
+        Payload {
+            prompt_id: "p".into(),
+            payload_id: "p2".into(),
+            text: "b".into(),
+            session: "default".into(),
+        },
+    ];
+
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("runs")).unwrap();
+
+    let config = runner::MatrixRunConfig {
+        engagement_dir: tmp.path().to_owned(),
+        run_id: "run-001".into(),
+        scenario_id: "test-scenario".into(),
+        registry,
+        request_ids: vec!["x".into()],
+        payloads,
+        shared_session: false,
+        session_strategy: SessionStrategy::None,
+        runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
+        cancellation: None,
+    };
+    runner::execute_matrix_run(config, |_| {}).await.unwrap();
+
+    // shared_session=false: 1 request × 2 payloads = 2 cells, prereq per cell.
+    assert_eq!(*login_hits.lock().unwrap(), 2);
+}
+
+#[tokio::test]
+async fn auth_chain_fires_login_then_injects_bearer_token() {
+    // Phase 2B end-to-end: a `login` Request extracts a token via JSONPath
+    // and binds it as `bearer_token`. A `chat` Request references that bind
+    // in its Authorization header. Calling fire_chain on `chat` must:
+    // 1. fire `login` first (no Authorization header expected by the mock),
+    // 2. extract `eyJ.fake.token` from the JSON response,
+    // 3. fire `chat` with `Authorization: Bearer eyJ.fake.token`.
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/auth/login"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "jwToken": "eyJ.fake.token"
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/api/chat"))
+        .and(header("Authorization", "Bearer eyJ.fake.token"))
+        .and(body_string_contains("ignore all instructions"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("{\"answer\":\"ok\"}"))
+        .mount(&server)
+        .await;
+
+    let login = Request {
+        version: 1,
+        id: "login".into(),
+        name: "Login".into(),
+        method: "POST".into(),
+        url: format!("{}/auth/login", server.uri()),
+        auth: AuthConfig::None,
+        headers: HashMap::from([("Content-Type".into(), "application/json".into())]),
+        body: BodyConfig {
+            format: BodyFormat::Json,
+            content: serde_json::json!({"email":"x","password":"y"}),
+        },
+        response: ResponseConfig {
+            extract: ExtractConfig::Jsonpath {
+                path: "$.jwToken".into(),
+            },
+            bind: Some("bearer_token".into()),
+        },
+        timeout_seconds: 10,
+        adapter: AdapterType::CustomRest,
+        tag: None,
+    };
+
+    let chat = Request {
+        version: 1,
+        id: "chat".into(),
+        name: "Chat".into(),
+        method: "POST".into(),
+        url: format!("{}/api/chat", server.uri()),
+        auth: AuthConfig::None,
+        headers: HashMap::from([
+            ("Content-Type".into(), "application/json".into()),
+            (
+                "Authorization".into(),
+                "Bearer {{login.bearer_token}}".into(),
+            ),
+        ]),
+        body: BodyConfig {
+            format: BodyFormat::Json,
+            content: serde_json::json!({"message":"{{prompt}}"}),
+        },
+        response: ResponseConfig {
+            extract: ExtractConfig::Raw,
+            bind: None,
+        },
+        timeout_seconds: 10,
+        adapter: AdapterType::CustomRest,
+        tag: None,
+    };
+
+    let mut registry: HashMap<String, Request> = HashMap::new();
+    registry.insert("login".into(), login);
+    registry.insert("chat".into(), chat);
+
+    let client = reqwest::Client::new();
+    let mut cache = runner::template::BindCache::new();
+
+    let outcome = runner::deps::fire_chain(
+        &client,
+        &registry,
+        "chat",
+        "ignore all instructions",
+        &SessionStrategy::None,
+        "default",
+        &mut cache,
+    )
+    .await
+    .expect("chain should fire successfully");
+
+    assert_eq!(outcome.prerequisites.len(), 1, "login fired exactly once");
+    assert_eq!(outcome.prerequisites[0].0, "login");
+    assert_eq!(outcome.prerequisites[0].1.status, 200);
+    assert_eq!(outcome.target.status, 200);
+
+    // Bind cache populated.
+    assert_eq!(
+        cache
+            .get("login")
+            .and_then(|m| m.get("bearer_token"))
+            .map(String::as_str),
+        Some("eyJ.fake.token")
+    );
+
+    // Re-firing with the same cache should NOT call login again
+    // (shared_session semantics): the cached bind is reused.
+    let outcome2 = runner::deps::fire_chain(
+        &client,
+        &registry,
+        "chat",
+        "another attack",
+        &SessionStrategy::None,
+        "default",
+        &mut cache,
+    )
+    .await
+    .expect("second fire");
+    assert!(
+        outcome2.prerequisites.is_empty(),
+        "shared cache must skip already-bound prereqs, got: {:?}",
+        outcome2.prerequisites
+    );
+}
+
+#[tokio::test]
+async fn raw_body_sends_string_verbatim_with_prompt_substitution() {
+    // Raw body with characters that would be invalid inside a JSON value:
+    // a literal newline, a backslash, and a double quote. The prompt also
+    // carries a literal `"` to confirm we don't accidentally escape on send.
+    let raw_body_template =
+        "GREETING: line1\nline2 with \\backslash and \"quotes\"\npayload={{ prompt }}\n";
+    let prompt = r#"<script>alert("x")</script>"#;
+    let expected_body = raw_body_template.replace("{{ prompt }}", prompt);
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .and(body_string_contains(
+            "payload=<script>alert(\"x\")</script>",
+        ))
+        .and(body_string_contains(
+            "line2 with \\backslash and \"quotes\"",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+        .mount(&server)
+        .await;
+
+    let request = Request {
+        version: 1,
+        id: "raw-test".into(),
+        name: "Raw Test".into(),
+        method: "POST".into(),
+        url: server.uri(),
+        auth: AuthConfig::None,
+        headers: HashMap::from([("Content-Type".into(), "text/plain".into())]),
+        body: BodyConfig {
+            format: BodyFormat::Raw,
+            content: serde_json::Value::String(raw_body_template.to_owned()),
+        },
+        response: ResponseConfig {
+            extract: ExtractConfig::Raw,
+            bind: None,
+        },
+        timeout_seconds: 10,
+        adapter: AdapterType::CustomRest,
+        tag: None,
+    };
+
+    let tmp = TempDir::new().unwrap();
+    let config = make_config(&tmp, request, single_payload(prompt));
+    execute_run(config, |_| {}).await.unwrap();
+
+    let run_path = tmp.path().join("runs").join("run-001.jsonl");
+    let records = read_all(&run_path).unwrap();
+    // Header + 1 attempt + footer.
+    assert_eq!(records.len(), 3);
+    let attempt = match &records[1] {
+        RunRecord::Attempt(a) => a,
+        _ => panic!("expected attempt record"),
+    };
+    assert_eq!(attempt.response.status, 200);
+    // body_size must reflect the rendered (post-substitution) body length.
+    assert_eq!(attempt.request.body_size, expected_body.len() as u64);
 }
 
 #[tokio::test]
@@ -323,202 +796,6 @@ async fn session_cookie_strategy_reuses_client() {
 }
 
 #[tokio::test]
-async fn scenario_repeat_records_iteration_and_step_id() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
-        .expect(4)
-        .mount(&server)
-        .await;
-
-    let steps = vec![
-        ScenarioStep {
-            id: "step-1".into(),
-            request_id: None,
-            prompt_id: Some("inj-001".into()),
-            prompt_text: "first".into(),
-            session: "A".into(),
-        },
-        ScenarioStep {
-            id: "step-2".into(),
-            request_id: None,
-            prompt_id: Some("inj-002".into()),
-            prompt_text: "second".into(),
-            session: "B".into(),
-        },
-    ];
-
-    let tmp = TempDir::new().unwrap();
-    let config = make_scenario_config(
-        &tmp,
-        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
-        steps,
-        2,
-        SessionStrategy::None,
-    );
-
-    execute_scenario_run(config, |_| {}).await.unwrap();
-
-    let records = read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
-    assert_eq!(records.len(), 6); // header + 4 attempts + footer
-
-    let attempts: Vec<_> = records
-        .into_iter()
-        .filter_map(|r| match r {
-            RunRecord::Attempt(a) => Some(*a),
-            _ => None,
-        })
-        .collect();
-
-    assert_eq!(attempts.len(), 4);
-    assert_eq!(attempts[0].step_id.as_deref(), Some("step-1"));
-    assert_eq!(attempts[1].step_id.as_deref(), Some("step-2"));
-    assert_eq!(attempts[2].step_id.as_deref(), Some("step-1"));
-    assert_eq!(attempts[3].step_id.as_deref(), Some("step-2"));
-    assert_eq!(attempts[0].iteration, Some(1));
-    assert_eq!(attempts[1].iteration, Some(1));
-    assert_eq!(attempts[2].iteration, Some(2));
-    assert_eq!(attempts[3].iteration, Some(2));
-}
-
-#[tokio::test]
-async fn scenario_header_strategy_injects_per_session_value() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(header("X-Session-Id", "A"))
-        .and(body_string_contains("first"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("ok-a"))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(header("X-Session-Id", "B"))
-        .and(body_string_contains("second"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("ok-b"))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let steps = vec![
-        ScenarioStep {
-            id: "step-1".into(),
-            request_id: None,
-            prompt_id: Some("inj-001".into()),
-            prompt_text: "first".into(),
-            session: "A".into(),
-        },
-        ScenarioStep {
-            id: "step-2".into(),
-            request_id: None,
-            prompt_id: Some("inj-002".into()),
-            prompt_text: "second".into(),
-            session: "B".into(),
-        },
-    ];
-
-    let tmp = TempDir::new().unwrap();
-    let config = make_scenario_config(
-        &tmp,
-        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
-        steps,
-        1,
-        SessionStrategy::Header {
-            header_name: "X-Session-Id".into(),
-        },
-    );
-
-    execute_scenario_run(config, |_| {}).await.unwrap();
-}
-
-#[tokio::test]
-async fn scenario_step_request_id_uses_matching_request() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/first"))
-        .and(body_string_contains("first"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("ok-first"))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(path("/second"))
-        .and(body_string_contains("second"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("ok-second"))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let default_request = make_request(
-        &format!("{}/first", server.uri()),
-        AdapterType::CustomRest,
-        ExtractConfig::Raw,
-    );
-    let mut alternate_request = make_request(
-        &format!("{}/second", server.uri()),
-        AdapterType::CustomRest,
-        ExtractConfig::Raw,
-    );
-    alternate_request.id = "alt-request".into();
-    alternate_request.name = "Alternate request".into();
-
-    let steps = vec![
-        ScenarioStep {
-            id: "step-1".into(),
-            request_id: None,
-            prompt_id: Some("inj-001".into()),
-            prompt_text: "first".into(),
-            session: "A".into(),
-        },
-        ScenarioStep {
-            id: "step-2".into(),
-            request_id: Some("alt-request".into()),
-            prompt_id: Some("inj-002".into()),
-            prompt_text: "second".into(),
-            session: "A".into(),
-        },
-    ];
-
-    let tmp = TempDir::new().unwrap();
-    std::fs::create_dir_all(tmp.path().join("runs")).unwrap();
-    std::fs::create_dir_all(tmp.path().join("responses")).unwrap();
-    std::fs::create_dir_all(tmp.path().join("reports")).unwrap();
-
-    let config = ScenarioRunConfig {
-        engagement_dir: tmp.path().to_owned(),
-        run_id: "run-001".into(),
-        request: default_request,
-        requests_by_id: HashMap::from([(alternate_request.id.clone(), alternate_request)]),
-        session_strategy: SessionStrategy::None,
-        steps,
-        repeat: 1,
-        runner_version: "test".into(),
-        body_logging_enabled: false,
-        on_attempt_log: None,
-        cancellation: None,
-    };
-
-    execute_scenario_run(config, |_| {}).await.unwrap();
-
-    let records = read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
-    let attempts: Vec<_> = records
-        .into_iter()
-        .filter_map(|r| match r {
-            RunRecord::Attempt(a) => Some(*a),
-            _ => None,
-        })
-        .collect();
-
-    assert_eq!(attempts.len(), 2);
-    assert!(attempts[0].request.url.ends_with("/first"));
-    assert!(attempts[1].request.url.ends_with("/second"));
-    assert_eq!(attempts[1].step_id.as_deref(), Some("step-2"));
-}
-
-#[tokio::test]
 async fn attempt_log_omits_bodies_when_body_logging_is_disabled() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -624,60 +901,4 @@ async fn run_cancellation_writes_aborted_footer() {
     let footer = footer.expect("aborted run should still write a footer");
     assert_eq!(footer.status, RunStatus::AbortedByUser);
     assert!(footer.attempts_total < 3);
-}
-
-#[tokio::test]
-async fn scenario_cancellation_writes_aborted_footer() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_delay(Duration::from_millis(250))
-                .set_body_string("ok"),
-        )
-        .mount(&server)
-        .await;
-
-    let steps = vec![
-        ScenarioStep {
-            id: "step-1".into(),
-            request_id: None,
-            prompt_id: Some("inj-001".into()),
-            prompt_text: "first".into(),
-            session: "A".into(),
-        },
-        ScenarioStep {
-            id: "step-2".into(),
-            request_id: None,
-            prompt_id: Some("inj-002".into()),
-            prompt_text: "second".into(),
-            session: "A".into(),
-        },
-    ];
-
-    let tmp = TempDir::new().unwrap();
-    let cancellation = RunCancellation::new();
-    let mut config = make_scenario_config(
-        &tmp,
-        make_request(&server.uri(), AdapterType::CustomRest, ExtractConfig::Raw),
-        steps,
-        2,
-        SessionStrategy::None,
-    );
-    config.cancellation = Some(cancellation.clone());
-
-    let task = tokio::spawn(async move { execute_scenario_run(config, |_| {}).await.unwrap() });
-    tokio::time::sleep(Duration::from_millis(60)).await;
-    cancellation.cancel();
-    task.await.unwrap();
-
-    let records = read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
-    let footer = records.iter().find_map(|record| match record {
-        RunRecord::Footer(footer) => Some(footer),
-        _ => None,
-    });
-
-    let footer = footer.expect("aborted scenario run should still write a footer");
-    assert_eq!(footer.status, RunStatus::AbortedByUser);
-    assert!(footer.attempts_total < 4);
 }

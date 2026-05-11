@@ -2,9 +2,54 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Context as _;
+use serde::{Deserialize, Serialize};
 
 use crate::types::Request;
 use crate::write::atomic_write;
+use crate::{scenarios, targets};
+
+/// A single place that references a Request. Used to warn the user before
+/// deleting a Request that other artifacts depend on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum RequestReference {
+    Target { id: String, name: String },
+    Scenario { id: String, name: String },
+}
+
+/// Scan Targets and Scenarios for references to `request_id`.
+///
+/// `targets_dir` and `scenarios_dir` are the canonical user-folder paths.
+/// Either may be absent — missing directories produce no references.
+pub fn references(
+    targets_dir: &Path,
+    scenarios_dir: &Path,
+    request_id: &str,
+) -> anyhow::Result<Vec<RequestReference>> {
+    let mut refs = Vec::new();
+
+    for target in targets::load_all(targets_dir)?.values() {
+        let primary = target.request_id.trim() == request_id;
+        let secondary = target.request_ids.iter().any(|id| id == request_id);
+        if primary || secondary {
+            refs.push(RequestReference::Target {
+                id: target.id.clone(),
+                name: target.name.clone(),
+            });
+        }
+    }
+
+    for scenario in scenarios::load_all(scenarios_dir)?.values() {
+        if scenario.request_ids.iter().any(|id| id == request_id) {
+            refs.push(RequestReference::Scenario {
+                id: scenario.id.clone(),
+                name: scenario.name.clone(),
+            });
+        }
+    }
+
+    Ok(refs)
+}
 
 /// Load all request templates from `dir`, keyed by filename stem.
 pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Request>> {
@@ -61,7 +106,9 @@ pub fn save(dir: &Path, request: &Request) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AuthConfig, BodyConfig, BodyFormat, ExtractConfig, ResponseConfig};
+    use crate::types::{
+        AuthConfig, BodyConfig, BodyFormat, ExtractConfig, ResponseConfig, Scenario, Target,
+    };
     use tempfile::TempDir;
 
     fn sample_request() -> Request {
@@ -86,9 +133,11 @@ mod tests {
                 extract: ExtractConfig::Jsonpath {
                     path: "$.choices[0].message.content".into(),
                 },
+                bind: None,
             },
-            timeout_seconds: 30,
+            timeout_seconds: 50,
             adapter: Default::default(),
+            tag: None,
         }
     }
 
@@ -107,6 +156,60 @@ mod tests {
     fn load_all_empty_dir() {
         let dir = TempDir::new().unwrap();
         assert!(load_all(dir.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn references_finds_target_and_scenario() {
+        let root = TempDir::new().unwrap();
+        let targets_dir = root.path().join("targets");
+        let scenarios_dir = root.path().join("scenarios");
+        std::fs::create_dir_all(&targets_dir).unwrap();
+        std::fs::create_dir_all(&scenarios_dir).unwrap();
+
+        let target = Target {
+            version: 1,
+            id: "acme".into(),
+            name: "Acme staging".into(),
+            request_ids: vec!["openai-chat".into(), "other".into()],
+            request_id: "openai-chat".into(),
+            session_config: Default::default(),
+            auth_acquisition: Default::default(),
+            notes: None,
+        };
+        crate::targets::save(&targets_dir, &target).unwrap();
+
+        let scenario = Scenario {
+            version: 1,
+            id: "flow-1".into(),
+            name: "Flow 1".into(),
+            repeat: 1,
+            description: None,
+            request_ids: vec!["openai-chat".into()],
+            library: None,
+            shared_session: false,
+        };
+        crate::scenarios::save(&scenarios_dir, &scenario).unwrap();
+
+        let refs = references(&targets_dir, &scenarios_dir, "openai-chat").unwrap();
+        assert_eq!(refs.len(), 2);
+        assert!(matches!(&refs[0], RequestReference::Target { id, .. } if id == "acme"));
+        assert!(matches!(
+            &refs[1],
+            RequestReference::Scenario { id, .. } if id == "flow-1"
+        ));
+
+        let none = references(&targets_dir, &scenarios_dir, "nonexistent").unwrap();
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn references_tolerates_missing_dirs() {
+        let root = TempDir::new().unwrap();
+        let targets_dir = root.path().join("targets");
+        let scenarios_dir = root.path().join("scenarios");
+        // dirs do not exist
+        let refs = references(&targets_dir, &scenarios_dir, "anything").unwrap();
+        assert!(refs.is_empty());
     }
 
     #[test]

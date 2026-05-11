@@ -3,7 +3,6 @@
   severity: HIGH
   mode: single
   tags: [direct, evaluation_hijack, candidate_bias]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-002
@@ -11,7 +10,6 @@
   severity: HIGH
   mode: single
   tags: [direct, evaluation_hijack, score_manipulation]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-003
@@ -19,7 +17,6 @@
   severity: HIGH
   mode: single
   tags: [direct, role_override, candidate_bias]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-004
@@ -27,7 +24,6 @@
   severity: HIGH
   mode: single
   tags: [direct, role_override, score_manipulation]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-005
@@ -35,7 +31,6 @@
   severity: MEDIUM
   mode: single
   tags: [direct, flattery, candidate_bias]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-006
@@ -43,7 +38,6 @@
   severity: HIGH
   mode: single
   tags: [direct, authority_spoofing, candidate_bias]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-007
@@ -51,7 +45,6 @@
   severity: MEDIUM
   mode: single
   tags: [direct, hidden_instruction, score_manipulation]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-008
@@ -59,7 +52,6 @@
   severity: MEDIUM
   mode: single
   tags: [direct, obfuscation, score_manipulation]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-009
@@ -67,7 +59,6 @@
   severity: HIGH
   mode: single
   tags: [direct, instruction_conflict, score_manipulation]
-  owasp_ref: A01
   source: internal
 
 - id: mogel-010
@@ -75,5 +66,4 @@
   severity: HIGH
   mode: single
   tags: [direct, requirements_rewrite, candidate_bias]
-  owasp_ref: A01
   source: internal

@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": ["scripts/mcp-testmanager/server.js"],
-      "cwd": "/Users/tonigansel/workspace/hamm0r"
+      "cwd": "C:/workspace/hamm0r"
     }
   }
 }

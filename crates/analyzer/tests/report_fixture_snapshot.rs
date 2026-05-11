@@ -69,6 +69,10 @@ fn fixture_run_renders_stable_report_html() {
         generated_at: "2026-04-26T10:02:00Z".to_owned(),
         started_at,
         finished_at,
+        judge_model: verdict_records.iter().find_map(|record| match record {
+            verdicts::VerdictRecord::Header(header) => Some(header.model.clone()),
+            _ => None,
+        }),
         attempts: report_attempts,
         verdicts: latest_verdicts,
     });

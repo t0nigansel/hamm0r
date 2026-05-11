@@ -17,6 +17,10 @@ pub struct RunHeader {
     pub started_at: String,
     pub runner_version: String,
     pub prompt_files: Vec<String>,
+    /// Scenario the run was launched from, if any. Set by matrix runs;
+    /// absent on flat ad-hoc runs (e.g. the per-result rerun path).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,6 +76,12 @@ pub struct RunAttempt {
     /// Prompt snapshot text used for this attempt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_text: Option<String>,
+    /// Phase 2 of docs/RefactorPlan.md: tags non-user-facing attempts.
+    /// Currently `Some("prerequisite")` for auth-chain prerequisite
+    /// firings, `None` for ordinary attempts. Readers must tolerate
+    /// unknown values (forward compatibility).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     pub request: RequestEnvelope,
     pub response: ResponseEnvelope,
     pub timing: Timing,
@@ -183,6 +193,52 @@ pub fn read_body_by_relative_path(
     read_body_at(&engagement_dir.join(relative_path))
 }
 
+/// Permanently remove every artifact tied to a run inside `engagement_dir`:
+/// the run JSONL, its verdicts JSONL, the responses directory, and any
+/// generated report HTML. Missing files are tolerated. Returns the number
+/// of filesystem entries removed (for diagnostics in the UI toast).
+pub fn delete_run(engagement_dir: &Path, run_id: &str) -> anyhow::Result<usize> {
+    if run_id.trim().is_empty() {
+        anyhow::bail!("run_id must not be empty");
+    }
+
+    let mut removed = 0usize;
+
+    let run_log = engagement_dir.join("runs").join(format!("{run_id}.jsonl"));
+    if run_log.exists() {
+        std::fs::remove_file(&run_log)
+            .with_context(|| format!("cannot delete {}", run_log.display()))?;
+        removed += 1;
+    }
+
+    let verdicts = engagement_dir
+        .join("runs")
+        .join(format!("{run_id}.verdicts.jsonl"));
+    if verdicts.exists() {
+        std::fs::remove_file(&verdicts)
+            .with_context(|| format!("cannot delete {}", verdicts.display()))?;
+        removed += 1;
+    }
+
+    let responses_dir = engagement_dir.join("responses").join(run_id);
+    if responses_dir.exists() {
+        std::fs::remove_dir_all(&responses_dir)
+            .with_context(|| format!("cannot delete {}", responses_dir.display()))?;
+        removed += 1;
+    }
+
+    let report = engagement_dir
+        .join("reports")
+        .join(format!("report-{run_id}.html"));
+    if report.exists() {
+        std::fs::remove_file(&report)
+            .with_context(|| format!("cannot delete {}", report.display()))?;
+        removed += 1;
+    }
+
+    Ok(removed)
+}
+
 fn read_body_at(path: &Path) -> anyhow::Result<Option<String>> {
     if !path.exists() {
         return Ok(None);
@@ -205,6 +261,7 @@ mod tests {
             started_at: "2026-04-25T09:00:00Z".into(),
             runner_version: "0.1.0".into(),
             prompt_files: vec!["injection-classics".into()],
+            scenario_id: None,
         })
     }
 
@@ -218,6 +275,7 @@ mod tests {
             iteration: None,
             session: None,
             prompt_text: None,
+            kind: None,
             request: RequestEnvelope {
                 method: "POST".into(),
                 url: "https://api.example.com".into(),
@@ -317,5 +375,50 @@ mod tests {
 
         let content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(content.lines().count(), 2);
+    }
+
+    #[test]
+    fn delete_run_removes_all_artifacts() {
+        let engagement = TempDir::new().unwrap();
+        let runs_dir = engagement.path().join("runs");
+        let responses_dir = engagement.path().join("responses").join("run-001");
+        let reports_dir = engagement.path().join("reports");
+        std::fs::create_dir_all(&runs_dir).unwrap();
+        std::fs::create_dir_all(&responses_dir).unwrap();
+        std::fs::create_dir_all(&reports_dir).unwrap();
+
+        std::fs::write(runs_dir.join("run-001.jsonl"), "{}\n").unwrap();
+        std::fs::write(runs_dir.join("run-001.verdicts.jsonl"), "{}\n").unwrap();
+        std::fs::write(responses_dir.join("0001.txt"), "body").unwrap();
+        std::fs::write(reports_dir.join("report-run-001.html"), "<html/>").unwrap();
+        // Adjacent run that must NOT be touched.
+        std::fs::write(runs_dir.join("run-002.jsonl"), "{}\n").unwrap();
+
+        let removed = delete_run(engagement.path(), "run-001").unwrap();
+        assert_eq!(removed, 4);
+
+        assert!(!runs_dir.join("run-001.jsonl").exists());
+        assert!(!runs_dir.join("run-001.verdicts.jsonl").exists());
+        assert!(!responses_dir.exists());
+        assert!(!reports_dir.join("report-run-001.html").exists());
+        // Sibling run untouched.
+        assert!(runs_dir.join("run-002.jsonl").exists());
+    }
+
+    #[test]
+    fn delete_run_is_idempotent_when_artifacts_missing() {
+        let engagement = TempDir::new().unwrap();
+        // Only the runs directory exists; no files inside.
+        std::fs::create_dir_all(engagement.path().join("runs")).unwrap();
+
+        let removed = delete_run(engagement.path(), "run-missing").unwrap();
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn delete_run_rejects_empty_id() {
+        let engagement = TempDir::new().unwrap();
+        assert!(delete_run(engagement.path(), "").is_err());
+        assert!(delete_run(engagement.path(), "   ").is_err());
     }
 }

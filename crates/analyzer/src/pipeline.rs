@@ -17,11 +17,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-#[cfg(feature = "runtime")]
-use crate::llm::LlmJudge;
-use crate::report::{build_report_data, render_html_report, ReportAttempt, ReportBuildInput};
+use crate::hosted::{build_hosted_config, judge_with_hosted, HostedJudgeConfigInput};
 #[cfg(feature = "runtime")]
 use crate::judge_with_llm;
+#[cfg(feature = "runtime")]
+use crate::llm::LlmJudge;
+use crate::ollama::{judge_with_ollama, OllamaJudge};
+use crate::report::{build_report_data, render_html_report, ReportAttempt, ReportBuildInput};
 use crate::{judge as judge_heuristic, to_verdict_entry, JudgeInput};
 use storage::atomic_write;
 use storage::runs::{read_all as read_run_records, RunAttempt, RunRecord};
@@ -74,11 +76,40 @@ pub struct JudgeRunOptions<'a> {
     pub engagement_dir: &'a Path,
     pub prompts_dir: &'a Path,
     pub run_id: &'a str,
-    /// If set, attempts are evaluated with the local LLM. If `None`, the
-    /// heuristic judge is used for every attempt.
+    pub judge_prompt_template: Option<&'a str>,
+    /// If set, attempts are evaluated with the local LLM (requires the
+    /// `runtime` feature). Ignored when `ollama` is also set.
     pub model_path: Option<&'a Path>,
+    /// Dev-only Ollama backend. When `Some`, judges are run by POSTing
+    /// to that Ollama instance instead of loading a GGUF in-process.
+    /// Takes precedence over `model_path` so a developer can flip on
+    /// the sidecar without changing other call-site plumbing.
+    pub ollama: Option<OllamaConfig<'a>>,
+    pub hosted: Option<HostedJudgeConfig<'a>>,
     pub analyzer_version: &'a str,
     pub force: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct OllamaConfig<'a> {
+    /// Base URL of the Ollama server, e.g. `http://localhost:11434`.
+    pub url: &'a str,
+    /// Model tag in Ollama (e.g. `qwen2.5:3b`).
+    pub model: &'a str,
+}
+
+#[derive(Debug, Clone)]
+pub struct HostedJudgeConfig<'a> {
+    pub provider: &'a str,
+    pub endpoint: &'a str,
+    pub deployment: &'a str,
+    pub api_style: &'a str,
+    pub api_version: Option<&'a str>,
+    pub api_key: &'a str,
+    pub max_input_chars: u32,
+    pub max_output_tokens: u32,
+    pub request_timeout_seconds: u32,
+    pub max_retries: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -155,9 +186,7 @@ pub fn load_attempt(run_path: &Path, seq: u32) -> anyhow::Result<RunAttempt> {
         .ok_or_else(|| anyhow::anyhow!("attempt {seq} not found in {}", run_path.display()))
 }
 
-pub fn read_latest_verdicts(
-    verdict_path: &Path,
-) -> anyhow::Result<HashMap<u32, VerdictEntry>> {
+pub fn read_latest_verdicts(verdict_path: &Path) -> anyhow::Result<HashMap<u32, VerdictEntry>> {
     if !verdict_path.exists() {
         return Ok(HashMap::new());
     }
@@ -167,8 +196,7 @@ pub fn read_latest_verdicts(
 
 pub fn load_attempt_response_text(engagement_dir: &Path, attempt: &RunAttempt) -> String {
     if let Some(ref body_file) = attempt.response.body_file {
-        if let Ok(Some(text)) =
-            storage::runs::read_body_by_relative_path(engagement_dir, body_file)
+        if let Ok(Some(text)) = storage::runs::read_body_by_relative_path(engagement_dir, body_file)
         {
             return text;
         }
@@ -237,12 +265,8 @@ fn write_verdict_footer(verdict_path: &Path, run_id: &str) -> anyhow::Result<()>
         return Ok(());
     }
     let records = verdicts::read_all(verdict_path)?;
-    let footer = verdicts::summarize_footer(
-        run_id,
-        &records,
-        iso_now(),
-        VerdictRunStatus::Completed,
-    );
+    let footer =
+        verdicts::summarize_footer(run_id, &records, iso_now(), VerdictRunStatus::Completed);
     verdicts::append(verdict_path, &VerdictRecord::Footer(footer))
 }
 
@@ -253,6 +277,7 @@ fn build_judge_input(
     engagement_dir: &Path,
     attempt: &RunAttempt,
     prompt_meta: Option<&PromptMeta>,
+    judge_prompt_template: Option<&str>,
 ) -> JudgeInput {
     let response_text = load_attempt_response_text(engagement_dir, attempt);
     let prompt_text = attempt
@@ -270,6 +295,7 @@ fn build_judge_input(
         owasp_ref: prompt_meta.and_then(|p| p.owasp_ref.clone()),
         severity: prompt_meta.and_then(|p| p.severity.clone()),
         request_failed: attempt.response.status == 0 || attempt.response.error.is_some(),
+        judge_prompt_template: judge_prompt_template.map(str::to_owned),
     }
 }
 
@@ -278,9 +304,10 @@ pub fn judge_attempt_heuristic(
     engagement_dir: &Path,
     attempt: &RunAttempt,
     prompt_meta: Option<&PromptMeta>,
+    judge_prompt_template: Option<&str>,
     evaluated_at: &str,
 ) -> anyhow::Result<VerdictEntry> {
-    let input = build_judge_input(engagement_dir, attempt, prompt_meta);
+    let input = build_judge_input(engagement_dir, attempt, prompt_meta, judge_prompt_template);
     let output = judge_heuristic(&input)?;
     Ok(to_verdict_entry(attempt.seq, evaluated_at, &input, output))
 }
@@ -291,10 +318,11 @@ pub fn judge_attempt_with_llm(
     engagement_dir: &Path,
     attempt: &RunAttempt,
     prompt_meta: Option<&PromptMeta>,
+    judge_prompt_template: Option<&str>,
     evaluated_at: &str,
     judge: &LlmJudge,
 ) -> anyhow::Result<VerdictEntry> {
-    let input = build_judge_input(engagement_dir, attempt, prompt_meta);
+    let input = build_judge_input(engagement_dir, attempt, prompt_meta, judge_prompt_template);
     let output = judge_with_llm(&input, judge)?;
     Ok(to_verdict_entry(attempt.seq, evaluated_at, &input, output))
 }
@@ -306,6 +334,7 @@ pub struct JudgeOneOptions<'a> {
     pub prompts_dir: &'a Path,
     pub run_id: &'a str,
     pub seq: u32,
+    pub judge_prompt_template: Option<&'a str>,
     pub analyzer_version: &'a str,
     pub force: bool,
 }
@@ -326,8 +355,70 @@ pub fn judge_one_heuristic(opts: &JudgeOneOptions) -> anyhow::Result<JudgeOutcom
     let prompt_meta = prompt_index.get(&attempt.prompt_id);
 
     let evaluated_at = iso_now();
-    let verdict =
-        judge_attempt_heuristic(opts.engagement_dir, &attempt, prompt_meta, &evaluated_at)?;
+    let verdict = judge_attempt_heuristic(
+        opts.engagement_dir,
+        &attempt,
+        prompt_meta,
+        opts.judge_prompt_template,
+        &evaluated_at,
+    )?;
+
+    ensure_verdict_header(
+        &verdict_path,
+        opts.run_id,
+        &verdict.model_used,
+        opts.analyzer_version,
+    )?;
+    verdicts::append(
+        &verdict_path,
+        &VerdictRecord::Verdict(Box::new(verdict.clone())),
+    )?;
+
+    Ok(JudgeOutcome::Judged(verdict))
+}
+
+pub fn judge_one_hosted(
+    opts: &JudgeOneOptions,
+    hosted: &HostedJudgeConfig<'_>,
+) -> anyhow::Result<JudgeOutcome> {
+    let verdict_path = verdict_path_for(opts.engagement_dir, opts.run_id);
+    let latest = read_latest_verdicts(&verdict_path)?;
+
+    if let Some(existing) = latest.get(&opts.seq) {
+        if !opts.force {
+            return Ok(JudgeOutcome::Skipped(existing.clone()));
+        }
+    }
+
+    let run_path = run_path_for(opts.engagement_dir, opts.run_id);
+    let attempt = load_attempt(&run_path, opts.seq)?;
+    let prompt_index = build_prompt_index(opts.prompts_dir)?;
+    let prompt_meta = prompt_index.get(&attempt.prompt_id);
+    let input = build_judge_input(
+        opts.engagement_dir,
+        &attempt,
+        prompt_meta,
+        opts.judge_prompt_template,
+    );
+    let evaluated_at = iso_now();
+    let hosted_cfg = build_hosted_config(HostedJudgeConfigInput {
+        provider: hosted.provider,
+        endpoint: hosted.endpoint,
+        deployment: hosted.deployment,
+        api_style: hosted.api_style,
+        api_version: hosted.api_version,
+        api_key: hosted.api_key,
+        max_input_chars: hosted.max_input_chars,
+        max_output_tokens: hosted.max_output_tokens,
+        request_timeout_seconds: hosted.request_timeout_seconds,
+        max_retries: hosted.max_retries,
+    })?;
+    let verdict = to_verdict_entry(
+        attempt.seq,
+        &evaluated_at,
+        &input,
+        judge_with_hosted(&input, &hosted_cfg)?,
+    );
 
     ensure_verdict_header(
         &verdict_path,
@@ -359,29 +450,51 @@ pub fn judge_run(
     let verdict_path = verdict_path_for(opts.engagement_dir, opts.run_id);
     let latest = read_latest_verdicts(&verdict_path)?;
 
-    let summary = match opts.model_path {
-        Some(_model_path) => {
-            #[cfg(feature = "runtime")]
-            {
-                run_llm(
-                    opts,
-                    &verdict_path,
-                    attempts,
-                    &prompt_index,
-                    &latest,
-                    total,
-                    _model_path,
-                    on_progress,
-                )?
-            }
-            #[cfg(not(feature = "runtime"))]
-            {
-                return Err(anyhow::anyhow!(
-                    "analyzer compiled without `runtime` feature; LLM judging unavailable"
-                ));
-            }
+    let summary = if let Some(hosted_cfg) = opts.hosted.as_ref() {
+        run_hosted(
+            opts,
+            &verdict_path,
+            attempts,
+            &prompt_index,
+            &latest,
+            total,
+            hosted_cfg,
+            on_progress,
+        )?
+    } else if let Some(ollama_cfg) = opts.ollama.as_ref() {
+        run_ollama(
+            opts,
+            &verdict_path,
+            attempts,
+            &prompt_index,
+            &latest,
+            total,
+            ollama_cfg,
+            on_progress,
+        )?
+    } else if opts.model_path.is_some() {
+        #[cfg(feature = "runtime")]
+        {
+            run_llm(
+                opts,
+                &verdict_path,
+                attempts,
+                &prompt_index,
+                &latest,
+                total,
+                opts.model_path.unwrap(),
+                on_progress,
+            )?
         }
-        None => run_heuristic(
+        #[cfg(not(feature = "runtime"))]
+        {
+            return Err(anyhow::anyhow!(
+                "analyzer compiled without `runtime` feature; LLM judging unavailable. \
+                 Use --ollama-url for the dev sidecar backend, or build with --features runtime."
+            ));
+        }
+    } else {
+        run_heuristic(
             opts,
             &verdict_path,
             attempts,
@@ -389,11 +502,90 @@ pub fn judge_run(
             &latest,
             total,
             on_progress,
-        )?,
+        )?
     };
 
     write_verdict_footer(&verdict_path, opts.run_id)?;
     Ok(summary)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_hosted(
+    opts: &JudgeRunOptions,
+    verdict_path: &Path,
+    attempts: Vec<RunAttempt>,
+    prompt_index: &HashMap<String, PromptMeta>,
+    latest: &HashMap<u32, VerdictEntry>,
+    total: u32,
+    hosted: &HostedJudgeConfig<'_>,
+    on_progress: &mut dyn FnMut(Progress),
+) -> anyhow::Result<JudgeRunSummary> {
+    let hosted_cfg = build_hosted_config(HostedJudgeConfigInput {
+        provider: hosted.provider,
+        endpoint: hosted.endpoint,
+        deployment: hosted.deployment,
+        api_style: hosted.api_style,
+        api_version: hosted.api_version,
+        api_key: hosted.api_key,
+        max_input_chars: hosted.max_input_chars,
+        max_output_tokens: hosted.max_output_tokens,
+        request_timeout_seconds: hosted.request_timeout_seconds,
+        max_retries: hosted.max_retries,
+    })?;
+    let mut processed = 0u32;
+    let mut judged = 0u32;
+    let mut skipped_existing = 0u32;
+
+    for attempt in attempts {
+        processed += 1;
+
+        if latest.contains_key(&attempt.seq) && !opts.force {
+            skipped_existing += 1;
+            on_progress(Progress {
+                processed,
+                total,
+                judged,
+                skipped_existing,
+            });
+            continue;
+        }
+
+        let prompt_meta = prompt_index.get(&attempt.prompt_id);
+        let input = build_judge_input(
+            opts.engagement_dir,
+            &attempt,
+            prompt_meta,
+            opts.judge_prompt_template,
+        );
+        let evaluated_at = iso_now();
+        let verdict = to_verdict_entry(
+            attempt.seq,
+            &evaluated_at,
+            &input,
+            judge_with_hosted(&input, &hosted_cfg)?,
+        );
+        ensure_verdict_header(
+            verdict_path,
+            opts.run_id,
+            &verdict.model_used,
+            opts.analyzer_version,
+        )?;
+        verdicts::append(verdict_path, &VerdictRecord::Verdict(Box::new(verdict)))?;
+        judged += 1;
+        on_progress(Progress {
+            processed,
+            total,
+            judged,
+            skipped_existing,
+        });
+    }
+
+    Ok(JudgeRunSummary {
+        processed,
+        total,
+        judged,
+        skipped_existing,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -427,8 +619,13 @@ fn run_heuristic(
 
         let prompt_meta = prompt_index.get(&attempt.prompt_id);
         let evaluated_at = iso_now();
-        let verdict =
-            judge_attempt_heuristic(opts.engagement_dir, &attempt, prompt_meta, &evaluated_at)?;
+        let verdict = judge_attempt_heuristic(
+            opts.engagement_dir,
+            &attempt,
+            prompt_meta,
+            opts.judge_prompt_template,
+            &evaluated_at,
+        )?;
         ensure_verdict_header(
             verdict_path,
             opts.run_id,
@@ -440,6 +637,73 @@ fn run_heuristic(
             &VerdictRecord::Verdict(Box::new(verdict.clone())),
         )?;
         local_latest.insert(attempt.seq, verdict);
+        judged += 1;
+        on_progress(Progress {
+            processed,
+            total,
+            judged,
+            skipped_existing,
+        });
+    }
+
+    Ok(JudgeRunSummary {
+        processed,
+        total,
+        judged,
+        skipped_existing,
+    })
+}
+
+/// Ollama-backed run loop. Mirrors `run_llm` but uses HTTP instead of
+/// the in-process `LlamaModel`. Lives outside the `runtime` feature
+/// gate so it works on hosts without the C++ toolchain.
+#[allow(clippy::too_many_arguments)]
+fn run_ollama(
+    opts: &JudgeRunOptions,
+    verdict_path: &Path,
+    attempts: Vec<RunAttempt>,
+    prompt_index: &HashMap<String, PromptMeta>,
+    latest: &HashMap<u32, VerdictEntry>,
+    total: u32,
+    cfg: &OllamaConfig,
+    on_progress: &mut dyn FnMut(Progress),
+) -> anyhow::Result<JudgeRunSummary> {
+    let judge = OllamaJudge::new(cfg.url, cfg.model)?;
+    let mut processed = 0u32;
+    let mut judged = 0u32;
+    let mut skipped_existing = 0u32;
+
+    for attempt in attempts {
+        processed += 1;
+
+        if latest.contains_key(&attempt.seq) && !opts.force {
+            skipped_existing += 1;
+            on_progress(Progress {
+                processed,
+                total,
+                judged,
+                skipped_existing,
+            });
+            continue;
+        }
+
+        let prompt_meta = prompt_index.get(&attempt.prompt_id);
+        let evaluated_at = iso_now();
+        let input = build_judge_input(
+            opts.engagement_dir,
+            &attempt,
+            prompt_meta,
+            opts.judge_prompt_template,
+        );
+        let output = judge_with_ollama(&input, &judge)?;
+        let verdict = to_verdict_entry(attempt.seq, &evaluated_at, &input, output);
+        ensure_verdict_header(
+            verdict_path,
+            opts.run_id,
+            &verdict.model_used,
+            opts.analyzer_version,
+        )?;
+        verdicts::append(verdict_path, &VerdictRecord::Verdict(Box::new(verdict)))?;
         judged += 1;
         on_progress(Progress {
             processed,
@@ -494,6 +758,7 @@ fn run_llm(
             opts.engagement_dir,
             &attempt,
             prompt_meta,
+            opts.judge_prompt_template,
             &evaluated_at,
             &judge,
         )?;
@@ -503,10 +768,7 @@ fn run_llm(
             &verdict.model_used,
             opts.analyzer_version,
         )?;
-        verdicts::append(
-            verdict_path,
-            &VerdictRecord::Verdict(Box::new(verdict)),
-        )?;
+        verdicts::append(verdict_path, &VerdictRecord::Verdict(Box::new(verdict)))?;
         judged += 1;
         on_progress(Progress {
             processed,
@@ -546,9 +808,18 @@ pub fn generate_report(engagement_dir: &Path, run_id: &str) -> anyhow::Result<Pa
     }
 
     let verdict_path = verdict_path_for(engagement_dir, run_id);
-    let latest_verdicts = read_latest_verdicts(&verdict_path)?;
+    let verdict_records = if verdict_path.exists() {
+        verdicts::read_all(&verdict_path)?
+    } else {
+        Vec::new()
+    };
+    let latest_verdicts = verdicts::latest_by_seq(&verdict_records);
     let mut verdict_list = latest_verdicts.values().cloned().collect::<Vec<_>>();
     verdict_list.sort_by_key(|v| v.seq);
+    let judge_model = verdict_records.iter().find_map(|record| match record {
+        VerdictRecord::Header(header) => Some(header.model.clone()),
+        _ => None,
+    });
 
     // engagement_slug shown in the report — derive from directory name.
     let engagement_slug = engagement_dir
@@ -580,6 +851,7 @@ pub fn generate_report(engagement_dir: &Path, run_id: &str) -> anyhow::Result<Pa
         generated_at: iso_now(),
         started_at,
         finished_at,
+        judge_model,
         attempts: report_attempts,
         verdicts: verdict_list,
     });

@@ -59,8 +59,8 @@ pub fn read(paths: &HammorPaths) -> anyhow::Result<Option<AnalyzerInstall>> {
     }
     let raw = std::fs::read_to_string(&path)
         .with_context(|| format!("cannot read {}", path.display()))?;
-    let install: AnalyzerInstall = serde_json::from_str(&raw)
-        .with_context(|| format!("cannot parse {}", path.display()))?;
+    let install: AnalyzerInstall =
+        serde_json::from_str(&raw).with_context(|| format!("cannot parse {}", path.display()))?;
     if install.version != CURRENT_VERSION {
         anyhow::bail!(
             "install.json schema version {} not supported (expected {})",
