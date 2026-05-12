@@ -451,10 +451,8 @@ where
         config
             .payloads
             .iter()
-            .filter_map(|p| {
-                seen.insert(p.prompt_id.clone())
-                    .then(|| p.prompt_id.clone())
-            })
+            .filter(|p| seen.insert(p.prompt_id.clone()))
+            .map(|p| p.prompt_id.clone())
             .collect()
     };
 
@@ -469,7 +467,7 @@ where
         &config.engagement_dir,
         &primary_request_id,
         &config.runner_version,
-        prompt_files.into_iter(),
+        prompt_files,
         scenario_id,
     )?;
 

@@ -632,7 +632,7 @@ mod tests {
         assert_eq!(report.targets_skipped, 1);
 
         let reqs = requests::load_all(&requests_dir).unwrap();
-        assert!(reqs.get("manual__login").is_none());
+        assert!(!reqs.contains_key("manual__login"));
     }
 
     #[test]
