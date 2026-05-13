@@ -285,17 +285,19 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
 
 ### 2.4  Tauri commands
 
-- [ ] **Drop legacy commands:** `save_target`, `delete_target`,
-      `list_targets`, `get_target_meta`, `save_target_meta`,
-      `acquire_target_auth`, `test_target_connection`,
-      `list_target_requests`, target-scoped `save_request` /
-      `delete_request`. **Not done.** All still registered in
-      `main.rs`. Their UI consumers are unreachable; they're dead but
-      not deleted. Defer until the user's WIP in adjacent areas
-      (hosted-judge, bearer storage, Test Request) stabilises so a
-      single-shot deletion doesn't conflict.
+- [⚠️] **Drop legacy commands:** most are already gone. Only
+      `list_targets` is still registered in `main.rs:66` (backed by
+      `crates/hamm0r/src/commands/targets.rs`); the rest
+      (`save_target`, `delete_target`, `get_target_meta`,
+      `save_target_meta`, `acquire_target_auth`,
+      `test_target_connection`, `list_target_requests`, target-scoped
+      `save_request`/`delete_request`) are not in the invoke handler
+      list anymore. Final cleanup: remove `list_targets` + the
+      `targets` module + the legacy `Target` enum variants in
+      `RequestReference`.
 - [ ] **Drop `start_run`** (the flat-payload entry the wizard used).
-      **Not done.** Same reason — let the wizard die first.
+      Still registered in `main.rs:79`. Wizard is gone; no UI caller
+      should remain. Safe to remove.
 - [x] **`start_scenario_run` is now the only matrix launcher.** It
       detects `request_ids` + `library` and dispatches to the new
       `dispatch_matrix_scenario`; legacy step-based scenarios still
@@ -311,10 +313,8 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
       replace "Start Engagement" / "Open Workbench".
 - [⚠️] **Run a Scenario picker** uses `window.prompt` for v1.
       Functional but ugly. Proper modal picker is a follow-up.
-- [ ] **Empty-state hints** for Requests and Scenarios views: not
-      added. The Requests view has its existing welcome text; the
-      Scenarios view's right-pane empty state still says "Select a
-      scenario or create one" — that stays for now.
+- [x] **Empty-state hints** for Requests and Scenarios views shipped
+      with the polish pass (see "Empty-state hints" entry below).
 - [x] **Requests view:** `tag` field added; `bind` field on the
       response-extract section with a multi-line help blurb showing
       the `{{login.bearer_token}}` example and explaining the chain
@@ -323,12 +323,13 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
       multi-select, OWASP A01–A10 chips, category chips (auto-built
       from prompt library), shared_session checkbox, live counter.
 - [x] **Engagements view:** unchanged.
-- [ ] **Wizard modal HTML + JS state machine + WIZARD_SCENARIOS
-      preset list:** still in the codebase. Unreachable from default
-      flow but reachable via stale legacy listeners (e.g.
-      `#btn-home-start-engagement` if it somehow exists).
-- [ ] **Targets view + Workbench view DOM + JS:** still in the
-      codebase. Mechanical bulk delete is its own follow-up.
+- [x] **Wizard modal HTML + JS state machine + WIZARD_SCENARIOS
+      preset list:** removed. Only explanatory comments remain in
+      `ui/js/app.js` pointing at this plan.
+- [x] **Targets view + Workbench view DOM + JS:** removed. A handful
+      of legacy CSS class names (`target-test-result`,
+      `target-request-picker`) still exist but are inert — left for a
+      cosmetic follow-up.
 
 ### 2.6  Tests
 
@@ -348,20 +349,26 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
 - [x] `docs/Datamodel.md`: matrix scenarios documented; bind/
       interpolation contract added; body formats (incl. `raw`)
       enumerated; tag noted.
-- [ ] `docs/Architecture.md`: not updated. Should remove the Target
-      command path mention and the wizard mention.
-- [ ] `docs/ProductVision.md`: not verified. Probably no contradiction.
-- [ ] **Mark `RequestPlan.md` as superseded** by this document. Not
-      done.
+- [x] `docs/Architecture.md`: verified. No Target-entity or Wizard
+      references remain (only the generic "target system" usage).
+- [x] `docs/ProductVision.md`: verified. No contradictions with the
+      collapsed four-primitive model.
+- [x] **`RequestPlan.md` retired.** Deleted from the repo; this
+      document is now the single source for the Request/Scenario
+      refactor.
 
 ---
 
 ## What's still open — work-list
 
-Only one item remains:
-
 1. **End-to-end Playwright spec** for the auth-chain matrix flow.
    Closes the Definition of Done for Phase 2.
+2. **Remove `list_targets`** Tauri command + `commands/targets.rs`
+   module + legacy `RequestReference::Target` variant. Wizard and
+   Targets view are gone; nothing should still call this.
+3. **Remove `start_run`** Tauri command (the flat-payload entry the
+   wizard used). `start_scenario_run` is the only matrix launcher
+   now.
 
 The polish items below all shipped:
 
@@ -385,8 +392,8 @@ The polish items below all shipped:
   `target_id` / `steps` being silently dropped on load. `scenarios/`
   added to the directory layout. `Architecture.md` Target-editor
   reference replaced with Request editor.
-- ✅ **`RequestPlan.md` superseded.** Banner at the top points at
-  this document.
+- ✅ **`RequestPlan.md` retired.** Removed from the repo; this
+  document is the single source for the refactor.
 
 ---
 
