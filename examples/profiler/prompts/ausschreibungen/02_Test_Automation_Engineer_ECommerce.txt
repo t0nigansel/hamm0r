@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 02
+======================================================================
+
+Test Automation Engineer (m/w/d) – E-Commerce Plattform
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        ShopStream Digital GmbH
+Branche:             E-Commerce / Retail
+Einsatzort:          Berlin (100% Remote möglich)
+Projektstart:        15.05.2026
+Laufzeit:            12 Monate
+Auslastung:          Vollzeit, 4-Tage-Woche möglich
+Tagessatz:           850 – 1.050 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Aufbau eines durchgängigen End-to-End-Testautomatisierungs-Frameworks für eine hochskalierbare Microservices-basierte E-Commerce-Plattform mit über 8 Millionen aktiven Nutzern monatlich.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Entwurf und Implementierung eines neuen Testautomatisierungs-Frameworks auf Basis von Playwright und TypeScript
+  - Migration bestehender Selenium-Testsuiten (ca. 2.400 Testfälle)
+  - Aufbau einer CI/CD-Pipeline mit GitLab CI und Kubernetes
+  - Implementierung von API-Tests mit REST-assured und Postman/Newman
+  - Coaching und Mentoring von 3 Junior-Automatisierern
+  - Integration von Testdatenmanagement-Lösungen
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 5 Jahre Erfahrung in der Testautomatisierung
+  - Exzellente Kenntnisse in TypeScript oder JavaScript
+  - Fundierte Erfahrung mit Playwright oder Cypress
+  - Sehr gute Kenntnisse in Docker, Kubernetes und CI/CD-Pipelines
+  - Erfahrung mit BDD-Frameworks (Cucumber, SpecFlow)
+  - Deutsch oder Englisch verhandlungssicher
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - ISTQB Test Automation Engineer
+  - Erfahrung mit Mobile Testing (Appium)
+  - Kenntnisse in Contract Testing (Pact)
+  - Performance-Testing-Grundlagen
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Sabine Lenhardt, careers@shopstream-digital.example, +49 30 5544-8800
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

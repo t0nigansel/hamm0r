@@ -133,6 +133,7 @@ mod tests {
                 extract: ExtractConfig::Jsonpath {
                     path: "$.choices[0].message.content".into(),
                 },
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 50,
@@ -156,6 +157,15 @@ mod tests {
     fn load_all_empty_dir() {
         let dir = TempDir::new().unwrap();
         assert!(load_all(dir.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn bundled_requests_parse() {
+        let requests_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../requests");
+
+        let map = load_all(&requests_dir).unwrap();
+
+        assert!(map.contains_key("ollama-chat-local"));
     }
 
     #[test]

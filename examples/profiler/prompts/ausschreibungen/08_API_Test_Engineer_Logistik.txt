@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 08
+======================================================================
+
+API Test Engineer (m/w/d) – Logistik-Plattform
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        LogiFlow Systems AG
+Branche:             Logistik / Supply Chain
+Einsatzort:          Düsseldorf (Hybrid)
+Projektstart:        Sofort
+Laufzeit:            8 Monate
+Auslastung:          Vollzeit
+Tagessatz:           780 – 980 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Einführung einer API-getriebenen Logistik-Plattform mit über 150 Microservices zur Anbindung von Spediteuren, Lagerhaltung und ERP-Systemen.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Entwicklung und Pflege automatisierter API-Testsuiten (REST, GraphQL, gRPC)
+  - Contract Testing mit Pact zwischen Services
+  - Testdatenmanagement und Mock-Server-Aufbau (WireMock)
+  - Erstellung von Integrationstests für EDI/EDIFACT-Schnittstellen
+  - Zusammenarbeit mit 6 agilen Entwicklungsteams
+  - Dokumentation der APIs mittels OpenAPI/Swagger
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 3 Jahre Erfahrung im API-Testing
+  - Sehr gute Kenntnisse in Postman, REST-assured oder Karate
+  - Programmierkenntnisse in Java oder Python
+  - Erfahrung mit GraphQL oder gRPC
+  - Verständnis von Microservice-Architekturen
+  - Deutsch mind. C1
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Kenntnisse in Kafka und Event-Driven Architectures
+  - Erfahrung mit EDI/EDIFACT
+  - ISTQB Advanced Technical Test Analyst
+  - Kenntnisse in der Logistikbranche
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Robert Cramer, r.cramer@logiflow-systems.example, +49 211 6677-5544
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

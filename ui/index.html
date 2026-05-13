@@ -23,13 +23,14 @@
       <span class="sep">/</span>
       <span class="current" id="breadcrumb-engagement">no engagement open</span>
     </div>
+    <div class="topbar-progress" id="topbar-progress" aria-live="polite">
+      <span id="topbar-progress-bar">[              ]</span>
+      <span id="topbar-progress-count">0/0</span>
+    </div>
     <div class="topbar-right">
-      <div class="engagement-pill">
-        <span class="dot" id="engagement-dot"></span>
-        <span id="db-label">no engagement</span>
-      </div>
       <button class="icon-btn" id="btn-new-engagement" title="New engagement">+</button>
       <button class="icon-btn" id="btn-open-engagement" title="Open engagement">⏏</button>
+      <button class="icon-btn" id="btn-global-fire" title="Fire" aria-label="Fire" disabled>&#9654;</button>
       <button class="icon-btn" id="btn-help" title="Help">?</button>
     </div>
   </div>
@@ -277,6 +278,15 @@
               </div>
             </div>
 
+            <div class="form-row">
+              <label for="req-result-columns">Result columns</label>
+              <textarea id="req-result-columns" rows="4" spellcheck="false"
+                placeholder="QA: qualifications&#10;EX: experience&#10;Total: total"></textarea>
+              <div class="hint">
+                Optional. One column per line as <code>Label: dot.path</code>. Values are read from JSON responses and shown in Engagement results.
+              </div>
+            </div>
+
             <div class="form-row form-row-inline">
               <div style="flex:0 0 160px">
                 <label for="req-timeout">Timeout (s)</label>
@@ -292,7 +302,6 @@
 
             <div class="form-actions">
               <button type="submit" id="btn-req-save" class="btn btn-primary">Save</button>
-              <button type="button" id="btn-req-fire" class="btn btn-ghost">Fire request</button>
               <button type="button" id="btn-req-cancel" class="btn btn-ghost">Cancel</button>
               <span style="flex:1"></span>
               <button type="button" id="btn-req-delete" class="btn btn-ghost danger" style="display:none;">Delete</button>
@@ -358,19 +367,30 @@
 
         <!-- Header: chip filters + search + actions -->
         <div class="lib-header">
-          <div class="filter-chips" id="library-chips">
-            <button class="chip active" data-owasp="">ALL</button>
-            <button class="chip" data-owasp="A01">A01</button>
-            <button class="chip" data-owasp="A02">A02</button>
-            <button class="chip" data-owasp="A03">A03</button>
-            <button class="chip" data-owasp="A04">A04</button>
-            <button class="chip" data-owasp="A05">A05</button>
-            <button class="chip" data-owasp="A06">A06</button>
-            <button class="chip" data-owasp="A07">A07</button>
-            <button class="chip" data-owasp="A08">A08</button>
-            <button class="chip" data-owasp="A09">A09</button>
-            <button class="chip" data-owasp="A10">A10</button>
-            <button class="chip" data-owasp="baseline">BASELINE</button>
+          <div class="lib-filter-columns">
+            <div class="lib-filter-group">
+              <div class="lib-filter-label">OWASP Ref</div>
+              <div class="filter-chips" id="library-chips">
+                <button class="chip active" data-owasp="">ALL</button>
+                <button class="chip" data-owasp="A01">A01</button>
+                <button class="chip" data-owasp="A02">A02</button>
+                <button class="chip" data-owasp="A03">A03</button>
+                <button class="chip" data-owasp="A04">A04</button>
+                <button class="chip" data-owasp="A05">A05</button>
+                <button class="chip" data-owasp="A06">A06</button>
+                <button class="chip" data-owasp="A07">A07</button>
+                <button class="chip" data-owasp="A08">A08</button>
+                <button class="chip" data-owasp="A09">A09</button>
+                <button class="chip" data-owasp="A10">A10</button>
+                <button class="chip" data-owasp="baseline">BASELINE</button>
+              </div>
+            </div>
+            <div class="lib-filter-group">
+              <div class="lib-filter-label">Category</div>
+              <div class="filter-chips" id="library-category-chips">
+                <button class="chip active" data-category="">ALL</button>
+              </div>
+            </div>
           </div>
           <div class="lib-header-right">
             <div class="search-box" style="width:180px">
@@ -546,7 +566,6 @@
             </div>
 
             <div class="run-controls">
-              <button id="btn-run-scenario" class="btn btn-danger btn-large">▶ Run Scenario</button>
               <button id="btn-stop-scenario" class="btn btn-large" disabled>■ Stop</button>
             </div>
 
@@ -599,7 +618,7 @@
             </div>
 
             <div class="eng-detail-meta">
-              <span>Target: <strong id="eng-detail-target">—</strong></span>
+              <span>Endpoint: <strong id="eng-detail-target">—</strong></span>
               <span>Scenario: <strong id="eng-detail-scenario">—</strong></span>
               <span>Status: <strong id="eng-detail-status">—</strong></span>
               <span>Start: <strong id="eng-detail-start">—</strong></span>
@@ -633,7 +652,7 @@
                   <div class="table-wrap">
                     <table id="results-table">
                       <thead>
-                        <tr>
+                        <tr id="results-head-row">
                           <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
                           <th>Verdict</th>
                           <th class="col-wide">Request</th>
@@ -679,12 +698,19 @@
     <h3 style="margin-bottom:1rem;font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Result Detail</h3>
     <div id="detail-summary" class="detail-summary"></div>
     <div class="detail-section">
-      <strong>Request / Prompt</strong>
-      <pre id="detail-prompt"></pre>
+      <div class="tab-bar detail-source-tabs" id="detail-source-tabs" role="tablist" aria-label="Result request source">
+        <button type="button" class="tab tab-active" data-detail-source="prompt" role="tab" aria-selected="true">Prompt</button>
+        <button type="button" class="tab" data-detail-source="request" role="tab" aria-selected="false">Request</button>
+      </div>
+      <pre id="detail-source-text"></pre>
     </div>
     <div class="detail-section">
       <strong>Response</strong>
       <pre id="detail-response"></pre>
+    </div>
+    <div class="detail-section" id="detail-metrics-section" style="display:none">
+      <strong>Metrics</strong>
+      <div class="detail-meta-grid" id="detail-metrics"></div>
     </div>
     <div class="detail-section">
       <strong>Run Metadata</strong>

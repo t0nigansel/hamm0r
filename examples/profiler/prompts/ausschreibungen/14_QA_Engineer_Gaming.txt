@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 14
+======================================================================
+
+QA Engineer Gaming (m/w/d) – Mobile Free-to-Play
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        PixelRage Studios GmbH
+Branche:             Gaming / Entertainment
+Einsatzort:          Hamburg (Hybrid, 2 Tage/Woche Büro)
+Projektstart:        15.06.2026
+Laufzeit:            10 Monate
+Auslastung:          Vollzeit
+Tagessatz:           650 – 850 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Qualitätssicherung eines Free-to-Play Mobile-Games vor globalem Launch (iOS/Android, 12 Sprachen). Fokus auf Spielbalance, Monetarisierung und Live-Ops.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Funktionale Tests der Spielmechaniken und Progression
+  - Testen von In-App-Käufen und Monetarisierungsfeatures
+  - Lokalisierungs- und Kulturtests für 12 Märkte
+  - Regressionstests bei wöchentlichen Live-Ops-Updates
+  - Exploratives Testen zur Identifikation von Exploits und Balance-Issues
+  - Zusammenarbeit mit Game Designern und Community-Team
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 2 Jahre Erfahrung im Games QA
+  - Erfahrung mit Mobile-Games-Testing (iOS + Android)
+  - Vertrautheit mit Engines wie Unity oder Unreal
+  - Strukturiertes und detailgenaues Arbeiten
+  - Leidenschaft für Gaming
+  - Englisch fließend, Deutsch mind. B2
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Erfahrung mit Live-Service-Games
+  - Scripting in C# oder Python
+  - Kenntnisse in Analytics-Tools (GameAnalytics, Amplitude)
+  - Weitere Sprachen (JP, KR, CN)
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Jenny Roskopf, jobs@pixelrage-studios.example, +49 40 1100-2233
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

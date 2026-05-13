@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 01
+======================================================================
+
+Senior Testmanager (m/w/d) – Core Banking Transformation
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        FinNova Solutions AG
+Branche:             Banking / Finanzdienstleistungen
+Einsatzort:          Frankfurt am Main (60% Remote möglich)
+Projektstart:        01.06.2026
+Laufzeit:            18 Monate mit Option auf Verlängerung
+Auslastung:          Vollzeit (5 Tage/Woche)
+Tagessatz:           1.150 – 1.350 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Ablösung der bestehenden Core-Banking-Plattform durch eine moderne Cloud-basierte Lösung (Avaloq / Temenos T24). Migration von ca. 2,8 Millionen Kundendatensätzen sowie Integration mit über 40 Umsystemen.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Gesamtverantwortung für die Teststrategie und Testplanung über alle Teststufen hinweg
+  - Führung eines 12-köpfigen internationalen Testteams (DE, PL, IN)
+  - Reporting an Lenkungsausschuss und C-Level
+  - Budgetverantwortung für den Testbereich (ca. 3,5 Mio. €)
+  - Koordination von Abnahmetests mit Fachbereichen und Regulatoren (BaFin)
+  - Etablierung KPI-basierter Testmetriken
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 10 Jahre Berufserfahrung als Testmanager
+  - ISTQB Certified Tester - Advanced Level Test Manager
+  - Nachweisbare Erfahrung in mindestens 2 Core-Banking-Migrationen
+  - Sehr gute Kenntnisse in HP ALM / Micro Focus Quality Center
+  - Erfahrung mit regulatorischen Anforderungen (MaRisk, BAIT)
+  - Deutsch verhandlungssicher (C1), Englisch fließend
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - ISTQB Expert Level Test Management
+  - Kenntnisse in Avaloq oder Temenos T24
+  - Jira Xray oder qTest
+  - PRINCE2 oder PMI-Zertifizierung
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Dr. Markus Brehmer, m.brehmer@finnova-solutions.example, +49 69 9876-1234
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

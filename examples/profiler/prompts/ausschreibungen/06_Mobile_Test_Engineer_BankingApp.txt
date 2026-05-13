@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 06
+======================================================================
+
+Mobile Test Engineer (m/w/d) – Banking App
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        NeoPay Mobile GmbH
+Branche:             FinTech / Mobile Banking
+Einsatzort:          Hamburg (Hybrid, 3 Tage/Woche vor Ort)
+Projektstart:        01.06.2026
+Laufzeit:            10 Monate
+Auslastung:          Vollzeit
+Tagessatz:           820 – 1.050 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Test einer neuen Mobile-Banking-App (iOS/Android) mit Biometric Authentication, Instant Payments und eingebettetem Krypto-Wallet. Release für 5 europäische Märkte.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Manuelle und automatisierte Tests auf iOS- und Android-Geräten
+  - Aufbau und Pflege einer Geräte-Matrix (real devices + device farms)
+  - Testautomatisierung mit Appium und XCUITest/Espresso
+  - Durchführung von Usability-, Performance- und Sicherheitstests auf Mobile
+  - Integration in CI/CD (Bitrise, Fastlane)
+  - Abstimmung mit UX-Designern und Produktentwicklung
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 4 Jahre Erfahrung im Mobile Testing
+  - Fundierte Kenntnisse in Appium (mindestens 2 Jahre)
+  - Erfahrung mit iOS- und Android-Entwicklungsumgebungen
+  - Gute Programmierkenntnisse in Java oder Kotlin / Swift
+  - Erfahrung mit Device-Cloud-Lösungen (BrowserStack, Sauce Labs)
+  - Deutsch mind. B2, Englisch fließend
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - ISTQB Mobile Application Tester
+  - Kenntnisse in Detox oder Maestro
+  - Erfahrung im Banking-/FinTech-Bereich
+  - Accessibility-Testing auf Mobile
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Lisa Markwort, jobs@neopay-mobile.example, +49 40 2211-9988
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

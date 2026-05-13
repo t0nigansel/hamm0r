@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 12
+======================================================================
+
+Testdatenmanager (m/w/d) – Telekommunikation
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        TelNord Connect AG
+Branche:             Telekommunikation
+Einsatzort:          Hannover (Hybrid, 40% Remote)
+Projektstart:        01.06.2026
+Laufzeit:            12 Monate
+Auslastung:          Vollzeit
+Tagessatz:           850 – 1.080 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Aufbau eines zentralen Testdatenmanagements für 14 Testumgebungen im Rahmen der Migration auf eine neue BSS/OSS-Plattform.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Konzeption eines unternehmensweiten Testdatenmanagements (TDM)
+  - Aufbau synthetischer Testdaten-Generatoren
+  - Anonymisierung und Pseudonymisierung produktiver Daten (DSGVO-konform)
+  - Integration mit Tools wie Delphix, Informatica TDM oder CA TDM
+  - Erstellung von Testdatenkatalogen und Self-Service-Portal
+  - Schulung und Support für Testteams
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 4 Jahre Erfahrung im Testdatenmanagement
+  - Sehr gute SQL- und Datenbank-Kenntnisse (Oracle, PostgreSQL)
+  - Erfahrung mit einem TDM-Tool (Delphix, Informatica, CA, Broadcom)
+  - Fundiertes Verständnis von DSGVO und Anonymisierungsverfahren
+  - Scripting-Kenntnisse in Python oder Shell
+  - Deutsch mind. C1
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Telekommunikations-Erfahrung (OSS/BSS)
+  - Kenntnisse in Kafka und Data Streaming
+  - Cloud-Erfahrung (Azure/AWS)
+  - Erfahrung mit synthetischen Daten (GenRocket, Tonic.ai)
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Peter Hausmann, p.hausmann@telnord-connect.example, +49 511 2233-8899
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

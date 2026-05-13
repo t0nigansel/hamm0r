@@ -1,8 +1,8 @@
 use std::path::Path;
 
 const BUNDLED: &[(&str, &str)] = &[(
-    "profiler-ai-analyze-de.yaml",
-    include_str!("../../../../requests/profiler-ai-analyze-de.yaml"),
+    "ollama-chat-local.yaml",
+    include_str!("../../../../requests/ollama-chat-local.yaml"),
 )];
 
 /// Write bundled request YAMLs into `dir`, skipping files that already exist.
@@ -32,14 +32,14 @@ mod tests {
         let dir = TempDir::new().unwrap();
         seed_on_startup(dir.path()).unwrap();
 
-        let seeded = dir.path().join("profiler-ai-analyze-de.yaml");
+        let seeded = dir.path().join("ollama-chat-local.yaml");
         assert!(seeded.exists());
     }
 
     #[test]
     fn seed_on_startup_does_not_overwrite_existing_request() {
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("profiler-ai-analyze-de.yaml");
+        let path = dir.path().join("ollama-chat-local.yaml");
         storage::atomic_write(&path, b"custom: true\n").unwrap();
 
         seed_on_startup(dir.path()).unwrap();

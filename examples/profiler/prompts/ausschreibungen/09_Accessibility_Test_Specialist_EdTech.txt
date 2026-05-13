@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 09
+======================================================================
+
+Accessibility Test Specialist (m/w/d) – Bildungsplattform
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        LernHorizont Bildungsmedien GmbH
+Branche:             EdTech / Bildung
+Einsatzort:          Leipzig (100% Remote)
+Projektstart:        01.05.2026
+Laufzeit:            6 Monate
+Auslastung:          Teilzeit möglich (min. 3 Tage/Woche)
+Tagessatz:           750 – 900 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Barrierefreiheitsüberprüfung und -optimierung einer Online-Lernplattform für Schulen gemäß BITV 2.0 und WCAG 2.2 AA. Zielgruppe umfasst auch Lernende mit motorischen und kognitiven Einschränkungen.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Durchführung von Accessibility-Audits gemäß WCAG 2.2 AA/AAA
+  - Prüfung mit assistiven Technologien (NVDA, JAWS, VoiceOver, Dragon)
+  - Erstellung von Konformitätserklärungen nach BITV 2.0
+  - Schulung von Entwicklungsteams zu Accessibility-Best-Practices
+  - Dokumentation und Priorisierung von Barrieren
+  - Beratung bei UX-/UI-Design hinsichtlich Barrierefreiheit
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 3 Jahre Erfahrung im Accessibility Testing
+  - CPACC- oder WAS-Zertifizierung (IAAP)
+  - Sehr gute Kenntnisse der WCAG 2.1/2.2 und ARIA
+  - Erfahrung mit Screenreadern und anderen assistiven Technologien
+  - Kenntnisse in HTML, CSS und JavaScript (Leseebene)
+  - Deutsch verhandlungssicher
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Persönliche Erfahrung mit Hilfstechnologien
+  - Erfahrung im Bildungsbereich / EdTech
+  - BITV-Prüfung nach BITV-Prüfverbund-Methode
+  - Tools: axe DevTools, WAVE, Siteimprove
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Dr. Kathrin Pflüger, k.pflueger@lernhorizont.example, +49 341 8899-2266
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

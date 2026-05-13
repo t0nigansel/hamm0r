@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 11
+======================================================================
+
+UAT-Koordinator / Business Tester (m/w/d) – ERP-Einführung
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        Pharma Nordrhein KG
+Branche:             Pharma / Life Sciences
+Einsatzort:          Bonn (Hybrid)
+Projektstart:        15.05.2026
+Laufzeit:            14 Monate
+Auslastung:          Vollzeit
+Tagessatz:           700 – 900 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Einführung von SAP S/4HANA zur Ablösung des bestehenden SAP ECC 6.0, einschließlich Anbindung an GxP-relevante Laborsysteme.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Koordination von User Acceptance Tests mit 9 Fachbereichen
+  - Schulung von Key-Usern in Testdurchführung und Tool-Nutzung
+  - Erstellung von End-to-End-Testszenarien basierend auf Geschäftsprozessen
+  - Begleitung der Testdurchführung (ca. 180 Key-User insgesamt)
+  - Defekt-Triage und Priorisierung mit Fachverantwortlichen
+  - GxP-konforme Testdokumentation (CSV, GAMP 5)
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 5 Jahre Erfahrung in UAT-Koordination oder Business Testing
+  - Erfahrung in mindestens einer SAP-Einführung (ECC oder S/4HANA)
+  - Sehr gute Kommunikations- und Moderationsfähigkeiten
+  - Erfahrung mit HP ALM, Jira oder SAP Solution Manager
+  - Verständnis von Geschäftsprozessen (O2C, P2P, R2R)
+  - Deutsch verhandlungssicher
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - GxP-/GAMP-5-Erfahrung
+  - ISTQB Foundation Level
+  - Kenntnisse in Signavio oder ARIS
+  - Pharma-/Life-Sciences-Erfahrung
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Claudia Weinhold, c.weinhold@pharma-nordrhein.example, +49 228 3344-5566
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 03
+======================================================================
+
+Performance Test Engineer (m/w/d) – Connected Car Platform
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        MobilityWorks Engineering GmbH
+Branche:             Automotive / IoT
+Einsatzort:          Stuttgart (vor Ort, 20% Remote)
+Projektstart:        01.07.2026
+Laufzeit:            9 Monate mit Option auf Verlängerung
+Auslastung:          Vollzeit
+Tagessatz:           950 – 1.200 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Performance- und Lasttest-Optimierung einer Connected-Car-Plattform, die Echtzeit-Telemetriedaten von über 1,2 Millionen Fahrzeugen verarbeitet. Ziel: SLA-Compliance unter Peak-Load-Bedingungen.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Konzeption und Durchführung von Last-, Stress-, Spike- und Endurance-Tests
+  - Modellierung realistischer User-Journeys und Lastprofile
+  - Analyse von Performance-Engpässen (Anwendung, Datenbank, Infrastruktur)
+  - Erstellung aussagekräftiger Performance-Reports für Stakeholder
+  - Zusammenarbeit mit DevOps und SRE-Teams zur kontinuierlichen Optimierung
+  - Integration von Performance-Tests in die Deployment-Pipeline
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 4 Jahre Erfahrung als Performance Tester
+  - Sehr gute Kenntnisse in JMeter, Gatling oder LoadRunner
+  - Erfahrung mit APM-Tools (Dynatrace, AppDynamics, New Relic)
+  - Fundiertes Verständnis von verteilten Systemen und Microservices
+  - Kenntnisse in Kafka, MQTT und Event-Streaming-Architekturen
+  - Deutsch (mind. B2) und Englisch fließend
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - ISTQB Advanced Level Technical Test Analyst
+  - Erfahrung in der Automotive-Domäne
+  - Kenntnisse in k6 oder Locust
+  - Grafana, Prometheus, ELK-Stack
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Thomas Eggenberger, t.eggenberger@mobilityworks.example, +49 711 3322-4400
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

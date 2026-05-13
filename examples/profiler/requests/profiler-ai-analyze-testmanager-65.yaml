@@ -1,0 +1,45 @@
+version: 1
+id: profiler-ai-analyze-testmanager-65
+name: "Profiler AI Analyze Testmanager 65"
+method: POST
+url: "https://profiler-test.spirit-indianer.com/api/berater/5c583309b8056a406869b2d2/ai-analyze"
+auth:
+  type: bearer
+  token_env: PROFILER_BEARER_TOKEN
+headers:
+  sec-ch-ua-platform: '"Windows"'
+  Referer: "https://profiler-test.spirit-indianer.com/aiProfileMatching/5c583309b8056a406869b2d2"
+  sec-ch-ua: '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"'
+  sec-ch-ua-mobile: "?0"
+  User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+  Accept: "application/json, text/plain, */*"
+  Content-Type: "application/json"
+body:
+  format: raw
+  content: |-
+    {"sanitizedProfile":"Position: Testmanager\n\nSprachen: Deutsch, Englisch\n\nWerdegang:\n- Testmanager | 2023-05-01\n  Begleitung der Testvorbereitung und -durchführung in agilen Projekten. Erstellung von Testplänen, Testfällen und Testdaten sowie Koordination mit Fachabteilungen und Projektleitung.\n  Skills: Testmanagement (SEHR_GUT) [Testmanagement], Jira (SEHR_GUT) [Defektmanagement], Testdatenmanagement (GUT) [Testmanagement], Agile Vorgehensweise (GUT) [Vorgehensmodelle], Kommunikation (SEHR_GUT) [Soft Skills]\n- Testanalyst | 2020-08-01\n  Unterstützung bei funktionalen Tests und Regressionstests, Fehlerverfolgung und Reporting in Jira. Abstimmung mit Entwicklern und Fachbereichen zur Erarbeitung von Testcases.\n  Skills: Manuelles Testing (SEHR_GUT) [Testing], Regressionstest (GUT) [Testarten], Jira (SEHR_GUT) [Defektmanagement], Excel (SEHR_GUT) [MS Office]\n- QA Engineer | 2018-03-01\n  Vorbereitung von Testdokumentationen und Erstellung von Testreports. Teilnahme an der Implementierung von Qualitätskennzahlen und Testprozessen für eine webbasierte Anwendung.\n  Skills: Testdokumentation (SEHR_GUT) [Testmanagement], Qualitätssicherung (GUT) [Testmanagement], Prozessdokumentation (GUT) [Testmanagement]\n\nAusbildung:\n- Wirtschaftsinformatik | 2014-09-23 - 2017-05-24 | Bachelor of Science Wirtschaftsinformatik (nicht abgeschlossen)\n\nProjekte:\n- Aufbau eines Testdatenpools\n  Erstellung und Pflege eines Testdatenpools für verschiedene Testsysteme. Fokus auf Datenkonsistenz, Wiederverwendbarkeit und Abstimmung mit dem Testteam.\n  Skills: Testdatenmanagement (GUT) [Testmanagement], Excel (SEHR_GUT) [MS Office], Teamarbeit (SEHR_GUT) [Soft Skills]\n- Einführung eines Jira-basierten Testmanagements\n  Einführung eines Jira-basierten Defekt- und Testmanagements in einem mittelständischen Entwicklungsprojekt. Erstellung von Workflows, Testplänen und Statusreports.\n  Skills: Jira (SEHR_GUT) [Defektmanagement], Testmanagement (GUT) [Testmanagement], Reporting (GUT) [Testmanagement]\n\nZertifikate/Schulungen:\n- ISTQB Foundation Level | true | 2019-04-15\n- Agile Methoden | true | 2021-06-01","job":"Einleitung\r\n\r\nEin Partnerunternehmen aus der Energiewirtschaft sucht zum nächstmöglichen Zeitpunkt einen Testmanager (m/w/d) in 80% Remote und 20% vor Ort in Frankfurt am Main!\r\n\r\n·       Start: 09.02.2026\r\n\r\n·       Ende: 31.12.2026 (Verlängerung möglich)\r\n\r\n·       Freelancing, jedoch nur sozialversicherungspflichtig Angestellte Personen werden berücksichtigt werden können\r\n\r\n·       80% remote / 20% in Frankfurt am Main\r\n\r\n·       Bewerbungen gerne mit 2 Stundensätzen (remote/vor Ort)\r\n\r\nIhre Aufgaben\r\n\r\n·       Erstellung von Testkonzepten, Weiterentwicklung Teststrategien entsprechend der Qualitätsziele\r\n\r\n·       Entwicklung von Testplänen,-zeitplänen, Testverantwortlichkeiten , Testphasen und -methodiken\r\n\r\n·       Unterstützung bei der Testfallerstellung der Testkoordinatoren\r\n\r\n·       Einrichtung Testumgebung, Testdatenmanagement \r\n\r\n·       Identifizierung und Eskalation von Testproblemen und -risiken\r\n\r\n·       Überwachung und Kontrolle der Qualität der Testprozesse und-ergebnisse\r\n\r\n·       Identifizierung und Planung von Testdurchführungen im Release \r\n\r\n·       Testbezogene Kommunikation an Stakeholder, Projektleiter, Linienführung\r\n\r\n·       Durchführung und Weiterentwicklung der Testautomation. \r\n\r\n·       Testmanagementreporting\r\n\r\nUnsere Anforderungen\r\n\r\n·       Langjährige Erfahrung in der Durchführung vom Testmanagement mit dem Solution Manager 7.2 \r\n\r\n·       Langjährige Erfahrung als Testmanager im SAP-Umfeld, idealerweise im Rahmen von S/4HANA Einführungs-und Transformationsprojekten\r\n\r\n·       Sehr gute Kenntnisse der Prozesse, Strukturen und Abläufen im SAP Solution Manager insbesondere im Testmanagement\r\r\n\n·       Sehr gute Kenntnisse in agilen Methoden sowie dem Testdaten Management\r\r\n\n·       Hohes Maß an Motivation zur schnellen, gemeinsamen und adäquaten Lösungsfindung fachlicher und technischer Problemstellungen\r\r\n\n·       Erfahrungen im Releasemanagement und dem Transportmanagement von Vorteil\r\r\n\n·       Sehr gute Kommunikationsfähigkeiten und Erfahrung im verantwortungsvollen und zuverlässigen Umgang mit Kunden\r\r\n\n·       Selbständiges und eigenverantwortliches Arbeiten im Team unter Berücksichtigung von Budget- und Zeitvorgaben\r\r\n\n·       Verständnis für prozessuale und architektonische Zusammenhänge im Kontext Testmanagement\r\r\n\n·       Fundierte Kenntisse in verschiedenen Testmanagement-Tools (SolMan, Jira, etc.) und in der Testautomation mit Test Pilot\r\r\n\n·       Deutsch als Muttersprache oder verhandlungssichere Kommunikationsfähigkeiten in deutscher Sprache (Sprachlevel: C2 nach GER)\r\r\n\nWir bieten Ihnen\r\n\r\n·       Attraktive Möglichkeiten zur Verkürzung Ihres persönlichen Zahlungszieles\r\r\n\n·       Keine zeitraubende Rechnungserstellung mehr nötig\r\r\n\n·       Schnelle, zuverlässige Honorarzahlung\r\r\n\n·       Projektverträge mittels elektronischer Signatur abschließen\r\r\n\n \r\n\r\nIch freue mich über Vorschläge und versuche auch telefonisch Sie zu erreichen.","language":"de"}
+response:
+  extract:
+    type: raw
+  result_columns:
+    - id: qa
+      label: QA
+      path: analysis.scores.qualifications
+    - id: ex
+      label: EX
+      path: analysis.scores.experience
+    - id: ss
+      label: SS
+      path: analysis.scores.soft_skills
+    - id: cs
+      label: CS
+      path: analysis.scores.cultural_fit
+    - id: po
+      label: PO
+      path: analysis.scores.potential
+    - id: total
+      label: Total
+      path: analysis.scores.total
+timeout_seconds: 50
+tag: profiler-testmanager
+adapter: raw-http

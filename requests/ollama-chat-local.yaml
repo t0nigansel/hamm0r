@@ -1,0 +1,18 @@
+version: 1
+id: ollama-chat-local
+name: "Ollama (local) — chat"
+method: POST
+url: "http://localhost:11434/api/chat"
+auth:
+  type: none
+headers:
+  Content-Type: "application/json"
+body:
+  format: raw
+  content: '{"model":"llama3","stream":false,"messages":[{"role":"user","content":"{{prompt}}"}]}'
+response:
+  extract:
+    type: jsonpath
+    path: "$.message.content"
+timeout_seconds: 60
+adapter: raw-http

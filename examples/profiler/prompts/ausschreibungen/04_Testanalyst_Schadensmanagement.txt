@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 04
+======================================================================
+
+Testanalyst (m/w/d) – Schadensmanagement-System
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        VitaVersicherung Deutschland AG
+Branche:             Versicherung
+Einsatzort:          Köln (Hybrid, 2 Tage/Woche vor Ort)
+Projektstart:        Sofort
+Laufzeit:            6 Monate
+Auslastung:          Vollzeit
+Tagessatz:           780 – 950 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Modernisierung des bestehenden Schadensmanagement-Systems mit Fokus auf KI-gestützte Schadensregulierung in der Kfz-Sparte.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Analyse von Fachanforderungen und Erstellung detaillierter Testspezifikationen
+  - Ableitung von Testfällen aus User Stories und Use Cases
+  - Durchführung funktionaler und nicht-funktionaler Tests
+  - Enge Zusammenarbeit mit Product Owner und Entwicklungsteam (Scrum)
+  - Pflege und Weiterentwicklung der Testdokumentation in Jira/Xray
+  - Defect-Management und Nachverfolgung bis zur Behebung
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 3 Jahre Erfahrung als Testanalyst oder Tester
+  - ISTQB Certified Tester - Foundation Level
+  - Sehr gute Kenntnisse in Jira und Xray (oder vergleichbare Tools)
+  - Erfahrung im agilen Umfeld (Scrum/Kanban)
+  - Gute SQL-Kenntnisse für Datenbank-Tests
+  - Deutsch verhandlungssicher (C1)
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - ISTQB Advanced Level Test Analyst
+  - Erfahrung in der Versicherungsbranche
+  - Grundkenntnisse in Postman / REST-APIs
+  - Erfahrung mit KI-/ML-Systemen im Testkontext
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Anja Schönberg, bewerbung@vita-versicherung.example, +49 221 7788-3300
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

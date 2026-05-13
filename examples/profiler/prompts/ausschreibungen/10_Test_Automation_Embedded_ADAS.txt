@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 10
+======================================================================
+
+Test Automation Engineer Embedded (m/w/d) – ADAS/AD
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        AutoVision Technologies GmbH
+Branche:             Automotive / ADAS
+Einsatzort:          Ingolstadt (vor Ort erforderlich)
+Projektstart:        01.07.2026
+Laufzeit:            18 Monate
+Auslastung:          Vollzeit
+Tagessatz:           1.050 – 1.300 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Entwicklung automatisierter Testverfahren für ein ADAS-System (Advanced Driver Assistance Systems) der nächsten Generation gemäß ISO 26262 (ASIL-D) und SOTIF.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Aufbau und Pflege HiL-/SiL-Testumgebungen (dSPACE, Vector)
+  - Entwicklung automatisierter Testfälle in CAPL und Python
+  - Integration von Simulink-Modellen in die Testautomatisierung
+  - Auswertung von Messdaten und Regression-Analyse
+  - Durchführung von Fahrzeugtests auf Testgeländen
+  - Erstellung von Nachweisen gemäß ISO 26262
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 5 Jahre Erfahrung im Automotive-Testing
+  - Sehr gute Kenntnisse in CAPL, Vector CANoe, CANalyzer
+  - Erfahrung mit HiL-Prüfständen (dSPACE SCALEXIO, Vector VT System)
+  - Programmierkenntnisse in Python und C/C++
+  - Fundiertes Verständnis von ISO 26262 und A-SPICE
+  - Deutsch (mind. B2), Englisch fließend, Führerschein Klasse B
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Kenntnisse in ROS / ROS 2
+  - Erfahrung mit Sensorsimulation (Radar, Lidar, Kamera)
+  - ISTQB Automotive Software Tester
+  - Erfahrung mit AUTOSAR Classic/Adaptive
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Dipl.-Ing. Stefan Reitzenstein, recruiting@autovision-tech.example, +49 841 5566-7722
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

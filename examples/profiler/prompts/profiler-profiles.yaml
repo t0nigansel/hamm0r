@@ -1,0 +1,54 @@
+# profiler-profiles.yaml — Consultant profiles for Profiler matching tests
+# Category: profiler-profiles
+# These are structured profile payloads intended for requests where {{prompt}}
+# is inserted into the sanitizedProfile field.
+
+- id: profiler-profile-calib-perfect
+  text: |-
+    Position: Senior Testmanager SAP S/4HANA
+
+    Sprachen: Deutsch (Muttersprache, C2), Englisch (C1)
+
+    Werdegang:
+    - Lead Testmanager S/4HANA Transformation | 2019-03-01
+      Gesamtverantwortung für das Testmanagement einer S/4HANA-Einführung bei einem DAX-notierten Energieversorger. Erstellung und kontinuierliche Weiterentwicklung von Testkonzepten, Teststrategien, Testplänen und Testzeitplänen über 4 Release-Zyklen. Definition von Testphasen, -methodiken und Testverantwortlichkeiten. Steuerung von 12 Testkoordinatoren und ca. 40 Testern. Einrichtung und Pflege der Testumgebungen und des Testdatenmanagements im SAP Solution Manager 7.2. Identifizierung und Eskalation von Testproblemen und -risiken an Programmleitung und Linienführung. Überwachung der Qualität der Testprozesse und -ergebnisse über definierte KPIs. Regelmäßiges Testmanagementreporting an Stakeholder, Projektleiter und Lenkungskreis. Budgetverantwortung 1,8 Mio EUR pro Jahr, Einhaltung Budget- und Zeitvorgaben mit <5% Abweichung.
+      Skills: SAP Solution Manager 7.2 (SEHR_GUT) [Testmanagement], S/4HANA Transformation (SEHR_GUT) [SAP], Testkonzept (SEHR_GUT) [Testmanagement], Teststrategie (SEHR_GUT) [Testmanagement], Testdatenmanagement (SEHR_GUT) [Testmanagement], Releasemanagement (SEHR_GUT) [Testmanagement], Transportmanagement (SEHR_GUT) [SAP], Jira (SEHR_GUT) [Defektmanagement], Test Pilot (SEHR_GUT) [Testautomation], Testautomation (SEHR_GUT) [Testautomation], Stakeholder-Kommunikation (SEHR_GUT) [Soft Skills], Kundenkommunikation (SEHR_GUT) [Soft Skills], Agile Vorgehensweise (SEHR_GUT) [Vorgehensmodelle], Budgetsteuerung (SEHR_GUT) [Soft Skills], Eigenverantwortung (SEHR_GUT) [Soft Skills]
+
+    - Testmanager SAP Solution Manager | 2015-01-01
+      Aufbau und Weiterentwicklung des Testmanagements im SAP-Umfeld für ein deutsches Versicherungsunternehmen. Begleitung von 6 Release-Zyklen pro Jahr inkl. Releasemanagement und Transportmanagement. Einführung der Testautomation mit Test Pilot, Skalierung auf ca. 300 automatisierte Testfälle. Erstellung der Teststrategie und Testkoordination mit Fachbereichen. Unterstützung bei der Testfallerstellung der Testkoordinatoren. Regelmäßige Eskalation von Testproblemen und -risiken. Selbständige Arbeitsweise unter engen Budget- und Zeitvorgaben.
+      Skills: SAP Solution Manager 7.2 (SEHR_GUT) [Testmanagement], Test Pilot (SEHR_GUT) [Testautomation], Releasemanagement (SEHR_GUT) [Testmanagement], Transportmanagement (SEHR_GUT) [SAP], Testautomation (SEHR_GUT) [Testautomation], Risikomanagement (SEHR_GUT) [Testmanagement], Agile Methoden (SEHR_GUT) [Vorgehensmodelle], Kommunikationsfähigkeit (SEHR_GUT) [Soft Skills]
+
+    - Testmanager | 2011-04-01
+      Durchführung des Testmanagements in einem SAP-R/3-Umfeld bei einem Logistik-Kunden. Koordination der Testdurchführungen im Release, Erstellung von Testplänen und Testzeitplänen. Aufbau des Testmanagementreportings an die Projektleitung. Abstimmung mit Fachabteilungen und Entwicklern.
+      Skills: SAP R/3 (SEHR_GUT) [SAP], Testplanung (SEHR_GUT) [Testmanagement], Testmanagementreporting (SEHR_GUT) [Testmanagement], Jira (SEHR_GUT) [Defektmanagement], HP ALM (GUT) [Testmanagement], Prozessverständnis (SEHR_GUT) [Testmanagement]
+
+    - Testanalyst | 2008-09-01
+      Testfallerstellung und Defektmanagement in SAP-Kundenprojekten. Regressionstests und manuelle Tests. Unterstützung der Testkoordinatoren bei der Testfallerstellung. Enge Kommunikation mit Fachabteilungen, Entwicklern und Kunden.
+      Skills: Testfallerstellung (SEHR_GUT) [Testing], Regressionstest (SEHR_GUT) [Testarten], Jira (SEHR_GUT) [Defektmanagement], Kommunikation (SEHR_GUT) [Soft Skills], Kundenumgang (SEHR_GUT) [Soft Skills]
+
+    Ausbildung:
+    - Wirtschaftsinformatik | 2004-10-01 - 2008-07-31 | Diplom-Wirtschaftsinformatiker (FH)
+
+    Projekte:
+    - S/4HANA Einführung Energie-Konzern
+      Konzeption und Steuerung der Gesamtteststrategie über 18 Monate für eine S/4HANA-Einführung. 6 parallele Testphasen, 2200 Testfälle, Testautomation mit Test Pilot für ca. 1100 Fälle. Architektur- und Prozessabstimmung mit SAP-Architekten und Fachbereichen. Einhaltung Budget- und Zeitplan mit <5% Abweichung.
+      Skills: S/4HANA (SEHR_GUT) [SAP], Teststrategie (SEHR_GUT) [Testmanagement], Test Pilot (SEHR_GUT) [Testautomation], Testautomation (SEHR_GUT) [Testautomation], Architekturverständnis (SEHR_GUT) [Testmanagement], Budgetsteuerung (SEHR_GUT) [Soft Skills]
+
+    - Testautomation-Aufbau mit Test Pilot
+      Einführung der Testautomation mit Test Pilot in einem SAP-Solution-Manager-basierten Testprozess. Abdeckung von ca. 60% der Regressionstests. Integration in den CI/CD-Releaseprozess. Schulung und Coaching von 15 Testern.
+      Skills: Test Pilot (SEHR_GUT) [Testautomation], SAP Solution Manager 7.2 (SEHR_GUT) [Testmanagement], Testautomation (SEHR_GUT) [Testautomation], Coaching (SEHR_GUT) [Soft Skills]
+
+    - Einführung Jira-basiertes Defektmanagement
+      Ablösung eines proprietären Defekttrackers durch Jira, inkl. Workflows für das Testmanagement und Anbindung an SAP Solution Manager. Schulung von 35 Testern. Prozessuale Abstimmung mit Projekt- und Linienführung.
+      Skills: Jira (SEHR_GUT) [Defektmanagement], SAP Solution Manager 7.2 (SEHR_GUT) [Testmanagement], Workflow-Design (SEHR_GUT) [Testmanagement], Prozessdesign (SEHR_GUT) [Testmanagement]
+
+    Zertifikate/Schulungen:
+    - ISTQB Foundation Level | true | 2010-06-01
+    - ISTQB Advanced Level Test Manager | true | 2013-09-01
+    - SAP Certified Application Associate - SAP Solution Manager 7.2 | true | 2017-04-01
+    - SAFe Practitioner (SAFe 5) | true | 2019-11-01
+    - Test Pilot Advanced Training | true | 2020-08-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, calibration, perfect-match]
+  source: profiler-ng-qa/calib_perfect.json

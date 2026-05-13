@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 13
+======================================================================
+
+Agile Test Lead / SDET Lead (m/w/d) – SaaS-Plattform
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        CloudSprint GmbH
+Branche:             SaaS / B2B-Software
+Einsatzort:          Berlin oder München (100% Remote möglich)
+Projektstart:        01.07.2026
+Laufzeit:            Unbefristet als Freelancer, Startauftrag 9 Monate
+Auslastung:          Vollzeit oder 4 Tage/Woche
+Tagessatz:           1.000 – 1.250 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Aufbau und Skalierung der Qualitätssicherung einer schnell wachsenden HR-SaaS-Plattform (von 40 auf 120 Entwickler in 18 Monaten). Etablierung einer 'Quality Engineering'-Kultur.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Fachliche Leitung einer Gilde aus 8 SDETs über mehrere Scrum-Teams hinweg
+  - Etablierung von Shift-Left- und Shift-Right-Testing-Praktiken
+  - Coaching der Entwicklungsteams in Testing-Best-Practices
+  - Implementierung von Quality Gates in der CI/CD-Pipeline
+  - Aufbau einer Test-Pyramide (Unit, Integration, E2E, Contract)
+  - Etablierung von Observability-Testing in Produktion (Chaos Engineering)
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 7 Jahre Erfahrung in der Qualitätssicherung, davon 3 Jahre in Lead-Rolle
+  - Nachweisbare Erfahrung in der Skalierung von QA-Organisationen
+  - Sehr gute Kenntnisse in Testautomatisierung (Playwright/Cypress + Java/Python-Backend)
+  - Tiefes Verständnis von DevOps und SRE-Konzepten
+  - Erfahrung mit Chaos Engineering (Chaos Monkey, Gremlin, Litmus)
+  - Deutsch mind. B2, Englisch verhandlungssicher
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - ISTQB Expert Level
+  - Erfahrung im SaaS-/B2B-Umfeld
+  - Kenntnisse in Feature Flags (LaunchDarkly, Unleash)
+  - Speaker-Erfahrung auf Konferenzen
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Nils Brettschneider, talent@cloudsprint.example, +49 30 9988-7766
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

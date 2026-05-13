@@ -1,0 +1,45 @@
+version: 1
+id: profiler-ai-analyze-testmanager-25
+name: "Profiler AI Analyze Testmanager 25"
+method: POST
+url: "https://profiler-test.spirit-indianer.com/api/berater/5c583309b8056a406869b2d2/ai-analyze"
+auth:
+  type: bearer
+  token_env: PROFILER_BEARER_TOKEN
+headers:
+  sec-ch-ua-platform: '"Windows"'
+  Referer: "https://profiler-test.spirit-indianer.com/aiProfileMatching/5c583309b8056a406869b2d2"
+  sec-ch-ua: '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"'
+  sec-ch-ua-mobile: "?0"
+  User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+  Accept: "application/json, text/plain, */*"
+  Content-Type: "application/json"
+body:
+  format: raw
+  content: |-
+    {"sanitizedProfile":"Position: Kundenberater\n\nSprachen: Deutsch, Englisch\n\nWerdegang:\n- Kundenberater | 2022-03-01\n  Betreuung von Kundenanfragen, Pflege von Excel-Listen und Erstellung von Statusberichten. Ich unterstütze interne Fachbereiche bei der Klärung administrativer Abläufe und dokumentiere dabei Prozessschritte.\n  Skills: Kundenkommunikation (SEHR_GUT) [Soft Skills], Excel (SEHR_GUT) [MS Office], Dokumentation (GUT) [Testmanagement], Teamarbeit (GUT) [Soft Skills]\n- Sachbearbeiter | 2019-01-01\n  Erstellung von Prozessdokumentationen und Unterstützung der internen Qualitätsprüfung in einem Serviceprojekt. Ich arbeite eng mit dem Backoffice zusammen und erstelle regelmäßige Reports für die Leitung.\n  Skills: Prozessdokumentation (SEHR_GUT) [Testmanagement], Reporting (GUT) [Testmanagement], MS Office (SEHR_GUT) [MS Office], Zusammenarbeit (GUT) [Soft Skills]\n\nAusbildung:\n- Verwaltungswirtschaft | 2013-09-23 - 2016-07-24 | Bachelor of Arts Verwaltungswirtschaft\n\nProjekte:\n- Einführung eines Berichtswesens\n  Aufbau eines Excel-basierten Reportings zur Steuerung von Servicekennzahlen. Ich habe die relevanten Datenquellen konsolidiert und die Berichte den Fachbereichen bereitgestellt.\n  Skills: Excel (SEHR_GUT) [MS Office], Reporting (GUT) [Testmanagement], Datenpflege (GUT) [Testmanagement]\n- Wissensdatenbank für Serviceprozesse\n  Ich habe Arbeitsanweisungen und Prozessbeschreibungen dokumentiert und deren Veröffentlichung im Team koordiniert. Die Inhalte wurden als Referenz für die tägliche Arbeit genutzt.\n  Skills: Dokumentation (SEHR_GUT) [Testmanagement], Teamkoordination (GUT) [Soft Skills], Kommunikation (SEHR_GUT) [Soft Skills]\n\nZertifikate/Schulungen:\n- Datenschutz für Mitarbeiter | true | 2020-05-01\n- Projektmanagement Grundlagen | true | 2021-03-01","job":"Einleitung\r\n\r\nEin Partnerunternehmen aus der Energiewirtschaft sucht zum nächstmöglichen Zeitpunkt einen Testmanager (m/w/d) in 80% Remote und 20% vor Ort in Frankfurt am Main!\r\n\r\n·       Start: 09.02.2026\r\n\r\n·       Ende: 31.12.2026 (Verlängerung möglich)\r\n\r\n·       Freelancing, jedoch nur sozialversicherungspflichtig Angestellte Personen werden berücksichtigt werden können\r\n\r\n·       80% remote / 20% in Frankfurt am Main\r\n\r\n·       Bewerbungen gerne mit 2 Stundensätzen (remote/vor Ort)\r\n\r\n·        \r\n\r\nIhre Aufgaben\r\n\r\n·       Erstellung von Testkonzepten, Weiterentwicklung Teststrategien entsprechend der Qualitätsziele\r\n\r\n·       Entwicklung von Testplänen,-zeitplänen, Testverantwortlichkeiten , Testphasen und -methodiken\r\n\r\n·       Unterstützung bei der Testfallerstellung der Testkoordinatoren\r\n\r\n·       Einrichtung Testumgebung, Testdatenmanagement \r\n\r\n·       Identifizierung und Eskalation von Testproblemen und -risiken\r\n\r\n·       Überwachung und Kontrolle der Qualität der Testprozesse und-ergebnisse\r\n\r\n·       Identifizierung und Planung von Testdurchführungen im Release \r\n\r\n·       Testbezogene Kommunikation an Stakeholder, Projektleiter, Linienführung\r\n\r\n·       Durchführung und Weiterentwicklung der Testautomation. \r\n\r\n·       Testmanagementreporting\r\n\r\nUnsere Anforderungen\r\n\r\n·       Langjährige Erfahrung in der Durchführung vom Testmanagement mit dem Solution Manager 7.2 \r\n\r\n·       Langjährige Erfahrung als Testmanager im SAP-Umfeld, idealerweise im Rahmen von S/4HANA Einführungs-und Transformationsprojekten\r\n\r\n·       Sehr gute Kenntnisse der Prozesse, Strukturen und Abläufen im SAP Solution Manager insbesondere im Testmanagement\r\r\n\n·       Sehr gute Kenntnisse in agilen Methoden sowie dem Testdaten Management\r\r\n\r\n·       Hohes Maß an Motivation zur schnellen, gemeinsamen und adäquaten Lösungsfindung fachlicher und technischer Problemstellungen\r\r\n\n·       Erfahrungen im Releasemanagement und dem Transportmanagement von Vorteil\r\r\n\n·       Sehr gute Kommunikationsfähigkeiten und Erfahrung im verantwortungsvollen und zuverlässigen Umgang mit Kunden\r\r\n\r\n·       Selbständiges und eigenverantwortliches Arbeiten im Team unter Berücksichtigung von Budget- und Zeitvorgaben\r\r\n\r\n·       Verständnis für prozessuale und architektonische Zusammenhänge im Kontext Testmanagement\r\r\n\r\n·       Fundierte Kenntisse in verschiedenen Testmanagement-Tools (SolMan, Jira, etc.) und in der Testautomation mit Test Pilot\r\r\n\n·       Deutsch als Muttersprache oder verhandlungssichere Kommunikationsfähigkeiten in deutscher Sprache (Sprachlevel: C2 nach GER)\r\r\n\r\nWir bieten Ihnen\r\n\r\n·       Attraktive Möglichkeiten zur Verkürzung Ihres persönlichen Zahlungszieles\r\r\n\n·       Keine zeitraubende Rechnungserstellung mehr nötig\r\r\n\n·       Schnelle, zuverlässige Honorarzahlung\r\r\n\n·       Projektverträge mittels elektronischer Signatur abschließen\r\r\n\n \r\n\r\nIch freue mich über Vorschläge und versuche auch telefonisch Sie zu erreichen.","language":"de"}
+response:
+  extract:
+    type: raw
+  result_columns:
+    - id: qa
+      label: QA
+      path: analysis.scores.qualifications
+    - id: ex
+      label: EX
+      path: analysis.scores.experience
+    - id: ss
+      label: SS
+      path: analysis.scores.soft_skills
+    - id: cs
+      label: CS
+      path: analysis.scores.cultural_fit
+    - id: po
+      label: PO
+      path: analysis.scores.potential
+    - id: total
+      label: Total
+      path: analysis.scores.total
+timeout_seconds: 50
+tag: profiler-testmanager
+adapter: raw-http

@@ -1,0 +1,1150 @@
+# profiler-jobs.yaml — Job descriptions for Profiler matching tests
+# Category: profiler-jobs
+# These are structured job payloads intended for requests where {{prompt}}
+# is inserted into the job field.
+
+- id: profiler-job-calib-perfect
+  text: |-
+    Einleitung
+    
+    Ein Partnerunternehmen aus der Energiewirtschaft sucht zum nächstmöglichen Zeitpunkt einen Testmanager (m/w/d) in 80% Remote und 20% vor Ort in Frankfurt am Main!
+    
+    ·       Start: 09.02.2026
+    
+    ·       Ende: 31.12.2026 (Verlängerung möglich)
+    
+    ·       Freelancing, jedoch nur sozialversicherungspflichtig Angestellte Personen werden berücksichtigt werden können
+    
+    ·       80% remote / 20% in Frankfurt am Main
+    
+    ·       Bewerbungen gerne mit 2 Stundensätzen (remote/vor Ort)
+    
+    Ihre Aufgaben
+    
+    ·       Erstellung von Testkonzepten, Weiterentwicklung Teststrategien entsprechend der Qualitätsziele
+    
+    ·       Entwicklung von Testplänen,-zeitplänen, Testverantwortlichkeiten , Testphasen und -methodiken
+    
+    ·       Unterstützung bei der Testfallerstellung der Testkoordinatoren
+    
+    ·       Einrichtung Testumgebung, Testdatenmanagement 
+    
+    ·       Identifizierung und Eskalation von Testproblemen und -risiken
+    
+    ·       Überwachung und Kontrolle der Qualität der Testprozesse und-ergebnisse
+    
+    ·       Identifizierung und Planung von Testdurchführungen im Release 
+    
+    ·       Testbezogene Kommunikation an Stakeholder, Projektleiter, Linienführung
+    
+    ·       Durchführung und Weiterentwicklung der Testautomation. 
+    
+    ·       Testmanagementreporting
+    
+    Unsere Anforderungen
+    
+    ·       Langjährige Erfahrung in der Durchführung vom Testmanagement mit dem Solution Manager 7.2 
+    
+    ·       Langjährige Erfahrung als Testmanager im SAP-Umfeld, idealerweise im Rahmen von S/4HANA Einführungs-und Transformationsprojekten
+    
+    ·       Sehr gute Kenntnisse der Prozesse, Strukturen und Abläufen im SAP Solution Manager insbesondere im Testmanagement
+    
+    ·       Sehr gute Kenntnisse in agilen Methoden sowie dem Testdaten Management
+    
+    ·       Hohes Maß an Motivation zur schnellen, gemeinsamen und adäquaten Lösungsfindung fachlicher und technischer Problemstellungen
+    
+    ·       Erfahrungen im Releasemanagement und dem Transportmanagement von Vorteil
+    
+    ·       Sehr gute Kommunikationsfähigkeiten und Erfahrung im verantwortungsvollen und zuverlässigen Umgang mit Kunden
+    
+    ·       Selbständiges und eigenverantwortliches Arbeiten im Team unter Berücksichtigung von Budget- und Zeitvorgaben
+    
+    ·       Verständnis für prozessuale und architektonische Zusammenhänge im Kontext Testmanagement
+    
+    ·       Fundierte Kenntisse in verschiedenen Testmanagement-Tools (SolMan, Jira, etc.) und in der Testautomation mit Test Pilot
+    
+    ·       Deutsch als Muttersprache oder verhandlungssichere Kommunikationsfähigkeiten in deutscher Sprache (Sprachlevel: C2 nach GER)
+    
+    Wir bieten Ihnen
+    
+    ·       Attraktive Möglichkeiten zur Verkürzung Ihres persönlichen Zahlungszieles
+    
+    ·       Keine zeitraubende Rechnungserstellung mehr nötig
+    
+    ·       Schnelle, zuverlässige Honorarzahlung
+    
+    ·       Projektverträge mittels elektronischer Signatur abschließen
+    
+     
+    
+    Ich freue mich über Vorschläge und versuche auch telefonisch Sie zu erreichen.
+  severity: LOW
+  mode: single
+  tags: [profiler, job, calibration, perfect-match]
+  source: profiler-ng-qa/calib_perfect.json
+
+# Imported Ausschreibungen from prompts/ausschreibungen
+- id: profiler-job-01-senior-testmanager-m-w-d-core-banking-transformation
+  name: "Senior Testmanager (m/w/d) – Core Banking Transformation"
+  text: |-
+    AUSSCHREIBUNG 01
+    ======================================================================
+    
+    Senior Testmanager (m/w/d) – Core Banking Transformation
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        FinNova Solutions AG
+    Branche:             Banking / Finanzdienstleistungen
+    Einsatzort:          Frankfurt am Main (60% Remote möglich)
+    Projektstart:        01.06.2026
+    Laufzeit:            18 Monate mit Option auf Verlängerung
+    Auslastung:          Vollzeit (5 Tage/Woche)
+    Tagessatz:           1.150 – 1.350 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Ablösung der bestehenden Core-Banking-Plattform durch eine moderne Cloud-basierte Lösung (Avaloq / Temenos T24). Migration von ca. 2,8 Millionen Kundendatensätzen sowie Integration mit über 40 Umsystemen.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Gesamtverantwortung für die Teststrategie und Testplanung über alle Teststufen hinweg
+      - Führung eines 12-köpfigen internationalen Testteams (DE, PL, IN)
+      - Reporting an Lenkungsausschuss und C-Level
+      - Budgetverantwortung für den Testbereich (ca. 3,5 Mio. €)
+      - Koordination von Abnahmetests mit Fachbereichen und Regulatoren (BaFin)
+      - Etablierung KPI-basierter Testmetriken
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 10 Jahre Berufserfahrung als Testmanager
+      - ISTQB Certified Tester - Advanced Level Test Manager
+      - Nachweisbare Erfahrung in mindestens 2 Core-Banking-Migrationen
+      - Sehr gute Kenntnisse in HP ALM / Micro Focus Quality Center
+      - Erfahrung mit regulatorischen Anforderungen (MaRisk, BAIT)
+      - Deutsch verhandlungssicher (C1), Englisch fließend
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - ISTQB Expert Level Test Management
+      - Kenntnisse in Avaloq oder Temenos T24
+      - Jira Xray oder qTest
+      - PRINCE2 oder PMI-Zertifizierung
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Dr. Markus Brehmer, m.brehmer@finnova-solutions.example, +49 69 9876-1234
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-02-test-automation-engineer-m-w-d-e-commerce-plattform
+  name: "Test Automation Engineer (m/w/d) – E-Commerce Plattform"
+  text: |-
+    AUSSCHREIBUNG 02
+    ======================================================================
+    
+    Test Automation Engineer (m/w/d) – E-Commerce Plattform
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        ShopStream Digital GmbH
+    Branche:             E-Commerce / Retail
+    Einsatzort:          Berlin (100% Remote möglich)
+    Projektstart:        15.05.2026
+    Laufzeit:            12 Monate
+    Auslastung:          Vollzeit, 4-Tage-Woche möglich
+    Tagessatz:           850 – 1.050 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Aufbau eines durchgängigen End-to-End-Testautomatisierungs-Frameworks für eine hochskalierbare Microservices-basierte E-Commerce-Plattform mit über 8 Millionen aktiven Nutzern monatlich.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Entwurf und Implementierung eines neuen Testautomatisierungs-Frameworks auf Basis von Playwright und TypeScript
+      - Migration bestehender Selenium-Testsuiten (ca. 2.400 Testfälle)
+      - Aufbau einer CI/CD-Pipeline mit GitLab CI und Kubernetes
+      - Implementierung von API-Tests mit REST-assured und Postman/Newman
+      - Coaching und Mentoring von 3 Junior-Automatisierern
+      - Integration von Testdatenmanagement-Lösungen
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 5 Jahre Erfahrung in der Testautomatisierung
+      - Exzellente Kenntnisse in TypeScript oder JavaScript
+      - Fundierte Erfahrung mit Playwright oder Cypress
+      - Sehr gute Kenntnisse in Docker, Kubernetes und CI/CD-Pipelines
+      - Erfahrung mit BDD-Frameworks (Cucumber, SpecFlow)
+      - Deutsch oder Englisch verhandlungssicher
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - ISTQB Test Automation Engineer
+      - Erfahrung mit Mobile Testing (Appium)
+      - Kenntnisse in Contract Testing (Pact)
+      - Performance-Testing-Grundlagen
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Sabine Lenhardt, careers@shopstream-digital.example, +49 30 5544-8800
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-03-performance-test-engineer-m-w-d-connected-car-platform
+  name: "Performance Test Engineer (m/w/d) – Connected Car Platform"
+  text: |-
+    AUSSCHREIBUNG 03
+    ======================================================================
+    
+    Performance Test Engineer (m/w/d) – Connected Car Platform
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        MobilityWorks Engineering GmbH
+    Branche:             Automotive / IoT
+    Einsatzort:          Stuttgart (vor Ort, 20% Remote)
+    Projektstart:        01.07.2026
+    Laufzeit:            9 Monate mit Option auf Verlängerung
+    Auslastung:          Vollzeit
+    Tagessatz:           950 – 1.200 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Performance- und Lasttest-Optimierung einer Connected-Car-Plattform, die Echtzeit-Telemetriedaten von über 1,2 Millionen Fahrzeugen verarbeitet. Ziel: SLA-Compliance unter Peak-Load-Bedingungen.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Konzeption und Durchführung von Last-, Stress-, Spike- und Endurance-Tests
+      - Modellierung realistischer User-Journeys und Lastprofile
+      - Analyse von Performance-Engpässen (Anwendung, Datenbank, Infrastruktur)
+      - Erstellung aussagekräftiger Performance-Reports für Stakeholder
+      - Zusammenarbeit mit DevOps und SRE-Teams zur kontinuierlichen Optimierung
+      - Integration von Performance-Tests in die Deployment-Pipeline
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 4 Jahre Erfahrung als Performance Tester
+      - Sehr gute Kenntnisse in JMeter, Gatling oder LoadRunner
+      - Erfahrung mit APM-Tools (Dynatrace, AppDynamics, New Relic)
+      - Fundiertes Verständnis von verteilten Systemen und Microservices
+      - Kenntnisse in Kafka, MQTT und Event-Streaming-Architekturen
+      - Deutsch (mind. B2) und Englisch fließend
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - ISTQB Advanced Level Technical Test Analyst
+      - Erfahrung in der Automotive-Domäne
+      - Kenntnisse in k6 oder Locust
+      - Grafana, Prometheus, ELK-Stack
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Thomas Eggenberger, t.eggenberger@mobilityworks.example, +49 711 3322-4400
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-04-testanalyst-m-w-d-schadensmanagement-system
+  name: "Testanalyst (m/w/d) – Schadensmanagement-System"
+  text: |-
+    AUSSCHREIBUNG 04
+    ======================================================================
+    
+    Testanalyst (m/w/d) – Schadensmanagement-System
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        VitaVersicherung Deutschland AG
+    Branche:             Versicherung
+    Einsatzort:          Köln (Hybrid, 2 Tage/Woche vor Ort)
+    Projektstart:        Sofort
+    Laufzeit:            6 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           780 – 950 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Modernisierung des bestehenden Schadensmanagement-Systems mit Fokus auf KI-gestützte Schadensregulierung in der Kfz-Sparte.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Analyse von Fachanforderungen und Erstellung detaillierter Testspezifikationen
+      - Ableitung von Testfällen aus User Stories und Use Cases
+      - Durchführung funktionaler und nicht-funktionaler Tests
+      - Enge Zusammenarbeit mit Product Owner und Entwicklungsteam (Scrum)
+      - Pflege und Weiterentwicklung der Testdokumentation in Jira/Xray
+      - Defect-Management und Nachverfolgung bis zur Behebung
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 3 Jahre Erfahrung als Testanalyst oder Tester
+      - ISTQB Certified Tester - Foundation Level
+      - Sehr gute Kenntnisse in Jira und Xray (oder vergleichbare Tools)
+      - Erfahrung im agilen Umfeld (Scrum/Kanban)
+      - Gute SQL-Kenntnisse für Datenbank-Tests
+      - Deutsch verhandlungssicher (C1)
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - ISTQB Advanced Level Test Analyst
+      - Erfahrung in der Versicherungsbranche
+      - Grundkenntnisse in Postman / REST-APIs
+      - Erfahrung mit KI-/ML-Systemen im Testkontext
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Anja Schönberg, bewerbung@vita-versicherung.example, +49 221 7788-3300
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-05-penetration-tester-security-tester-m-w-d-health-tech
+  name: "Penetration Tester / Security Tester (m/w/d) – Health-Tech"
+  text: |-
+    AUSSCHREIBUNG 05
+    ======================================================================
+    
+    Penetration Tester / Security Tester (m/w/d) – Health-Tech
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        MediSecure Health Solutions GmbH
+    Branche:             Healthcare / MedTech
+    Einsatzort:          München (Hybrid)
+    Projektstart:        01.08.2026
+    Laufzeit:            12 Monate
+    Auslastung:          Vollzeit oder 4 Tage/Woche
+    Tagessatz:           1.100 – 1.400 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Sicherheitsüberprüfung einer neuen Patientenportal-Lösung inkl. mobiler Apps gemäß DSGVO, MDR und HIPAA. Das System verarbeitet besonders schützenswerte Gesundheitsdaten.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Durchführung von Penetrationstests nach OWASP-Methodik (Web, API, Mobile)
+      - Security-Code-Reviews und SAST/DAST-Analysen
+      - Threat Modeling gemeinsam mit Architekten und Entwicklern
+      - Bewertung von Schwachstellen nach CVSS und Erstellung von Risikoreports
+      - Durchführung von Social-Engineering-Tests (optional)
+      - Unterstützung bei Audits und Zertifizierungen (ISO 27001, BSI C5)
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 5 Jahre Erfahrung im Security Testing / Pentesting
+      - OSCP, CEH oder vergleichbare Zertifizierung
+      - Sehr gute Kenntnisse von OWASP Top 10, OWASP ASVS, MASVS
+      - Erfahrung mit Burp Suite Pro, Metasploit, Nessus, ZAP
+      - Fundierte Kenntnisse in Kryptographie und Authentifizierungsprotokollen (OAuth2, SAML)
+      - Deutsch und Englisch fließend
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - OSCE, GPEN oder GWAPT
+      - Erfahrung im Gesundheitswesen (MDR, FDA, HIPAA)
+      - Cloud-Security (AWS, Azure)
+      - Reverse Engineering, Fuzzing
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Dr. Henrik Vogelsang, security-recruiting@medisecure.example, +49 89 4455-7700
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-06-mobile-test-engineer-m-w-d-banking-app
+  name: "Mobile Test Engineer (m/w/d) – Banking App"
+  text: |-
+    AUSSCHREIBUNG 06
+    ======================================================================
+    
+    Mobile Test Engineer (m/w/d) – Banking App
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        NeoPay Mobile GmbH
+    Branche:             FinTech / Mobile Banking
+    Einsatzort:          Hamburg (Hybrid, 3 Tage/Woche vor Ort)
+    Projektstart:        01.06.2026
+    Laufzeit:            10 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           820 – 1.050 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Test einer neuen Mobile-Banking-App (iOS/Android) mit Biometric Authentication, Instant Payments und eingebettetem Krypto-Wallet. Release für 5 europäische Märkte.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Manuelle und automatisierte Tests auf iOS- und Android-Geräten
+      - Aufbau und Pflege einer Geräte-Matrix (real devices + device farms)
+      - Testautomatisierung mit Appium und XCUITest/Espresso
+      - Durchführung von Usability-, Performance- und Sicherheitstests auf Mobile
+      - Integration in CI/CD (Bitrise, Fastlane)
+      - Abstimmung mit UX-Designern und Produktentwicklung
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 4 Jahre Erfahrung im Mobile Testing
+      - Fundierte Kenntnisse in Appium (mindestens 2 Jahre)
+      - Erfahrung mit iOS- und Android-Entwicklungsumgebungen
+      - Gute Programmierkenntnisse in Java oder Kotlin / Swift
+      - Erfahrung mit Device-Cloud-Lösungen (BrowserStack, Sauce Labs)
+      - Deutsch mind. B2, Englisch fließend
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - ISTQB Mobile Application Tester
+      - Kenntnisse in Detox oder Maestro
+      - Erfahrung im Banking-/FinTech-Bereich
+      - Accessibility-Testing auf Mobile
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Lisa Markwort, jobs@neopay-mobile.example, +49 40 2211-9988
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-07-testmanager-m-w-d-e-government-plattform
+  name: "Testmanager (m/w/d) – E-Government-Plattform"
+  text: |-
+    AUSSCHREIBUNG 07
+    ======================================================================
+    
+    Testmanager (m/w/d) – E-Government-Plattform
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        Landesamt für Digitalisierung Rheinland-Pfalz (fiktiv)
+    Branche:             Öffentlicher Sektor
+    Einsatzort:          Mainz (vor Ort erforderlich)
+    Projektstart:        01.09.2026
+    Laufzeit:            24 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           880 – 1.100 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Einführung einer bürgernahen E-Government-Plattform zur Digitalisierung von 120 Verwaltungsdienstleistungen gemäß Onlinezugangsgesetz (OZG).
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Entwicklung und Umsetzung der Teststrategie über mehrere Releasewellen
+      - Führung eines hybriden Testteams (intern + externe Dienstleister, ca. 8 Personen)
+      - Koordination von Fachabteilungen, Kommunen und BSI
+      - Etablierung von Testprozessen nach V-Modell XT
+      - Ausschreibung und Steuerung externer Testdienstleister
+      - Reporting an Ministerialebene
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 8 Jahre Erfahrung als Testmanager, davon 3 Jahre im öffentlichen Sektor
+      - ISTQB Advanced Level Test Manager
+      - Erfahrung mit V-Modell XT oder vergleichbaren Vorgehensmodellen
+      - Kenntnisse in BSI-Grundschutz und OZG
+      - Führungskompetenz und Erfahrung in Multi-Stakeholder-Umfeldern
+      - Deutsch verhandlungssicher (C2)
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Sicherheitsüberprüfung Ü2 vorhanden oder bereit zur Durchführung
+      - IREB CPRE Foundation Level
+      - Erfahrung mit SAP-Systemen in der Verwaltung
+      - Projektmanagement-Zertifizierung
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Martin Gerlach (Referatsleiter IT), m.gerlach@lfd-rlp.example, +49 6131 1122-3344
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-08-api-test-engineer-m-w-d-logistik-plattform
+  name: "API Test Engineer (m/w/d) – Logistik-Plattform"
+  text: |-
+    AUSSCHREIBUNG 08
+    ======================================================================
+    
+    API Test Engineer (m/w/d) – Logistik-Plattform
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        LogiFlow Systems AG
+    Branche:             Logistik / Supply Chain
+    Einsatzort:          Düsseldorf (Hybrid)
+    Projektstart:        Sofort
+    Laufzeit:            8 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           780 – 980 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Einführung einer API-getriebenen Logistik-Plattform mit über 150 Microservices zur Anbindung von Spediteuren, Lagerhaltung und ERP-Systemen.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Entwicklung und Pflege automatisierter API-Testsuiten (REST, GraphQL, gRPC)
+      - Contract Testing mit Pact zwischen Services
+      - Testdatenmanagement und Mock-Server-Aufbau (WireMock)
+      - Erstellung von Integrationstests für EDI/EDIFACT-Schnittstellen
+      - Zusammenarbeit mit 6 agilen Entwicklungsteams
+      - Dokumentation der APIs mittels OpenAPI/Swagger
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 3 Jahre Erfahrung im API-Testing
+      - Sehr gute Kenntnisse in Postman, REST-assured oder Karate
+      - Programmierkenntnisse in Java oder Python
+      - Erfahrung mit GraphQL oder gRPC
+      - Verständnis von Microservice-Architekturen
+      - Deutsch mind. C1
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Kenntnisse in Kafka und Event-Driven Architectures
+      - Erfahrung mit EDI/EDIFACT
+      - ISTQB Advanced Technical Test Analyst
+      - Kenntnisse in der Logistikbranche
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Robert Cramer, r.cramer@logiflow-systems.example, +49 211 6677-5544
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-09-accessibility-test-specialist-m-w-d-bildungsplattform
+  name: "Accessibility Test Specialist (m/w/d) – Bildungsplattform"
+  text: |-
+    AUSSCHREIBUNG 09
+    ======================================================================
+    
+    Accessibility Test Specialist (m/w/d) – Bildungsplattform
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        LernHorizont Bildungsmedien GmbH
+    Branche:             EdTech / Bildung
+    Einsatzort:          Leipzig (100% Remote)
+    Projektstart:        01.05.2026
+    Laufzeit:            6 Monate
+    Auslastung:          Teilzeit möglich (min. 3 Tage/Woche)
+    Tagessatz:           750 – 900 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Barrierefreiheitsüberprüfung und -optimierung einer Online-Lernplattform für Schulen gemäß BITV 2.0 und WCAG 2.2 AA. Zielgruppe umfasst auch Lernende mit motorischen und kognitiven Einschränkungen.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Durchführung von Accessibility-Audits gemäß WCAG 2.2 AA/AAA
+      - Prüfung mit assistiven Technologien (NVDA, JAWS, VoiceOver, Dragon)
+      - Erstellung von Konformitätserklärungen nach BITV 2.0
+      - Schulung von Entwicklungsteams zu Accessibility-Best-Practices
+      - Dokumentation und Priorisierung von Barrieren
+      - Beratung bei UX-/UI-Design hinsichtlich Barrierefreiheit
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 3 Jahre Erfahrung im Accessibility Testing
+      - CPACC- oder WAS-Zertifizierung (IAAP)
+      - Sehr gute Kenntnisse der WCAG 2.1/2.2 und ARIA
+      - Erfahrung mit Screenreadern und anderen assistiven Technologien
+      - Kenntnisse in HTML, CSS und JavaScript (Leseebene)
+      - Deutsch verhandlungssicher
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Persönliche Erfahrung mit Hilfstechnologien
+      - Erfahrung im Bildungsbereich / EdTech
+      - BITV-Prüfung nach BITV-Prüfverbund-Methode
+      - Tools: axe DevTools, WAVE, Siteimprove
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Dr. Kathrin Pflüger, k.pflueger@lernhorizont.example, +49 341 8899-2266
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-10-test-automation-engineer-embedded-m-w-d-adas-ad
+  name: "Test Automation Engineer Embedded (m/w/d) – ADAS/AD"
+  text: |-
+    AUSSCHREIBUNG 10
+    ======================================================================
+    
+    Test Automation Engineer Embedded (m/w/d) – ADAS/AD
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        AutoVision Technologies GmbH
+    Branche:             Automotive / ADAS
+    Einsatzort:          Ingolstadt (vor Ort erforderlich)
+    Projektstart:        01.07.2026
+    Laufzeit:            18 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           1.050 – 1.300 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Entwicklung automatisierter Testverfahren für ein ADAS-System (Advanced Driver Assistance Systems) der nächsten Generation gemäß ISO 26262 (ASIL-D) und SOTIF.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Aufbau und Pflege HiL-/SiL-Testumgebungen (dSPACE, Vector)
+      - Entwicklung automatisierter Testfälle in CAPL und Python
+      - Integration von Simulink-Modellen in die Testautomatisierung
+      - Auswertung von Messdaten und Regression-Analyse
+      - Durchführung von Fahrzeugtests auf Testgeländen
+      - Erstellung von Nachweisen gemäß ISO 26262
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 5 Jahre Erfahrung im Automotive-Testing
+      - Sehr gute Kenntnisse in CAPL, Vector CANoe, CANalyzer
+      - Erfahrung mit HiL-Prüfständen (dSPACE SCALEXIO, Vector VT System)
+      - Programmierkenntnisse in Python und C/C++
+      - Fundiertes Verständnis von ISO 26262 und A-SPICE
+      - Deutsch (mind. B2), Englisch fließend, Führerschein Klasse B
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Kenntnisse in ROS / ROS 2
+      - Erfahrung mit Sensorsimulation (Radar, Lidar, Kamera)
+      - ISTQB Automotive Software Tester
+      - Erfahrung mit AUTOSAR Classic/Adaptive
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Dipl.-Ing. Stefan Reitzenstein, recruiting@autovision-tech.example, +49 841 5566-7722
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-11-uat-koordinator-business-tester-m-w-d-erp-einfuehrung
+  name: "UAT-Koordinator / Business Tester (m/w/d) – ERP-Einführung"
+  text: |-
+    AUSSCHREIBUNG 11
+    ======================================================================
+    
+    UAT-Koordinator / Business Tester (m/w/d) – ERP-Einführung
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        Pharma Nordrhein KG
+    Branche:             Pharma / Life Sciences
+    Einsatzort:          Bonn (Hybrid)
+    Projektstart:        15.05.2026
+    Laufzeit:            14 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           700 – 900 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Einführung von SAP S/4HANA zur Ablösung des bestehenden SAP ECC 6.0, einschließlich Anbindung an GxP-relevante Laborsysteme.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Koordination von User Acceptance Tests mit 9 Fachbereichen
+      - Schulung von Key-Usern in Testdurchführung und Tool-Nutzung
+      - Erstellung von End-to-End-Testszenarien basierend auf Geschäftsprozessen
+      - Begleitung der Testdurchführung (ca. 180 Key-User insgesamt)
+      - Defekt-Triage und Priorisierung mit Fachverantwortlichen
+      - GxP-konforme Testdokumentation (CSV, GAMP 5)
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 5 Jahre Erfahrung in UAT-Koordination oder Business Testing
+      - Erfahrung in mindestens einer SAP-Einführung (ECC oder S/4HANA)
+      - Sehr gute Kommunikations- und Moderationsfähigkeiten
+      - Erfahrung mit HP ALM, Jira oder SAP Solution Manager
+      - Verständnis von Geschäftsprozessen (O2C, P2P, R2R)
+      - Deutsch verhandlungssicher
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - GxP-/GAMP-5-Erfahrung
+      - ISTQB Foundation Level
+      - Kenntnisse in Signavio oder ARIS
+      - Pharma-/Life-Sciences-Erfahrung
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Claudia Weinhold, c.weinhold@pharma-nordrhein.example, +49 228 3344-5566
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-12-testdatenmanager-m-w-d-telekommunikation
+  name: "Testdatenmanager (m/w/d) – Telekommunikation"
+  text: |-
+    AUSSCHREIBUNG 12
+    ======================================================================
+    
+    Testdatenmanager (m/w/d) – Telekommunikation
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        TelNord Connect AG
+    Branche:             Telekommunikation
+    Einsatzort:          Hannover (Hybrid, 40% Remote)
+    Projektstart:        01.06.2026
+    Laufzeit:            12 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           850 – 1.080 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Aufbau eines zentralen Testdatenmanagements für 14 Testumgebungen im Rahmen der Migration auf eine neue BSS/OSS-Plattform.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Konzeption eines unternehmensweiten Testdatenmanagements (TDM)
+      - Aufbau synthetischer Testdaten-Generatoren
+      - Anonymisierung und Pseudonymisierung produktiver Daten (DSGVO-konform)
+      - Integration mit Tools wie Delphix, Informatica TDM oder CA TDM
+      - Erstellung von Testdatenkatalogen und Self-Service-Portal
+      - Schulung und Support für Testteams
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 4 Jahre Erfahrung im Testdatenmanagement
+      - Sehr gute SQL- und Datenbank-Kenntnisse (Oracle, PostgreSQL)
+      - Erfahrung mit einem TDM-Tool (Delphix, Informatica, CA, Broadcom)
+      - Fundiertes Verständnis von DSGVO und Anonymisierungsverfahren
+      - Scripting-Kenntnisse in Python oder Shell
+      - Deutsch mind. C1
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Telekommunikations-Erfahrung (OSS/BSS)
+      - Kenntnisse in Kafka und Data Streaming
+      - Cloud-Erfahrung (Azure/AWS)
+      - Erfahrung mit synthetischen Daten (GenRocket, Tonic.ai)
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Peter Hausmann, p.hausmann@telnord-connect.example, +49 511 2233-8899
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-13-agile-test-lead-sdet-lead-m-w-d-saas-plattform
+  name: "Agile Test Lead / SDET Lead (m/w/d) – SaaS-Plattform"
+  text: |-
+    AUSSCHREIBUNG 13
+    ======================================================================
+    
+    Agile Test Lead / SDET Lead (m/w/d) – SaaS-Plattform
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        CloudSprint GmbH
+    Branche:             SaaS / B2B-Software
+    Einsatzort:          Berlin oder München (100% Remote möglich)
+    Projektstart:        01.07.2026
+    Laufzeit:            Unbefristet als Freelancer, Startauftrag 9 Monate
+    Auslastung:          Vollzeit oder 4 Tage/Woche
+    Tagessatz:           1.000 – 1.250 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Aufbau und Skalierung der Qualitätssicherung einer schnell wachsenden HR-SaaS-Plattform (von 40 auf 120 Entwickler in 18 Monaten). Etablierung einer 'Quality Engineering'-Kultur.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Fachliche Leitung einer Gilde aus 8 SDETs über mehrere Scrum-Teams hinweg
+      - Etablierung von Shift-Left- und Shift-Right-Testing-Praktiken
+      - Coaching der Entwicklungsteams in Testing-Best-Practices
+      - Implementierung von Quality Gates in der CI/CD-Pipeline
+      - Aufbau einer Test-Pyramide (Unit, Integration, E2E, Contract)
+      - Etablierung von Observability-Testing in Produktion (Chaos Engineering)
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 7 Jahre Erfahrung in der Qualitätssicherung, davon 3 Jahre in Lead-Rolle
+      - Nachweisbare Erfahrung in der Skalierung von QA-Organisationen
+      - Sehr gute Kenntnisse in Testautomatisierung (Playwright/Cypress + Java/Python-Backend)
+      - Tiefes Verständnis von DevOps und SRE-Konzepten
+      - Erfahrung mit Chaos Engineering (Chaos Monkey, Gremlin, Litmus)
+      - Deutsch mind. B2, Englisch verhandlungssicher
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - ISTQB Expert Level
+      - Erfahrung im SaaS-/B2B-Umfeld
+      - Kenntnisse in Feature Flags (LaunchDarkly, Unleash)
+      - Speaker-Erfahrung auf Konferenzen
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Nils Brettschneider, talent@cloudsprint.example, +49 30 9988-7766
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-14-qa-engineer-gaming-m-w-d-mobile-free-to-play
+  name: "QA Engineer Gaming (m/w/d) – Mobile Free-to-Play"
+  text: |-
+    AUSSCHREIBUNG 14
+    ======================================================================
+    
+    QA Engineer Gaming (m/w/d) – Mobile Free-to-Play
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        PixelRage Studios GmbH
+    Branche:             Gaming / Entertainment
+    Einsatzort:          Hamburg (Hybrid, 2 Tage/Woche Büro)
+    Projektstart:        15.06.2026
+    Laufzeit:            10 Monate
+    Auslastung:          Vollzeit
+    Tagessatz:           650 – 850 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Qualitätssicherung eines Free-to-Play Mobile-Games vor globalem Launch (iOS/Android, 12 Sprachen). Fokus auf Spielbalance, Monetarisierung und Live-Ops.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Funktionale Tests der Spielmechaniken und Progression
+      - Testen von In-App-Käufen und Monetarisierungsfeatures
+      - Lokalisierungs- und Kulturtests für 12 Märkte
+      - Regressionstests bei wöchentlichen Live-Ops-Updates
+      - Exploratives Testen zur Identifikation von Exploits und Balance-Issues
+      - Zusammenarbeit mit Game Designern und Community-Team
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 2 Jahre Erfahrung im Games QA
+      - Erfahrung mit Mobile-Games-Testing (iOS + Android)
+      - Vertrautheit mit Engines wie Unity oder Unreal
+      - Strukturiertes und detailgenaues Arbeiten
+      - Leidenschaft für Gaming
+      - Englisch fließend, Deutsch mind. B2
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Erfahrung mit Live-Service-Games
+      - Scripting in C# oder Python
+      - Kenntnisse in Analytics-Tools (GameAnalytics, Amplitude)
+      - Weitere Sprachen (JP, KR, CN)
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Jenny Roskopf, jobs@pixelrage-studios.example, +49 40 1100-2233
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]
+
+- id: profiler-job-15-test-consultant-agile-quality-coach-m-w-d-energiewirtschaft
+  name: "Test Consultant / Agile Quality Coach (m/w/d) – Energiewirtschaft"
+  text: |-
+    AUSSCHREIBUNG 15
+    ======================================================================
+    
+    Test Consultant / Agile Quality Coach (m/w/d) – Energiewirtschaft
+    
+    ----------------------------------------------------------------------
+    ECKDATEN
+    ----------------------------------------------------------------------
+    
+    Auftraggeber:        EnerGrid Deutschland AG
+    Branche:             Energieversorgung / Smart Grid
+    Einsatzort:          Essen (Hybrid, 3 Tage/Woche vor Ort)
+    Projektstart:        01.08.2026
+    Laufzeit:            12 Monate mit Verlängerungsoption
+    Auslastung:          Vollzeit
+    Tagessatz:           1.100 – 1.400 €
+    
+    ----------------------------------------------------------------------
+    PROJEKTBESCHREIBUNG
+    ----------------------------------------------------------------------
+    
+    Transformation der Testorganisation im Rahmen der Digitalisierung des Stromnetzbetriebs (Smart Metering, Leitsysteme). Agile Transformation von Wasserfall zu SAFe.
+    
+    ----------------------------------------------------------------------
+    AUFGABEN UND VERANTWORTLICHKEITEN
+    ----------------------------------------------------------------------
+    
+      - Assessment der bestehenden Testorganisation und -prozesse
+      - Entwicklung einer Test-Strategie-Roadmap über 3 Jahre
+      - Einführung von SAFe Quality Practices in 4 Agile Release Trains
+      - Coaching von 15 Scrum Teams und deren Testern
+      - Einführung von TMMi oder TPI-Next als Reifegradmodell
+      - Workshops und Trainings für Management und Teams
+    
+    ----------------------------------------------------------------------
+    ANFORDERUNGEN (MUST-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Mindestens 10 Jahre Erfahrung im Testing, davon 5 Jahre als Berater/Coach
+      - ISTQB Advanced Level Test Manager oder Expert Level
+      - Nachweisbare Erfahrung in mindestens 2 agilen Transformationen
+      - SAFe-Zertifizierung (SPC, RTE oder Agilist)
+      - Kenntnisse in TMMi oder TPI-Next
+      - Exzellente Präsentations- und Moderationsfähigkeiten in Deutsch (C2) und Englisch (C1)
+    
+    ----------------------------------------------------------------------
+    WÜNSCHENSWERT (NICE-TO-HAVE)
+    ----------------------------------------------------------------------
+    
+      - Erfahrung in regulierten Branchen (Energie, EnWG, KRITIS)
+      - ISTQB Expert Level Improving the Test Process
+      - Zertifizierungen wie CSM, CSPO oder ICAgile
+      - Veröffentlichungen oder Speaker-Erfahrung
+    
+    ----------------------------------------------------------------------
+    ANSPRECHPARTNER
+    ----------------------------------------------------------------------
+    
+    Dr. Ingrid Baumgart, i.baumgart@energrid.example, +49 201 4455-9988
+    
+    ======================================================================
+    Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+    Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+    ======================================================================
+  severity: LOW
+  mode: single
+  tags: [profiler, job, ausschreibung, imported]

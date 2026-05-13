@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 15
+======================================================================
+
+Test Consultant / Agile Quality Coach (m/w/d) – Energiewirtschaft
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        EnerGrid Deutschland AG
+Branche:             Energieversorgung / Smart Grid
+Einsatzort:          Essen (Hybrid, 3 Tage/Woche vor Ort)
+Projektstart:        01.08.2026
+Laufzeit:            12 Monate mit Verlängerungsoption
+Auslastung:          Vollzeit
+Tagessatz:           1.100 – 1.400 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Transformation der Testorganisation im Rahmen der Digitalisierung des Stromnetzbetriebs (Smart Metering, Leitsysteme). Agile Transformation von Wasserfall zu SAFe.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Assessment der bestehenden Testorganisation und -prozesse
+  - Entwicklung einer Test-Strategie-Roadmap über 3 Jahre
+  - Einführung von SAFe Quality Practices in 4 Agile Release Trains
+  - Coaching von 15 Scrum Teams und deren Testern
+  - Einführung von TMMi oder TPI-Next als Reifegradmodell
+  - Workshops und Trainings für Management und Teams
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 10 Jahre Erfahrung im Testing, davon 5 Jahre als Berater/Coach
+  - ISTQB Advanced Level Test Manager oder Expert Level
+  - Nachweisbare Erfahrung in mindestens 2 agilen Transformationen
+  - SAFe-Zertifizierung (SPC, RTE oder Agilist)
+  - Kenntnisse in TMMi oder TPI-Next
+  - Exzellente Präsentations- und Moderationsfähigkeiten in Deutsch (C2) und Englisch (C1)
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Erfahrung in regulierten Branchen (Energie, EnWG, KRITIS)
+  - ISTQB Expert Level Improving the Test Process
+  - Zertifizierungen wie CSM, CSPO oder ICAgile
+  - Veröffentlichungen oder Speaker-Erfahrung
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Dr. Ingrid Baumgart, i.baumgart@energrid.example, +49 201 4455-9988
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

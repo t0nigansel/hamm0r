@@ -176,6 +176,18 @@ mod tests {
     }
 
     #[test]
+    fn bundled_prompts_parse() {
+        let prompts_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../prompts");
+
+        let map = load_all(&prompts_dir).unwrap();
+
+        assert!(map.contains_key("baselines"));
+        assert!(map.contains_key("library"));
+        assert!(map.contains_key("injection-classics"));
+        assert!(map.contains_key("exfil"));
+    }
+
+    #[test]
     fn load_all_roundtrip() {
         let dir = TempDir::new().unwrap();
         let prompts = sample_prompts();

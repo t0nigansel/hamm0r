@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 07
+======================================================================
+
+Testmanager (m/w/d) – E-Government-Plattform
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        Landesamt für Digitalisierung Rheinland-Pfalz (fiktiv)
+Branche:             Öffentlicher Sektor
+Einsatzort:          Mainz (vor Ort erforderlich)
+Projektstart:        01.09.2026
+Laufzeit:            24 Monate
+Auslastung:          Vollzeit
+Tagessatz:           880 – 1.100 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Einführung einer bürgernahen E-Government-Plattform zur Digitalisierung von 120 Verwaltungsdienstleistungen gemäß Onlinezugangsgesetz (OZG).
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Entwicklung und Umsetzung der Teststrategie über mehrere Releasewellen
+  - Führung eines hybriden Testteams (intern + externe Dienstleister, ca. 8 Personen)
+  - Koordination von Fachabteilungen, Kommunen und BSI
+  - Etablierung von Testprozessen nach V-Modell XT
+  - Ausschreibung und Steuerung externer Testdienstleister
+  - Reporting an Ministerialebene
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 8 Jahre Erfahrung als Testmanager, davon 3 Jahre im öffentlichen Sektor
+  - ISTQB Advanced Level Test Manager
+  - Erfahrung mit V-Modell XT oder vergleichbaren Vorgehensmodellen
+  - Kenntnisse in BSI-Grundschutz und OZG
+  - Führungskompetenz und Erfahrung in Multi-Stakeholder-Umfeldern
+  - Deutsch verhandlungssicher (C2)
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - Sicherheitsüberprüfung Ü2 vorhanden oder bereit zur Durchführung
+  - IREB CPRE Foundation Level
+  - Erfahrung mit SAP-Systemen in der Verwaltung
+  - Projektmanagement-Zertifizierung
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Martin Gerlach (Referatsleiter IT), m.gerlach@lfd-rlp.example, +49 6131 1122-3344
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================

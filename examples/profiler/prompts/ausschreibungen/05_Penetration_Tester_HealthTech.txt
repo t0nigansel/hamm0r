@@ -1,0 +1,64 @@
+AUSSCHREIBUNG 05
+======================================================================
+
+Penetration Tester / Security Tester (m/w/d) – Health-Tech
+
+----------------------------------------------------------------------
+ECKDATEN
+----------------------------------------------------------------------
+
+Auftraggeber:        MediSecure Health Solutions GmbH
+Branche:             Healthcare / MedTech
+Einsatzort:          München (Hybrid)
+Projektstart:        01.08.2026
+Laufzeit:            12 Monate
+Auslastung:          Vollzeit oder 4 Tage/Woche
+Tagessatz:           1.100 – 1.400 €
+
+----------------------------------------------------------------------
+PROJEKTBESCHREIBUNG
+----------------------------------------------------------------------
+
+Sicherheitsüberprüfung einer neuen Patientenportal-Lösung inkl. mobiler Apps gemäß DSGVO, MDR und HIPAA. Das System verarbeitet besonders schützenswerte Gesundheitsdaten.
+
+----------------------------------------------------------------------
+AUFGABEN UND VERANTWORTLICHKEITEN
+----------------------------------------------------------------------
+
+  - Durchführung von Penetrationstests nach OWASP-Methodik (Web, API, Mobile)
+  - Security-Code-Reviews und SAST/DAST-Analysen
+  - Threat Modeling gemeinsam mit Architekten und Entwicklern
+  - Bewertung von Schwachstellen nach CVSS und Erstellung von Risikoreports
+  - Durchführung von Social-Engineering-Tests (optional)
+  - Unterstützung bei Audits und Zertifizierungen (ISO 27001, BSI C5)
+
+----------------------------------------------------------------------
+ANFORDERUNGEN (MUST-HAVE)
+----------------------------------------------------------------------
+
+  - Mindestens 5 Jahre Erfahrung im Security Testing / Pentesting
+  - OSCP, CEH oder vergleichbare Zertifizierung
+  - Sehr gute Kenntnisse von OWASP Top 10, OWASP ASVS, MASVS
+  - Erfahrung mit Burp Suite Pro, Metasploit, Nessus, ZAP
+  - Fundierte Kenntnisse in Kryptographie und Authentifizierungsprotokollen (OAuth2, SAML)
+  - Deutsch und Englisch fließend
+
+----------------------------------------------------------------------
+WÜNSCHENSWERT (NICE-TO-HAVE)
+----------------------------------------------------------------------
+
+  - OSCE, GPEN oder GWAPT
+  - Erfahrung im Gesundheitswesen (MDR, FDA, HIPAA)
+  - Cloud-Security (AWS, Azure)
+  - Reverse Engineering, Fuzzing
+
+----------------------------------------------------------------------
+ANSPRECHPARTNER
+----------------------------------------------------------------------
+
+Dr. Henrik Vogelsang, security-recruiting@medisecure.example, +49 89 4455-7700
+
+======================================================================
+Hinweis: Diese Ausschreibung ist frei erfunden und dient ausschließlich
+Testzwecken. Alle Firmennamen, Personen und Kontaktdaten sind fiktiv.
+======================================================================
