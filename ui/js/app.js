@@ -189,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── State ──────────────────────────────────────────────────────────
   let dbOpen = false;
   let activeEngagementSlug = null;
+  let activeViewId = 'view-home';
   let editingPromptId = null;
   let currentScenarioId = null;
   // Matrix-mode editor state. A Scenario fires every selected Request
@@ -222,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     analyze:   glyph('🔍'),                   // U+1F50D magnifying glass
     exportMd:  glyph('MD', 'btn-icon-text'),  // textual badge
     exportPdf: glyph('PDF', 'btn-icon-text'), // textual badge
+    copy:      glyph('CP', 'btn-icon-text'),  // copy badge
     archive:   glyph('🗑'),                   // U+1F5D1 wastebasket
   };
 
@@ -231,9 +233,9 @@ document.addEventListener('DOMContentLoaded', () => {
     activeRunId: null,
     runs: [],
     resultsByRunId: new Map(),
-    targets: [],
     scenarios: [],
     targetMatch: null,
+    activeScenarioId: null,
     renderedReportSlug: null,
     renderedReportRunId: null,
     renderedReportHtml: null,
@@ -442,9 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onDbOpen(name, slug) {
     if (slug) activeEngagementSlug = slug;
-    $('#db-label').textContent = name;
     $('#breadcrumb-engagement').textContent = name;
-    $('#engagement-dot').classList.add('active');
     if ($('#view-home').classList.contains('active')) {
       loadHomeRecentEngagements();
     }
@@ -463,6 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   function showView(viewId) {
+    activeViewId = viewId;
     $$('.nav-item[data-view]').forEach(b => b.classList.remove('active'));
     $$('.view').forEach(v => v.classList.remove('active'));
 
@@ -486,6 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dbOpen) {
       if (viewId === 'view-scenarios') loadScenarioList();
     }
+    updateGlobalFireButton();
   }
 
   $$('.nav-item[data-view]').forEach(btn => {
@@ -805,6 +807,95 @@ document.addEventListener('DOMContentLoaded', () => {
     pendingDeleteId: '',
   };
 
+  function resolveGlobalFireAction() {
+    if (activeViewId === 'view-requests') {
+      return requestEditor.currentId
+        ? { enabled: true, mode: 'request', title: 'Fire selected request' }
+        : { enabled: false, mode: 'request', title: 'Select a request to fire' };
+    }
+
+    if (activeViewId === 'view-scenarios') {
+      return currentScenarioId
+        ? { enabled: true, mode: 'scenario', title: 'Fire selected scenario' }
+        : { enabled: false, mode: 'scenario', title: 'Select a scenario to fire' };
+    }
+
+    if (activeViewId === 'view-runs') {
+      if (!engagementDetail.slug) {
+        return { enabled: false, mode: 'engagement', title: 'Select an engagement to fire' };
+      }
+      if (!engagementDetail.activeScenarioId) {
+        return { enabled: false, mode: 'engagement', title: 'Selected engagement has no scenario run to fire' };
+      }
+      return { enabled: true, mode: 'engagement', title: 'Fire selected engagement scenario' };
+    }
+
+    return { enabled: false, mode: '', title: 'Select a request, scenario, or engagement to fire' };
+  }
+
+  function updateGlobalFireButton() {
+    const btn = $('#btn-global-fire');
+    if (!btn) return;
+    const busy = btn.dataset.busy === 'true';
+    const action = resolveGlobalFireAction();
+    btn.disabled = busy || !action.enabled;
+    btn.title = busy ? 'Fire is running' : action.title;
+    btn.setAttribute('aria-label', btn.title);
+    btn.dataset.fireMode = action.mode || '';
+  }
+
+  function setTopbarProgress(completed = 0, total = 0, state = 'running') {
+    const root = $('#topbar-progress');
+    const bar = $('#topbar-progress-bar');
+    const count = $('#topbar-progress-count');
+    if (!root || !bar || !count) return;
+
+    const safeCompleted = Math.max(0, Number(completed) || 0);
+    const safeTotal = Math.max(0, Number(total) || 0);
+    const width = 14;
+    const filled = safeTotal > 0
+      ? Math.max(0, Math.min(width, Math.round((safeCompleted / safeTotal) * width)))
+      : 0;
+    bar.textContent = `[${'='.repeat(filled)}${' '.repeat(width - filled)}]`;
+    count.textContent = `${safeCompleted}/${safeTotal || '?'}`;
+    root.dataset.state = state;
+    root.style.visibility = 'visible';
+  }
+
+  function clearTopbarProgress() {
+    const root = $('#topbar-progress');
+    if (!root) return;
+    root.style.visibility = 'hidden';
+    root.dataset.state = '';
+  }
+
+  async function fireSelectedRequest() {
+    if (!requestEditor.currentId) {
+      toast('Select a request first', 'error');
+      return;
+    }
+    setTopbarProgress(0, 1, 'running');
+    try {
+      const request = buildRequestFromForm();
+      const result = await API.call('test_request', {
+        request,
+        session_strategy: 'none',
+        session_field: null,
+        prompt_text: $('#req-test-prompt').value,
+      });
+      renderRequestTestResult(result);
+      toast(
+        `Request fired: ${result.status}`,
+        result.status >= 200 && result.status < 400 ? 'success' : 'info',
+      );
+      setTopbarProgress(1, 1, result.status >= 200 && result.status < 400 ? 'done' : 'error');
+    } catch (err) {
+      clearRequestTestResult();
+      setTopbarProgress(0, 1, 'error');
+      toast(err.message, 'error');
+    }
+  }
+
   function renderRequestHeaders(headers) {
     const root = $('#req-headers');
     root.innerHTML = '';
@@ -922,6 +1013,11 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#req-extract-path').value = ext.path || ext.pattern || '';
     $('#req-extract-path').style.display = ext.type === 'raw' ? 'none' : '';
     if ($('#req-bind')) $('#req-bind').value = (req.response && req.response.bind) || '';
+    if ($('#req-result-columns')) {
+      $('#req-result-columns').value = (req.response?.result_columns || [])
+        .map((col) => `${col.label || col.id}: ${col.path}`)
+        .join('\n');
+    }
 
     $('#req-timeout').value = Number(req.timeout_seconds || 30);
     $('#req-test-prompt').value = '';
@@ -1000,6 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const bindRaw = ($('#req-bind')?.value || '').trim();
     const bind = bindRaw === '' ? null : bindRaw;
+    const resultColumns = parseResultColumnsFromForm();
     const tagRaw = ($('#req-tag')?.value || '').trim();
     const tag = tagRaw === '' ? null : tagRaw;
 
@@ -1012,12 +1109,79 @@ document.addEventListener('DOMContentLoaded', () => {
       auth,
       headers,
       body,
-      response: bind ? { extract, bind } : { extract },
+      response: {
+        extract,
+        ...(bind ? { bind } : {}),
+        ...(resultColumns.length ? { result_columns: resultColumns } : {}),
+      },
       timeout_seconds: Math.max(1, Number($('#req-timeout').value || 30)),
       adapter: body.format === 'raw' ? 'raw-http' : 'custom-rest',
     };
     if (tag) out.tag = tag;
     return out;
+  }
+
+  function metricIdFromLabel(label) {
+    const id = String(label || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return id || 'metric';
+  }
+
+  function parseResultColumnsFromForm() {
+    const raw = $('#req-result-columns')?.value || '';
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const splitAt = line.indexOf(':');
+        if (splitAt < 0) {
+          const path = line.trim();
+          return { id: metricIdFromLabel(path), label: path, path };
+        }
+        const label = line.slice(0, splitAt).trim();
+        const path = line.slice(splitAt + 1).trim();
+        return { id: metricIdFromLabel(label), label, path };
+      })
+      .filter((col) => col.label && col.path);
+  }
+
+  function uniqueRequestCopyId(baseId, requests) {
+    const existing = new Set(requests.map((r) => r.id));
+    const base = `${String(baseId || 'request').replace(/-copy-\d+$/, '')}-copy`;
+    if (!existing.has(base)) return base;
+    for (let n = 2; n < 10000; n += 1) {
+      const candidate = `${base}-${n}`;
+      if (!existing.has(candidate)) return candidate;
+    }
+    return `${base}-${Date.now()}`;
+  }
+
+  async function copyRequestFromList(id) {
+    try {
+      const [source, requests] = await Promise.all([
+        API.call('get_request', { id }),
+        API.call('list_requests', {}),
+      ]);
+      if (!source) {
+        toast(`Request '${id}' not found`, 'error');
+        return;
+      }
+
+      const copy = JSON.parse(JSON.stringify(source));
+      copy.id = uniqueRequestCopyId(source.id, requests);
+      copy.name = `${source.name || source.id} Copy`;
+
+      await API.call('save_request_global', { request: copy });
+      currentScenarioMatrixGlobalRequests = [];
+      toast(`Copied request '${source.name || source.id}'`, 'success');
+      await loadRequestList(copy.id);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
   async function loadRequestList(selectAfter = '') {
@@ -1043,6 +1207,16 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="target-card-name">${esc(r.name || r.id)}</div>
         <div class="target-card-url">${esc(r.method || 'POST')} · ${esc(urlShort)}</div>`;
       li.addEventListener('click', () => openRequestEditor(r.id));
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'btn-icon btn-row-copy';
+      copyBtn.title = 'Copy request';
+      copyBtn.setAttribute('aria-label', 'Copy request');
+      copyBtn.innerHTML = ICONS.copy;
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyRequestFromList(r.id);
+      });
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'btn-icon btn-row-delete';
@@ -1053,6 +1227,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
         attemptDeleteRequest(r.id);
       });
+      li.appendChild(copyBtn);
       li.appendChild(deleteBtn);
       list.appendChild(li);
     });
@@ -1075,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#request-form').style.display = '';
     $('#btn-req-delete').style.display = 'none';
     $$('#request-list .target-card-row').forEach((row) => row.classList.remove('active'));
+    updateGlobalFireButton();
     setTimeout(() => $('#req-name').focus(), 0);
   }
 
@@ -1097,6 +1273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $$('#request-list .target-card-row').forEach((row) => {
       row.classList.toggle('active', row.dataset.id === req.id);
     });
+    updateGlobalFireButton();
   }
 
   // Expose for the top-level click delegation so the Requests buttons
@@ -1146,34 +1323,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if ($('#btn-req-cancel')) {
     $('#btn-req-cancel').addEventListener('click', () => {
+      requestEditor.currentId = '';
       $('#request-form').style.display = 'none';
       $('#request-welcome').style.display = '';
+      $$('#request-list .target-card-row').forEach((row) => row.classList.remove('active'));
       clearRequestTestResult();
-    });
-  }
-  if ($('#btn-req-fire')) {
-    $('#btn-req-fire').addEventListener('click', async () => {
-      const btn = $('#btn-req-fire');
-      btn.disabled = true;
-      try {
-        const request = buildRequestFromForm();
-        const result = await API.call('test_request', {
-          request,
-          session_strategy: 'none',
-          session_field: null,
-          prompt_text: $('#req-test-prompt').value,
-        });
-        renderRequestTestResult(result);
-        toast(
-          `Request fired: ${result.status}`,
-          result.status >= 200 && result.status < 400 ? 'success' : 'info',
-        );
-      } catch (err) {
-        clearRequestTestResult();
-        toast(err.message, 'error');
-      } finally {
-        btn.disabled = false;
-      }
+      updateGlobalFireButton();
     });
   }
   // ── Bearer-token keychain UI ───────────────────────────────────────
@@ -1330,6 +1485,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await API.call('save_request_global', { request: req });
         toast(`Saved request '${req.name}'`, 'success');
         requestEditor.currentId = req.id;
+        updateGlobalFireButton();
         await loadRequestList(req.id);
       } catch (err) {
         toast(err.message, 'error');
@@ -1354,6 +1510,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('#request-form').style.display = 'none';
         $('#request-welcome').style.display = '';
         clearRequestTestResult();
+        updateGlobalFireButton();
       }
       await loadRequestList();
       return;
@@ -1403,6 +1560,7 @@ document.addEventListener('DOMContentLoaded', () => {
           $('#request-form').style.display = 'none';
           $('#request-welcome').style.display = '';
           clearRequestTestResult();
+          updateGlobalFireButton();
         }
         await loadRequestList();
       } catch (err) {
@@ -1413,12 +1571,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // ── Shared prompt filter (used by library + picker) ──────────────
-  function applyPromptFilter(prompts, owaspFilter, searchText) {
+  function applyPromptFilter(prompts, owaspFilter, searchText, categoryFilter = '') {
     let result = prompts;
     if (owaspFilter === 'baseline') {
       result = result.filter(p => (p.tags || []).includes('baseline'));
     } else if (owaspFilter) {
       result = result.filter(p => p.owasp_ref === owaspFilter);
+    }
+    if (categoryFilter) {
+      result = result.filter(p => String(p.category || '') === categoryFilter);
     }
     const q = (searchText || '').toLowerCase();
     if (q) {
@@ -1431,7 +1592,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Library: load and render ───────────────────────────────────────
-  let libraryFilter = { owasp: '', search: '' };
+  let libraryFilter = { owasp: '', category: '', search: '' };
   let libraryDebounce = null;
 
   // Last-known full prompt list. Populated by loadPrompts so report
@@ -1443,10 +1604,36 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const all = await API.call('list_prompts', {});
       cachedPrompts = all;
-      const prompts = applyPromptFilter(all, libraryFilter.owasp, libraryFilter.search);
+      renderLibraryCategoryChips(all);
+      const prompts = applyPromptFilter(all, libraryFilter.owasp, libraryFilter.search, libraryFilter.category);
       renderPrompts(prompts);
       $('#prompt-count').textContent = `${prompts.length} prompts`;
     } catch (err) { toast(err.message, 'error'); }
+  }
+
+  function renderLibraryCategoryChips(prompts) {
+    const root = $('#library-category-chips');
+    if (!root) return;
+    const categories = [...new Set(prompts.map(p => String(p.category || '').trim()))]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    if (libraryFilter.category && !categories.includes(libraryFilter.category)) {
+      libraryFilter.category = '';
+    }
+    root.innerHTML = `
+      <button class="chip ${libraryFilter.category ? '' : 'active'}" data-category="">ALL</button>
+      ${categories.map(cat => `
+        <button class="chip ${libraryFilter.category === cat ? 'active' : ''}" data-category="${esc(cat)}">${esc(cat)}</button>
+      `).join('')}
+    `;
+    $$('#library-category-chips .chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        $$('#library-category-chips .chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        libraryFilter.category = chip.dataset.category || '';
+        loadPrompts();
+      });
+    });
   }
 
   function renderPrompts(prompts) {
@@ -1461,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tags = (p.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
       const row = document.createElement('div');
       row.className = 'prompt-row';
+      row.classList.toggle('selected', editingPromptId === p.id);
       row.dataset.id = p.id;
       const displayName = p.name || p.id;
       row.innerHTML = `
@@ -1484,6 +1672,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
         deletePrompt(p.id);
       });
+      row.addEventListener('click', () => openPromptEditor(p.id));
       list.appendChild(row);
     });
   }
@@ -1516,6 +1705,9 @@ document.addEventListener('DOMContentLoaded', () => {
     editorEl.style.display = '';
     const idHint = $('#pe-id-hint');
     if (promptId) {
+      $$('#library-prompt-list .prompt-row').forEach(row => {
+        row.classList.toggle('selected', row.dataset.id === promptId);
+      });
       $('#editor-title').textContent = 'Edit Prompt';
       try {
         const found = await API.call('get_prompt', { id: promptId });
@@ -1682,6 +1874,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Highlight in sidebar
       $$('#scenario-list li').forEach(li =>
         li.classList.toggle('active', li.dataset.id === scenarioId));
+      updateGlobalFireButton();
     } catch (err) { toast(err.message, 'error'); }
   }
 
@@ -1824,6 +2017,21 @@ document.addEventListener('DOMContentLoaded', () => {
     out.textContent = `${matched} prompts × ${requestCount} request(s) = ${total} attempts (plus auth-chain prereqs).`;
   }
 
+  function estimateCurrentScenarioTotal() {
+    const prompts = currentScenarioMatrixPromptIndex || [];
+    const matched = prompts.filter((p) => {
+      const owasp = String(p.owasp_ref || '');
+      const cat = String(p.category || '');
+      return (
+        currentScenarioMatrix.owasp_refs.includes(owasp) ||
+        currentScenarioMatrix.categories.includes(cat)
+      );
+    }).length;
+    const requestCount = currentScenarioMatrix.request_ids.length;
+    const repeat = Math.max(1, parseInt($('#sc-repeat')?.value, 10) || 1);
+    return matched * Math.max(1, requestCount) * repeat;
+  }
+
   // Listen on the shared-session checkbox.
   document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'sc-matrix-shared-session') {
@@ -1866,6 +2074,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentScenarioId = null;
         $('#scenario-builder').style.display = 'none';
         $('#scenario-empty').style.display = '';
+        updateGlobalFireButton();
       }
       toast('Scenario deleted', 'success');
       loadScenarioList();
@@ -1878,7 +2087,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Run scenario ───────────────────────────────────────────────────
-  $('#btn-run-scenario').addEventListener('click', async () => {
+  async function fireSelectedScenario() {
     if (!currentScenarioId) return;
     if (currentScenarioMatrix.request_ids.length === 0) {
       toast('Pick at least one Request before running.', 'error');
@@ -1894,13 +2103,13 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#btn-save-scenario').click();
     await new Promise(r => setTimeout(r, 300)); // brief wait for save
 
-    $('#btn-run-scenario').disabled = true;
     $('#btn-stop-scenario').disabled = false;
     $('#scenario-progress').style.display = '';
     $('#sc-progress-bar').style.width = '0%';
     $('#sc-progress-completed').textContent = '0';
     $('#sc-progress-total').textContent = '0';
     $('#sc-progress-errors').textContent = '0';
+    setTopbarProgress(0, estimateCurrentScenarioTotal(), 'running');
 
     try {
       const result = await API.call('start_scenario', {
@@ -1915,11 +2124,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       toast(err.message, 'error');
     } finally {
-      $('#btn-run-scenario').disabled = false;
       $('#btn-stop-scenario').disabled = true;
       stopProgressPoll();
     }
-  });
+  }
 
   $('#btn-stop-scenario').addEventListener('click', async () => {
     try {
@@ -1959,7 +2167,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── E-01/E-02 · Engagement list in Runs view ─────────────────────
   function setEngagementDetailTab(tab) {
     $$('.eng-detail-tab').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.engTab === tab);
+      const active = btn.dataset.engTab === tab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
     $$('.eng-detail-panel').forEach((panel) => {
       panel.classList.toggle('active', panel.id === `eng-panel-${tab}`);
@@ -2016,49 +2226,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function hydrateEngagementDetailCatalogs() {
-    if (!engagementDetail.targets.length) {
-      try { engagementDetail.targets = await API.call('list_targets', {}); } catch (_err) { engagementDetail.targets = []; }
-    }
     if (!engagementDetail.scenarios.length) {
       try { engagementDetail.scenarios = await API.call('list_scenarios', {}); } catch (_err) { engagementDetail.scenarios = []; }
     }
   }
 
-  function normalizeUrlForMatch(raw) {
-    const value = String(raw || '').trim();
-    if (!value) return null;
-    try {
-      const u = new URL(value);
-      const path = (u.pathname || '/').replace(/\/+$/, '') || '/';
-      return {
-        full: `${u.origin}${path}`,
-        origin: u.origin,
-      };
-    } catch (_err) {
-      const fallback = value.replace(/\/+$/, '');
-      return { full: fallback, origin: fallback };
-    }
-  }
-
-  function urlsLikelySameTarget(a, b) {
-    const ua = normalizeUrlForMatch(a);
-    const ub = normalizeUrlForMatch(b);
-    if (!ua || !ub) return false;
-    if (ua.full === ub.full) return true;
-    if (ua.origin === ub.origin) return true;
-    if (ua.full.startsWith(ub.full)) return true;
-    if (ub.full.startsWith(ua.full)) return true;
-    return false;
-  }
-
   function resolveTargetFromResults(results) {
     const requestUrl = String(results.find(r => r.request_url)?.request_url || '').trim();
     if (!requestUrl) return { id: null, name: '—', url: '' };
-
-    const match = engagementDetail.targets.find(t => urlsLikelySameTarget(t.url, requestUrl));
-    if (match) {
-      return { id: match.id, name: match.name, url: match.url };
-    }
 
     return {
       id: null,
@@ -2184,6 +2359,43 @@ document.addEventListener('DOMContentLoaded', () => {
     return '<span style="color:var(--text-3);">—</span>';
   }
 
+  function resultColumnsForResults(results) {
+    const byId = new Map();
+    results.forEach((result) => {
+      (result.result_columns || result.result_metrics || []).forEach((col) => {
+        const id = col.id || metricIdFromLabel(col.label || col.path);
+        if (!id || byId.has(id)) return;
+        byId.set(id, {
+          id,
+          label: col.label || id,
+          path: col.path || '',
+        });
+      });
+    });
+    return [...byId.values()];
+  }
+
+  function resultMetricValue(result, column) {
+    const metric = (result.result_metrics || []).find((item) => {
+      const id = item.id || metricIdFromLabel(item.label || item.path);
+      return id === column.id || item.path === column.path;
+    });
+    return metric?.value ?? '';
+  }
+
+  function renderResultsTableHead(columns = []) {
+    const metricHeaders = columns
+      .map((col) => `<th>${esc(col.label || col.id)}</th>`)
+      .join('');
+    $('#results-head-row').innerHTML = `
+      <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
+      <th>Verdict</th>
+      ${metricHeaders}
+      <th class="col-wide">Request</th>
+      <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
+      <th>Latency</th>`;
+  }
+
   async function tryRenderRunReportHtml(engagementSlug, runId, preview) {
     try {
       const html = await API.call('read_report_html', { engagement_slug: engagementSlug, run_id: runId });
@@ -2233,6 +2445,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateEngagementHeader(run, results) {
     const target = resolveTargetFromResults(results);
     engagementDetail.targetMatch = target;
+    engagementDetail.activeScenarioId = run?.scenario_id || null;
     engagementDetail.scenarioName = lookupScenarioNameForRun(run);
 
     const endCandidates = [...results]
@@ -2257,7 +2470,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (rerunBtn) rerunBtn.disabled = !engagementDetail.slug || !engagementDetail.activeRunId || runIsRunning;
     if (stopBtn) stopBtn.disabled = !engagementDetail.slug || !engagementDetail.activeRunId || !runIsRunning;
+    updateGlobalFireButton();
   }
+
+  async function fireSelectedEngagementScenario() {
+    if (!engagementDetail.slug) {
+      toast('Select an engagement first', 'error');
+      return;
+    }
+    if (!engagementDetail.activeScenarioId) {
+      toast('Selected engagement has no scenario run to fire.', 'error');
+      return;
+    }
+    try {
+      const runId = await API.call('start_scenario_run', {
+        engagement_slug: engagementDetail.slug,
+        scenario_id: engagementDetail.activeScenarioId,
+      });
+      setTopbarProgress(0, 0, 'running');
+      toast(`Engagement run started: ${runId}`, 'success');
+      await loadRuns({
+        engagementSlug: engagementDetail.slug,
+        autoSelectFirst: true,
+        preferredRunId: runId,
+      });
+      setEngagementDetailTab('results');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  $('#btn-global-fire')?.addEventListener('click', async () => {
+    const btn = $('#btn-global-fire');
+    const action = resolveGlobalFireAction();
+    if (!action.enabled) {
+      toast(action.title, 'info');
+      updateGlobalFireButton();
+      return;
+    }
+
+    btn.dataset.busy = 'true';
+    updateGlobalFireButton();
+    try {
+      if (action.mode === 'request') {
+        await fireSelectedRequest();
+      } else if (action.mode === 'scenario') {
+        await fireSelectedScenario();
+      } else if (action.mode === 'engagement') {
+        await fireSelectedEngagementScenario();
+      }
+    } finally {
+      btn.dataset.busy = 'false';
+      updateGlobalFireButton();
+    }
+  });
 
   function highlightActiveEngagementCard(slug) {
     $$('#engagement-cards .target-card-row').forEach((c) => {
@@ -2283,6 +2549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     engagementDetail.name = result.name || eng.name;
     engagementDetail.activeRunId = null;
     engagementDetail.resultsByRunId.clear();
+    engagementDetail.activeScenarioId = null;
 
     $('#eng-detail-title').textContent = engagementDetail.name;
     $('#eng-detail-slug').textContent = `/engagements/${eng.slug}`;
@@ -2291,6 +2558,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#run-results-section').style.display = 'none';
     setEngagementDetailTab('results');
     highlightActiveEngagementCard(eng.slug);
+    updateGlobalFireButton();
 
     await hydrateEngagementDetailCatalogs();
     await loadRuns({ engagementSlug: eng.slug, autoSelectFirst: true, preferredRunId: selectRunId });
@@ -2396,9 +2664,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (activeEngagementSlug === eng.slug) {
         activeEngagementSlug = null;
         dbOpen = false;
-        $('#db-label').textContent = 'no engagement';
         $('#breadcrumb-engagement').textContent = 'no engagement open';
-        $('#engagement-dot').classList.remove('active');
       }
       // Also drop any archive shadow we kept for the row.
       unarchiveEngagementSlug(eng.slug);
@@ -2419,6 +2685,11 @@ document.addEventListener('DOMContentLoaded', () => {
       expectedRunTotals.set(runId, eventTotal);
     }
     const displayTotal = expectedRunTotals.get(runId) || (Number.isFinite(eventTotal) ? eventTotal : null);
+    setTopbarProgress(
+      Number.isFinite(Number(ev.seq)) ? Number(ev.seq) : 0,
+      displayTotal || 0,
+      ev.error ? 'error' : (ev.finished ? 'done' : 'running'),
+    );
 
     setLiveActivityState(runId, {
       seq: Number.isFinite(Number(ev.seq)) ? Number(ev.seq) : null,
@@ -2626,6 +2897,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (progressEl) {
               progressEl.textContent = `${p.completed}/${displayTotal || '?'}`;
             }
+            setTopbarProgress(
+              Number.isFinite(Number(p.completed)) ? Number(p.completed) : 0,
+              displayTotal || 0,
+              String(p.status || run.status || '').toLowerCase() === 'running' ? 'running' : 'done',
+            );
             if (errorsEl) {
               errorsEl.textContent = String(p.errors ?? 0);
               errorsEl.style.color = Number(p.errors || 0) > 0 ? 'var(--critical)' : 'var(--text-2)';
@@ -2798,6 +3074,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('#run-results-section').style.display = 'none';
         renderEngagementTimeline([]);
         renderEngagementReport([], null);
+        renderResultsTableHead([]);
         updateEngagementHeader(null, []);
         return;
       }
@@ -2907,14 +3184,22 @@ document.addEventListener('DOMContentLoaded', () => {
       const results = await API.call('get_results', { engagement_slug: engagementSlug, run_id: runId });
       const diagnostics = await API.call('get_run_diagnostics', { engagement_slug: engagementSlug, run_id: runId });
       engagementDetail.resultsByRunId.set(runId, results);
+      const runSummary = engagementDetail.runs.find(r => r.id === runId) || null;
+      const runIsRunning = String(runSummary?.status || '').toLowerCase() === 'running';
+      const resultColumns = resultColumnsForResults(results);
+      renderResultsTableHead(resultColumns);
       tbody.innerHTML = '';
       results.forEach((r) => {
-        const statusClass = r.error_message ? 'status-error' : 'status-ok';
         const pending = !r.error_message && (r.status_code == null || Number(r.status_code) === 0);
-        const statusText = r.error_message ? 'ERROR' : (pending ? 'PENDING' : `${r.status_code || '?'}`);
+        const running = runIsRunning && Number(r.status_code || 0) === 0;
+        const statusClass = r.error_message && !running ? 'status-error' : 'status-ok';
+        const statusText = running ? 'RUNNING' : (r.error_message ? 'ERROR' : (pending ? 'PENDING' : `${r.status_code || '?'}`));
         const reqMethod = String(r.request_method || '').toUpperCase();
         const reqUrl = String(r.request_url || '').trim();
         const requestText = [reqMethod, reqUrl].filter(Boolean).join(' ');
+        const metricCells = resultColumns
+          .map((col) => `<td>${esc(resultMetricValue(r, col) || '-')}</td>`)
+          .join('');
         const tr = document.createElement('tr');
         tr.className = 'clickable';
         tr.innerHTML = `
@@ -2923,9 +3208,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <td><code>${esc(r.prompt_id)}</code></td>
           <td><span class="${statusClass}">${statusText}</span></td>
           <td>${engagementVerdictBadgeHtml(r)}</td>
+          ${metricCells}
           <td><div class="cell-text">${esc(requestText || '-')}</div></td>
           <td><div class="cell-text">${esc(r.prompt_text)}</div></td>
-          <td><div class="cell-text">${esc(r.response_text || (pending ? '(pending)' : ''))}</div></td>
+          <td><div class="cell-text">${esc(r.response_text || (running ? '(running)' : (pending ? '(pending)' : '')))}</div></td>
           <td>${r.latency_ms != null ? r.latency_ms + 'ms' : '-'}</td>`;
         tr.addEventListener('click', () => showResultDetail(r));
         tbody.appendChild(tr);
@@ -2951,9 +3237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
-      const runSummary = engagementDetail.runs.find(r => r.id === runId) || null;
       const live = engagementRunActivity.get(runId) || null;
-      const runIsRunning = String(runSummary?.status || '').toLowerCase() === 'running';
 
       if (runIsRunning && results.length === 0) {
         const diagMessage = diagnostics?.notes?.length ? diagnostics.notes.join(' | ') : null;
@@ -3232,13 +3516,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function rerunRun(runId) {
     if (!engagementDetail.slug || !runId) return;
-    const targetId = engagementDetail.targetMatch?.id;
-    if (!targetId) {
-      toast('Re-run requires a known target mapping. Open a run tied to an existing target URL.', 'error');
-      return;
-    }
     await ensureRunResultsLoaded(runId);
     const source = engagementDetail.resultsByRunId.get(runId) || [];
+    const diagnostics = await API.call('get_run_diagnostics', {
+      engagement_slug: engagementDetail.slug,
+      run_id: runId,
+    }).catch(() => null);
+    const targetId = source.find(r => r.request_id)?.request_id
+      || diagnostics?.request_id
+      || engagementDetail.targetMatch?.id;
+    if (!targetId) {
+      toast('Re-run requires a known request mapping. Open a run tied to an existing request.', 'error');
+      return;
+    }
     const payloads = source
       .filter(r => String(r.prompt_text || '').trim())
       .map((r, idx) => ({
@@ -3258,6 +3548,7 @@ document.addEventListener('DOMContentLoaded', () => {
         parallelism: 4,
       });
       expectedRunTotals.set(newRunId, payloads.length);
+      setTopbarProgress(0, payloads.length, 'running');
       toast(`Re-run started: ${newRunId}`, 'success');
       await loadRuns({
         engagementSlug: engagementDetail.slug,
@@ -3359,6 +3650,79 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Result detail modal ────────────────────────────────────────────
+  const resultDetailSource = {
+    prompt: '',
+    request: '',
+  };
+
+  function renderPromptTemplateString(value, prompt) {
+    return String(value == null ? '' : value).replace(/\{\{\s*prompt\s*\}\}/g, prompt);
+  }
+
+  function renderPromptTemplateValue(value, prompt) {
+    if (typeof value === 'string') return renderPromptTemplateString(value, prompt);
+    if (Array.isArray(value)) return value.map(item => renderPromptTemplateValue(item, prompt));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, renderPromptTemplateValue(item, prompt)])
+      );
+    }
+    return value;
+  }
+
+  function formatRequestBodyForDetail(requestTemplate, prompt) {
+    if (!requestTemplate || !requestTemplate.body) return '';
+    const body = requestTemplate.body;
+    const format = String(body.format || 'json').toLowerCase();
+    const content = body.content;
+
+    if (format === 'json') {
+      const rendered = renderPromptTemplateValue(content ?? {}, prompt);
+      return JSON.stringify(rendered, null, 2);
+    }
+
+    if (format === 'raw' || format === 'text') {
+      if (typeof content === 'string') return renderPromptTemplateString(content, prompt);
+      return renderPromptTemplateString(JSON.stringify(content ?? ''), prompt);
+    }
+
+    const rendered = renderPromptTemplateValue(content ?? {}, prompt);
+    return typeof rendered === 'string' ? rendered : JSON.stringify(rendered, null, 2);
+  }
+
+  function formatResultRequestDetail(r) {
+    const method = String(r.request_method || r.request_template?.method || '').toUpperCase();
+    const url = String(r.request_url || r.request_template?.url || '').trim();
+    const headers = r.request_headers || {};
+    const body = formatRequestBodyForDetail(r.request_template, r.prompt_text || '');
+    const lines = [[method, url].filter(Boolean).join(' ')];
+
+    const headerLines = Object.entries(headers)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}: ${value}`);
+    if (headerLines.length) {
+      lines.push('', ...headerLines);
+    }
+
+    if (body) {
+      lines.push('', body);
+    } else if (Number(r.request_body_size || 0) > 0) {
+      lines.push('', `(body not available; recorded size ${r.request_body_size} bytes)`);
+    }
+
+    return lines.join('\n');
+  }
+
+  function setResultDetailSource(mode) {
+    const selected = mode === 'request' ? 'request' : 'prompt';
+    $$('#detail-source-tabs .tab').forEach(tab => {
+      const active = tab.dataset.detailSource === selected;
+      tab.classList.toggle('tab-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    $('#detail-source-text').textContent = resultDetailSource[selected] || '';
+  }
+
   function showResultDetail(r) {
     const statusText = r.error_message ? 'ERROR' : (r.status_code || 'N/A');
     const verdictText = String(r.judge_verdict || '').toUpperCase() || '—';
@@ -3396,8 +3760,18 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     $('#detail-summary').textContent = summaryBits.join(' · ');
-    $('#detail-prompt').textContent = r.prompt_text;
+    resultDetailSource.prompt = r.prompt_text || '';
+    resultDetailSource.request = formatResultRequestDetail(r);
+    setResultDetailSource('prompt');
     $('#detail-response').textContent = r.response_text || '(no response)';
+    const metrics = r.result_metrics || [];
+    $('#detail-metrics-section').style.display = metrics.length ? '' : 'none';
+    $('#detail-metrics').innerHTML = metrics.map((metric) => `
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">${esc(metric.label || metric.id || metric.path)}</span>
+        <div class="detail-meta-value">${esc(metric.value || 'â€”')}</div>
+      </div>
+    `).join('');
     $('#detail-meta').innerHTML = metaItems.map(([label, value]) => `
       <div class="detail-meta-item">
         <span class="detail-meta-label">${esc(label)}</span>
@@ -3406,6 +3780,12 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
     $('#result-detail').style.display = 'flex';
   }
+
+  $('#detail-source-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab[data-detail-source]');
+    if (!tab) return;
+    setResultDetailSource(tab.dataset.detailSource);
+  });
 
   $('#result-detail-close').addEventListener('click', () => {
     $('#result-detail').style.display = 'none';
@@ -3445,6 +3825,11 @@ document.addEventListener('DOMContentLoaded', () => {
           $('#sc-progress-completed').textContent = run.completed;
           $('#sc-progress-total').textContent = run.total_prompts;
           $('#sc-progress-errors').textContent = run.errors;
+          setTopbarProgress(
+            run.completed,
+            run.total_prompts,
+            run.status === 'running' ? 'running' : 'done',
+          );
           if (run.status !== 'running') stopProgressPoll();
         }
       } catch (err) { /* progress poll — transient errors are expected */ }

@@ -119,12 +119,6 @@ const API = (() => {
 
     get active_slug() { return _activeSlug; },
 
-    // ── Targets ─────────────────────────────────────────────────────
-
-    async list_targets() {
-      return invoke('list_targets');
-    },
-
     async get_app_settings() {
       return invoke('get_app_settings');
     },
@@ -141,11 +135,6 @@ const API = (() => {
           fields: fields || {},
         },
       });
-    },
-
-    async get_target({ id }) {
-      const targets = await invoke('list_targets');
-      return targets.find(t => t.id === id) || null;
     },
 
     // ── Bearer token (OS keychain) ───────────────────────────────────
@@ -293,6 +282,13 @@ const API = (() => {
       };
     },
 
+    async start_scenario_run({ engagement_slug, scenario_id }) {
+      return invoke('start_scenario_run', {
+        engagementSlug: engagement_slug || _activeSlug,
+        scenarioId: scenario_id,
+      });
+    },
+
     async stop_run({ engagement_slug, run_id }) {
       if (!run_id) throw new Error('No run selected to stop.');
       return invoke('stop_run', {
@@ -379,15 +375,58 @@ const API = (() => {
     async get_results({ engagement_slug, run_id }) {
       const attempts = await handlers.read_run_attempts({ engagement_slug, run_id });
       const verdicts = await handlers.read_run_verdicts({ engagement_slug, run_id });
+      const diagnostics = await handlers.get_run_diagnostics({ engagement_slug, run_id }).catch(() => null);
+      const requests = await handlers.list_requests().catch(() => []);
       const verdictBySeq = new Map((verdicts || []).map(v => [Number(v.seq), v]));
+      const primaryRequest = requests.find(req => req.id === diagnostics?.request_id) || null;
       const hasRepeat = attempts.some(a => (a.iteration || 1) > 1);
       const sorted = [...attempts].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+
+      const normalizeEndpoint = (value) => String(value || '').trim().replace(/\/+$/, '');
+      const matchingRequest = (attempt) => {
+        const method = String(attempt.request?.method || '').toUpperCase();
+        const url = normalizeEndpoint(attempt.request?.url);
+        const endpointMatch = requests.find(req =>
+          String(req.method || '').toUpperCase() === method &&
+          normalizeEndpoint(req.url) === url
+        );
+        return endpointMatch || primaryRequest;
+      };
+      const valueAtDotPath = (root, path) => {
+        if (!path) return undefined;
+        return String(path).split('.').filter(Boolean).reduce((value, part) => {
+          if (value == null) return undefined;
+          if (Array.isArray(value) && /^\d+$/.test(part)) return value[Number(part)];
+          if (typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, part)) {
+            return value[part];
+          }
+          return undefined;
+        }, root);
+      };
+      const extractMetrics = (responseText, requestTemplate) => {
+        const columns = requestTemplate?.response?.result_columns || [];
+        if (!columns.length || !String(responseText || '').trim()) return [];
+        let parsed;
+        try {
+          parsed = JSON.parse(responseText);
+        } catch (_err) {
+          return columns.map(col => ({ ...col, value: '' }));
+        }
+        return columns.map(col => {
+          const value = valueAtDotPath(parsed, col.path);
+          const rendered = value == null
+            ? ''
+            : (typeof value === 'object' ? JSON.stringify(value) : String(value));
+          return { ...col, value: rendered };
+        });
+      };
 
       return Promise.all(sorted.map(async a => {
         const response_text = a.response?.body_file
           ? (await handlers.read_response_body({ engagement_slug, run_id, seq: a.seq })) || ''
           : '';
         const judged = verdictBySeq.get(Number(a.seq)) || null;
+        const requestTemplate = matchingRequest(a);
 
         const iteration = a.iteration || 1;
         const stepId = a.step_id || a.payload_id || `seq-${a.seq}`;
@@ -405,8 +444,14 @@ const API = (() => {
           prompt_text: a.prompt_text || '',
           status_code: a.response?.status ?? 0,
           response_text,
+          request_id: requestTemplate?.id || diagnostics?.request_id || '',
+          request_template: requestTemplate || null,
+          result_columns: requestTemplate?.response?.result_columns || [],
+          result_metrics: extractMetrics(response_text, requestTemplate),
           request_url: a.request?.url || '',
           request_method: a.request?.method || '',
+          request_headers: a.request?.headers || {},
+          request_body_size: a.request?.body_size ?? null,
           sent_at: a.timing?.sent_at || '',
           received_at: a.timing?.received_at || '',
           error_message: a.response?.error || null,

@@ -285,19 +285,19 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
 
 ### 2.4  Tauri commands
 
-- [⚠️] **Drop legacy commands:** most are already gone. Only
-      `list_targets` is still registered in `main.rs:66` (backed by
-      `crates/hamm0r/src/commands/targets.rs`); the rest
-      (`save_target`, `delete_target`, `get_target_meta`,
-      `save_target_meta`, `acquire_target_auth`,
-      `test_target_connection`, `list_target_requests`, target-scoped
-      `save_request`/`delete_request`) are not in the invoke handler
-      list anymore. Final cleanup: remove `list_targets` + the
-      `targets` module + the legacy `Target` enum variants in
-      `RequestReference`.
-- [ ] **Drop `start_run`** (the flat-payload entry the wizard used).
-      Still registered in `main.rs:79`. Wizard is gone; no UI caller
-      should remain. Safe to remove.
+- [x] **Drop legacy commands:** done. `list_targets` and its
+      `commands/targets.rs` module are removed; the rest of the
+      Target-scoped commands had already been deregistered. The
+      legacy `RequestReference::Target` variant in
+      `crates/storage/src/requests.rs` stays — migration v2 still
+      reads legacy Target YAML at upgrade time, and `references()`
+      uses it to warn the user before deleting a Request that an
+      un-migrated Target points at.
+- [⚠️] **`start_run` is NOT dead** (RefactorPlan was wrong). It
+      backs the Engagement detail "Re-run" button (see
+      `ui/js/app.js`, `start_run` call inside the rerun handler).
+      Keeping it. The flat-payload shape pre-dates `start_scenario_run`
+      but still serves a real UI flow.
 - [x] **`start_scenario_run` is now the only matrix launcher.** It
       detects `request_ids` + `library` and dispatches to the new
       `dispatch_matrix_scenario`; legacy step-based scenarios still
@@ -362,13 +362,9 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
 ## What's still open — work-list
 
 1. **End-to-end Playwright spec** for the auth-chain matrix flow.
-   Closes the Definition of Done for Phase 2.
-2. **Remove `list_targets`** Tauri command + `commands/targets.rs`
-   module + legacy `RequestReference::Target` variant. Wizard and
-   Targets view are gone; nothing should still call this.
-3. **Remove `start_run`** Tauri command (the flat-payload entry the
-   wizard used). `start_scenario_run` is the only matrix launcher
-   now.
+   Closes the Definition of Done for Phase 2. Owned by the
+   `hamm0r-testmanager` MCP workflow (`/sync-tests`), not by ad-hoc
+   spec writing.
 
 The polish items below all shipped:
 

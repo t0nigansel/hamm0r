@@ -63,7 +63,6 @@ fn main() {
             commands::library::create_prompt,
             commands::library::update_prompt,
             commands::library::delete_prompt,
-            commands::targets::list_targets,
             commands::scenarios::list_scenarios,
             commands::scenarios::create_scenario,
             commands::scenarios::get_scenario,
