@@ -22,6 +22,10 @@ const BUNDLED: &[(&str, &str)] = &[
         "baselines.yaml",
         include_str!("../../../../prompts/baselines.yaml"),
     ),
+    (
+        "unbounded-consumption.yaml",
+        include_str!("../../../../prompts/unbounded-consumption.yaml"),
+    ),
 ];
 
 #[derive(Debug, Serialize)]
