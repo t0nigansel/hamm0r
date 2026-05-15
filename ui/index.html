@@ -101,17 +101,9 @@
          ============================================================== -->
     <section id="view-home" class="view">
       <div class="landing-wrap">
-        <div class="landing-cta-grid">
-          <button id="btn-home-run-scenario" class="landing-card landing-card-primary">
-            <span class="landing-eyebrow">Run</span>
-            <strong>Run a Scenario</strong>
-            <span>Pick a saved Scenario; fires into a fresh engagement.</span>
-          </button>
-          <button id="btn-home-open-scenarios" class="landing-card">
-            <span class="landing-eyebrow">Build</span>
-            <strong>Open Scenarios</strong>
-            <span>Compose a new Scenario — Requests × library.</span>
-          </button>
+        <div class="landing-cta-grid" id="home-cta-grid">
+          <!-- Populated by updateHomeCtas() — tiles adapt to whether the
+               user has Requests / runnable Scenarios yet. -->
         </div>
 
         <div id="analyzer-cta-card" class="analyzer-cta" style="display:none">

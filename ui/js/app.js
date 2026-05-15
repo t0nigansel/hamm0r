@@ -438,6 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       // Not running inside Tauri yet — ok in dev
     } finally {
+      updateHomeCtas();
       loadHomeRecentEngagements();
     }
   }
@@ -475,7 +476,10 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#breadcrumb-view').textContent = VIEW_LABELS[viewId] || viewId;
 
 
-    if (viewId === 'view-home') loadHomeRecentEngagements();
+    if (viewId === 'view-home') {
+      updateHomeCtas();
+      loadHomeRecentEngagements();
+    }
     if (viewId === 'view-prompts') loadPrompts();
     if (viewId === 'view-requests') loadRequestList();
     if (viewId === 'view-engagements') loadEngagementList();
@@ -722,7 +726,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return hasRequests && hasLibrary;
   }
 
-  $('#btn-home-run-scenario')?.addEventListener('click', async () => {
+  async function openScenarioPicker() {
     const list = $('#run-scenario-picker-list');
     $('#run-scenario-picker').style.display = 'flex';
     list.innerHTML = '<div class="eng-list-empty">loading…</div>';
@@ -753,10 +757,78 @@ document.addEventListener('DOMContentLoaded', () => {
       closeRunScenarioPicker();
       toast(err.message, 'error');
     }
+  }
+
+  const HOME_CTA_ACTIONS = {
+    run_scenario: openScenarioPicker,
+    open_scenarios: () => showView('view-scenarios'),
+    open_requests: () => showView('view-requests'),
+    open_prompts: () => showView('view-prompts'),
+  };
+
+  // Render the two Home tiles based on what the user has in their workspace.
+  // Three states: no Requests yet, Requests but no runnable Scenarios, ready.
+  // Tiles carry a data-cta-action attribute; one delegated handler dispatches.
+  async function updateHomeCtas() {
+    const grid = $('#home-cta-grid');
+    if (!grid) return;
+
+    let requestCount = 0;
+    let runnableScenarioCount = 0;
+    try {
+      const [requests, scenarios] = await Promise.all([
+        API.call('list_requests', {}),
+        API.call('list_scenarios', {}),
+      ]);
+      requestCount = requests.length;
+      runnableScenarioCount = scenarios.filter(isScenarioRunnable).length;
+    } catch (_) {
+      // On failure, fall through to the "ready" tiles — they degrade gracefully.
+      runnableScenarioCount = 1;
+    }
+
+    let tiles;
+    if (requestCount === 0) {
+      tiles = [
+        { action: 'open_requests', primary: true, eyebrow: 'Start', title: 'Create your first Request',
+          desc: 'Define an HTTP endpoint to attack. An Ollama starter is bundled.' },
+        { action: 'open_prompts', primary: false, eyebrow: 'Browse', title: 'Explore the Prompt library',
+          desc: 'Look at the bundled OWASP attacks before you build a Request.' },
+      ];
+    } else if (runnableScenarioCount === 0) {
+      tiles = [
+        { action: 'open_scenarios', primary: true, eyebrow: 'Build', title: 'Create your first Scenario',
+          desc: 'Compose a Request × prompts matrix — that’s what gets fired.' },
+        { action: 'open_requests', primary: false, eyebrow: 'Manage', title: 'Edit Requests',
+          desc: 'Adjust the Requests you have saved so far.' },
+      ];
+    } else {
+      tiles = [
+        { action: 'run_scenario', primary: true, eyebrow: 'Run', title: 'Run a Scenario',
+          desc: 'Pick a saved Scenario; fires into a fresh engagement.' },
+        { action: 'open_scenarios', primary: false, eyebrow: 'Build', title: 'Open Scenarios',
+          desc: 'Compose a new Scenario — Requests × prompts.' },
+      ];
+    }
+
+    grid.innerHTML = tiles.map(t => `
+      <button class="landing-card${t.primary ? ' landing-card-primary' : ''}" data-cta-action="${t.action}">
+        <span class="landing-eyebrow">${t.eyebrow}</span>
+        <strong>${t.title}</strong>
+        <span>${t.desc}</span>
+      </button>
+    `).join('');
+  }
+
+  $('#home-cta-grid')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-cta-action]');
+    if (!btn) return;
+    const fn = HOME_CTA_ACTIONS[btn.dataset.ctaAction];
+    if (fn) fn();
   });
+
   $('#run-scenario-picker-close')?.addEventListener('click', closeRunScenarioPicker);
   $('#run-scenario-picker-cancel')?.addEventListener('click', closeRunScenarioPicker);
-  $('#btn-home-open-scenarios')?.addEventListener('click', () => showView('view-scenarios'));
   $('#btn-home-refresh-recents')?.addEventListener('click', () => {
     loadHomeRecentEngagements();
   });
