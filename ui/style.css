@@ -831,7 +831,7 @@ input, select, textarea {
 .view.active { display: flex; flex-direction: column; }
 
 #view-targets.view.active,
-#view-library.view.active,
+#view-prompts.view.active,
 #view-scenarios.view.active,
 #view-runs.view.active {
   overflow: visible;
@@ -3177,7 +3177,7 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
 /* ═══════════════════════════════════════════════════════════════════════
    Library view layout
    ═══════════════════════════════════════════════════════════════════════ */
-#view-library.view.active { display: flex; flex-direction: column; overflow: hidden; }
+#view-prompts.view.active { display: flex; flex-direction: column; overflow: hidden; }
 
 .lib-layout {
   display: flex;

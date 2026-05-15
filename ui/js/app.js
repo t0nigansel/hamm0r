@@ -117,7 +117,7 @@ document.addEventListener('click', (e) => {
     return;
   }
 
-  // Requests view: "+" button and "Create your first request" CTA.
+  // Requests view: "+" button and "Create request" CTA.
   if (target.closest?.('#btn-new-request, #btn-request-get-started')) {
     if (typeof window.__hamm0r.startNewRequest === 'function') {
       window.__hamm0r.startNewRequest();
@@ -457,7 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const VIEW_LABELS = {
     'view-home': 'home',
     'view-requests': 'requests',
-    'view-library': 'library',
+    'view-prompts': 'prompts',
     'view-scenarios': 'scenarios',
     'view-runs': 'runs',
   };
@@ -476,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     if (viewId === 'view-home') loadHomeRecentEngagements();
-    if (viewId === 'view-library') loadPrompts();
+    if (viewId === 'view-prompts') loadPrompts();
     if (viewId === 'view-requests') loadRequestList();
     if (viewId === 'view-runs') loadEngagementList();
     if (viewId !== 'view-runs') {

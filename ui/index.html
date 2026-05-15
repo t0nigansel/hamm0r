@@ -64,14 +64,14 @@
       </svg>
       <span class="label">Requests</span>
     </button>
-    <button class="nav-item sidebar-item" data-view="view-library" title="Libraries">
+    <button class="nav-item sidebar-item" data-view="view-prompts" title="Prompts">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m16 6 4 14" />
         <path d="M12 6v14" />
         <path d="M8 8v12" />
         <path d="M4 4v16" />
       </svg>
-      <span class="label">Libraries</span>
+      <span class="label">Prompts</span>
     </button>
     <button class="nav-item sidebar-item" data-view="view-scenarios" title="Scenarios">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -163,7 +163,7 @@
               <code>{{prompt}}</code> in the body to mark where attack payloads
               get substituted at run time.
             </p>
-            <button id="btn-request-get-started" class="btn btn-primary" style="margin-top:1.5rem;">+ Create your first request</button>
+            <button id="btn-request-get-started" class="btn btn-primary" style="margin-top:1.5rem;">+ Create request</button>
           </div>
 
           <form id="request-form" style="display:none">
@@ -362,7 +362,7 @@
     <!-- ==============================================================
          T-22 · Library view (reskinned)
          ============================================================== -->
-    <section id="view-library" class="view">
+    <section id="view-prompts" class="view">
       <div class="lib-layout">
 
         <!-- Header: chip filters + search + actions -->
@@ -504,7 +504,7 @@
             <p class="muted" style="margin:0.5rem 0 1.5rem 0;font-size:12px;">
               Pick a scenario from the list, or click below to start a new one.
             </p>
-            <button id="btn-scenario-get-started" class="btn btn-primary">+ Create your first scenario</button>
+            <button id="btn-scenario-get-started" class="btn btn-primary">+ Create scenario</button>
           </div>
 
           <div id="scenario-builder" style="display:none">
