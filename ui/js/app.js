@@ -1947,6 +1947,16 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="target-card-name">${esc(s.name || s.id)}</div>
           <div class="target-card-url">${esc(s.id)}</div>`;
         li.addEventListener('click', () => openScenario(s.id));
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn-icon btn-row-copy';
+        copyBtn.title = 'Copy scenario';
+        copyBtn.setAttribute('aria-label', 'Copy scenario');
+        copyBtn.innerHTML = ICONS.copy;
+        copyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          copyScenarioFromList(s.id);
+        });
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'btn-icon btn-row-delete';
@@ -1957,11 +1967,24 @@ document.addEventListener('DOMContentLoaded', () => {
           e.stopPropagation();
           deleteScenarioFromUi(s);
         });
+        li.appendChild(copyBtn);
         li.appendChild(deleteBtn);
         ul.appendChild(li);
       });
       if (empty) empty.style.display = scenarios.length === 0 ? '' : 'none';
     } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function copyScenarioFromList(id) {
+    try {
+      const copy = await API.call('copy_scenario', { id });
+      currentScenarioId = copy.id;
+      toast(`Copied scenario '${copy.name}'`, 'success');
+      await loadScenarioList();
+      openScenario(copy.id);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
   async function createNewScenario() {

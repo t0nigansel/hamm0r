@@ -266,6 +266,33 @@ const API = (() => {
       return { ok: true };
     },
 
+    async copy_scenario({ id }) {
+      const [source, map] = await Promise.all([
+        invoke('get_scenario', { id }),
+        invoke('list_scenarios'),
+      ]);
+      if (!source) throw new Error(`Scenario '${id}' not found`);
+
+      const existing = new Set(Object.values(map).map(s => s.id));
+      const base = `${String(source.id || 'scenario').replace(/-copy-\d+$/, '')}-copy`;
+      let newId = base;
+      if (existing.has(newId)) {
+        for (let n = 2; n < 10000; n += 1) {
+          const candidate = `${base}-${n}`;
+          if (!existing.has(candidate)) { newId = candidate; break; }
+        }
+        if (newId === base) newId = `${base}-${Date.now()}`;
+      }
+
+      const clone = {
+        ...JSON.parse(JSON.stringify(source)),
+        id: newId,
+        name: `${source.name || source.id} Copy`,
+      };
+      const saved = await invoke('save_scenario', { scenario: clone });
+      return toUiScenario(saved);
+    },
+
     // ── Run / fire ───────────────────────────────────────────────────
 
     async start_scenario({ scenario_id }) {
