@@ -2631,7 +2631,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('#eng-detail-title').textContent = engagementDetail.name;
     $('#eng-detail-slug').textContent = `/engagements/${eng.slug}`;
-    $('#runs-empty').style.display = 'none';
+    setHidden($('#runs-empty'), true);
+    setHidden($('#engagements-welcome'), true);
     $('#eng-detail').style.display = '';
     $('#run-results-section').style.display = 'none';
     setEngagementDetailTab('results');
@@ -2656,9 +2657,15 @@ document.addEventListener('DOMContentLoaded', () => {
       container.innerHTML = '';
       if (engagements.length === 0) {
         container.innerHTML = '<div style="padding:12px 14px;font-family:var(--mono);font-size:11px;color:var(--text-3);">no engagements yet</div>';
-        renderRunsViewEmptyState('Select an engagement to view its runs.');
+        setHidden($('#runs-empty'), true);
+        setHidden($('#eng-detail'), true);
+        setHidden($('#engagements-welcome'), false);
+        updateEngagementActionButtons(null);
         return;
       }
+
+      // At least one engagement exists — hide the cold-start welcome.
+      setHidden($('#engagements-welcome'), true);
 
       engagements.forEach((eng) => {
         const card = document.createElement('div');
@@ -2710,6 +2717,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   $('#btn-runs-new-engagement').addEventListener('click', openEngagementDialog);
+  $('#btn-engagement-get-started')?.addEventListener('click', openEngagementDialog);
 
   async function deleteEngagementFromUi(eng) {
     if (!eng || !eng.slug) return;
