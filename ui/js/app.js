@@ -683,7 +683,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   $('#btn-new-engagement').addEventListener('click', openEngagementDialog);
-  $('#btn-open-engagement').addEventListener('click', openEngagementDialog);
   // Phase 2 of docs/RefactorPlan.md: wizard removed. Home CTAs route to
   // Scenarios; "+" buttons open the lightweight engagement-dialog directly.
   function closeRunScenarioPicker() {
