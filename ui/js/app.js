@@ -1262,6 +1262,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Currently-active tag filter for the Requests list. '' = ALL.
+  let requestTagFilter = '';
+
+  function renderRequestTagFilter(allRequests) {
+    const bar = $('#request-tag-filter');
+    if (!bar) return;
+
+    const tags = Array.from(new Set(
+      allRequests.map(r => (r.tag || '').trim()).filter(Boolean)
+    )).sort();
+
+    // Only show the bar if there's something to filter — single-tag or
+    // all-untagged lists don't benefit from a one-option chip bar.
+    if (tags.length === 0) {
+      setHidden(bar, true);
+      bar.innerHTML = '';
+      requestTagFilter = '';
+      return;
+    }
+
+    setHidden(bar, false);
+    const untaggedCount = allRequests.filter(r => !(r.tag || '').trim()).length;
+    const chips = [
+      `<button class="chip${requestTagFilter === '' ? ' active' : ''}" data-tag="">ALL</button>`,
+      ...tags.map(t => `<button class="chip${requestTagFilter === t ? ' active' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`),
+    ];
+    if (untaggedCount > 0) {
+      chips.push(`<button class="chip${requestTagFilter === '__untagged__' ? ' active' : ''}" data-tag="__untagged__">UNTAGGED</button>`);
+    }
+    bar.innerHTML = chips.join('');
+  }
+
+  $('#request-tag-filter')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip[data-tag]');
+    if (!chip) return;
+    requestTagFilter = chip.dataset.tag;
+    loadRequestList();
+  });
+
   async function loadRequestList(selectAfter = '') {
     const list = $('#request-list');
     list.innerHTML = '';
@@ -1273,16 +1312,28 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    renderRequestTagFilter(requests);
+
+    const filtered = requests.filter(r => {
+      if (requestTagFilter === '') return true;
+      const tag = (r.tag || '').trim();
+      if (requestTagFilter === '__untagged__') return tag === '';
+      return tag === requestTagFilter;
+    });
+
     $('#request-empty').style.display = requests.length === 0 ? '' : 'none';
 
-    requests.forEach(r => {
+    filtered.forEach(r => {
       const li = document.createElement('li');
       li.className = 'target-card-row';
       if (r.id === requestEditor.currentId) li.classList.add('active');
       li.dataset.id = r.id;
       const urlShort = (r.url || '').replace(/^https?:\/\//, '');
+      const tagBadge = (r.tag || '').trim()
+        ? `<span class="tag" style="margin-left:6px;font-size:10px;opacity:0.75;">${esc(r.tag)}</span>`
+        : '';
       li.innerHTML = `
-        <div class="target-card-name">${esc(r.name || r.id)}</div>
+        <div class="target-card-name">${esc(r.name || r.id)}${tagBadge}</div>
         <div class="target-card-url">${esc(r.method || 'POST')} · ${esc(urlShort)}</div>`;
       li.addEventListener('click', () => openRequestEditor(r.id));
       const copyBtn = document.createElement('button');
