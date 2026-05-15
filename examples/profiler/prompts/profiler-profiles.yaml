@@ -51,4 +51,611 @@
   severity: LOW
   mode: single
   tags: [profiler, profile, calibration, perfect-match]
-  source: profiler-ng-qa/calib_perfect.json
+
+- id: profile-senior-testmanager-banking
+  text: |-
+    Position: Senior Testmanager Banking
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Senior Testmanager Core-Banking-Migration | 2017-08-01
+      Testmanagement-Verantwortung für eine Core-Banking-Migration bei einer deutschen Großbank. Steuerung von 8 Testkoordinatoren und 30 Testern, jährliches Testbudget 1,4 Mio EUR. Erstellung von Teststrategie, Testkonzept und Testplänen über 3 Release-Zyklen. Aufbau Testdatenmanagement nach BAIT-Anforderungen, Eskalation von Testrisiken an Programmleitung.
+      Skills: Testmanagement (SEHR_GUT) [Testmanagement], Teststrategie (SEHR_GUT) [Testmanagement], Testdatenmanagement (SEHR_GUT) [Testmanagement], HP ALM (SEHR_GUT) [Testmanagement], Jira (SEHR_GUT) [Defektmanagement], BAIT (GUT) [Compliance], Kundenkommunikation (SEHR_GUT) [Soft Skills], Risikomanagement (SEHR_GUT) [Testmanagement]
+
+    - Testmanager Zahlungsverkehr | 2012-04-01
+      Testmanagement im Zahlungsverkehr (SEPA/SWIFT) bei einer Privatbank. Koordination von 12 Testern, Steuerung der Releases im klassischen V-Modell. Reporting an die Linienführung.
+      Skills: V-Modell (SEHR_GUT) [Vorgehensmodelle], SEPA (GUT) [Banking], HP ALM (SEHR_GUT) [Testmanagement], Testkoordination (SEHR_GUT) [Testmanagement], Reporting (SEHR_GUT) [Testmanagement]
+
+    Ausbildung:
+    - Wirtschaftsinformatik | 2002-10-01 - 2007-09-30 | Diplom-Wirtschaftsinformatiker (Uni)
+
+    Projekte:
+    - Migration auf neues Kernbankensystem
+      Gesamtverantwortung Testmanagement, 5400 Testfälle, 18 Monate, Budget eingehalten.
+      Skills: Testmanagement (SEHR_GUT) [Testmanagement], Banking-Domäne (SEHR_GUT) [Banking], Stakeholder-Management (SEHR_GUT) [Soft Skills]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2009-05-01
+    - ISTQB Certified Tester Advanced Level Test Manager (CTAL-TM) | true | 2014-11-01
+    - PRINCE2 Practitioner | true | 2016-03-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, banking, senior, testmanager]
+
+- id: profile-mid-testmanager-versicherung
+  text: |-
+    Position: Testmanager Versicherung
+
+    Sprachen: Deutsch (Muttersprache), Englisch (B2)
+
+    Werdegang:
+    - Testmanager Bestandsführung | 2020-06-01
+      Testmanagement für ein Bestandsführungssystem in der Lebensversicherung. Steuerung von 5 Testern, Testfallerstellung in Xray, Testdurchführung in agilen Sprints.
+      Skills: Testmanagement (GUT) [Testmanagement], Xray (SEHR_GUT) [Testmanagement], Jira (SEHR_GUT) [Defektmanagement], Scrum (SEHR_GUT) [Vorgehensmodelle], Testkonzept (GUT) [Testmanagement]
+
+    - Testkoordinator | 2017-01-01
+      Koordination der Testdurchführungen im Bereich Schaden/Leistung. Testfallerstellung, Defektmanagement, Reporting an die Projektleitung.
+      Skills: Testkoordination (GUT) [Testmanagement], HP QC (GUT) [Testmanagement], Jira (SEHR_GUT) [Defektmanagement], Testfallerstellung (SEHR_GUT) [Testing]
+
+    Ausbildung:
+    - Versicherungsfachmann (IHK) | 2014-09-01 - 2017-01-31 | Ausbildung
+
+    Projekte:
+    - Einführung agiler Testmethoden
+      Migration eines bestehenden V-Modell-Testprozesses zu Scrum. Einführung von Xray, Schulung der Tester.
+      Skills: Scrum (SEHR_GUT) [Vorgehensmodelle], Xray (SEHR_GUT) [Testmanagement], Coaching (GUT) [Soft Skills]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2018-10-01
+    - Professional Scrum Master I (PSM I) | true | 2021-02-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, insurance, mid, testmanager]
+
+- id: profile-junior-tester-ecommerce
+  text: |-
+    Position: Junior Tester E-Commerce
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Junior QA Engineer | 2024-02-01
+      Manuelle und teilautomatisierte Tests einer Shop-Plattform. Erstellung von Testfällen in Jira/Xray, Bug-Reporting, einfache UI-Automatisierung mit Cypress.
+      Skills: Cypress (MITTEL) [Testautomation], Jira (GUT) [Defektmanagement], Xray (MITTEL) [Testmanagement], Manuelles Testing (GUT) [Testing], Shopify (MITTEL) [E-Commerce]
+
+    - Werkstudent Software-Test | 2022-09-01
+      Unterstützung des QA-Teams bei Regressionstests und Datenpflege.
+      Skills: Regressionstest (GUT) [Testarten], Excel (GUT) [MS Office], Teamarbeit (SEHR_GUT) [Soft Skills]
+
+    Ausbildung:
+    - Medieninformatik | 2020-10-01 - 2024-01-31 | Bachelor of Science
+
+    Projekte:
+    - Black-Friday-Lasttest-Vorbereitung
+      Erstellung manueller Smoke-Test-Pläne für die Black-Friday-Kampagne. Unterstützung bei der Auswertung.
+      Skills: Smoke-Test (GUT) [Testarten], Dokumentation (GUT) [Soft Skills]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2024-05-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, ecommerce, junior, tester]
+
+- id: profile-testautomation-engineer-web
+  text: |-
+    Position: Test Automation Engineer Web
+
+    Sprachen: Deutsch (C2), Englisch (C1)
+
+    Werdegang:
+    - Senior Test Automation Engineer | 2021-03-01
+      Aufbau und Wartung von Playwright- und Cypress-Frameworks für eine SaaS-Plattform. Integration in GitLab CI, Page-Object-Pattern, ~1800 automatisierte E2E-Tests. Mentoring von 3 Junior-Automatisierern.
+      Skills: Playwright (SEHR_GUT) [Testautomation], Cypress (SEHR_GUT) [Testautomation], TypeScript (SEHR_GUT) [Programmierung], GitLab CI (SEHR_GUT) [CI/CD], Docker (GUT) [DevOps], Page Object Pattern (SEHR_GUT) [Testautomation], Mentoring (GUT) [Soft Skills]
+
+    - Test Automation Engineer | 2019-06-01
+      Selenium/WebdriverIO-Automation für ein CRM-System. Wartung von ca. 600 Testfällen, Reduktion Flaky-Tests von 12% auf <2%.
+      Skills: Selenium (SEHR_GUT) [Testautomation], WebdriverIO (SEHR_GUT) [Testautomation], JavaScript (SEHR_GUT) [Programmierung], Jenkins (GUT) [CI/CD]
+
+    Ausbildung:
+    - Informatik | 2014-10-01 - 2019-03-31 | Bachelor of Science (FH)
+
+    Projekte:
+    - Migration Selenium → Playwright
+      Migration eines bestehenden Selenium-Frameworks (600 Tests) zu Playwright, Reduktion der Laufzeit um 60%.
+      Skills: Playwright (SEHR_GUT) [Testautomation], Selenium (SEHR_GUT) [Testautomation], Refactoring (SEHR_GUT) [Programmierung]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level Agile Tester (CTFL-AT) | true | 2020-04-01
+    - ISTQB Certified Tester Advanced Level Test Automation Engineering (CTAL-TAE) | true | 2022-09-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, automation, web, senior]
+
+- id: profile-performance-tester
+  text: |-
+    Position: Performance Test Engineer
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Performance Test Lead | 2018-11-01
+      Last- und Performancetests für eine Online-Banking-Plattform mit Spitzen >50.000 concurrent users. Aufbau eines k6-basierten Test-Suites mit Grafana-Reporting, Tuning von SQL-Queries und JVM-Parametern in enger Zusammenarbeit mit Entwicklung.
+      Skills: k6 (SEHR_GUT) [Performance Testing], Gatling (SEHR_GUT) [Performance Testing], JMeter (SEHR_GUT) [Performance Testing], Grafana (SEHR_GUT) [Monitoring], InfluxDB (GUT) [Monitoring], JVM Tuning (GUT) [Performance], SQL Tuning (GUT) [Performance]
+
+    - Performance-Tester | 2014-01-01
+      JMeter-basierte Lasttests im SAP-Umfeld. Erstellung von Performance-Reports, Auswertung gegen NFR-Vorgaben.
+      Skills: JMeter (SEHR_GUT) [Performance Testing], SAP GUI (GUT) [SAP], Auswertung (SEHR_GUT) [Performance Testing]
+
+    Ausbildung:
+    - Informatik | 2008-10-01 - 2013-09-30 | Master of Science
+
+    Projekte:
+    - Performance-Tuning Online-Banking
+      Reduktion p95-Latenz von 1,8s auf 420ms unter Volllast durch koordiniertes Tuning.
+      Skills: Performance-Analyse (SEHR_GUT) [Performance Testing], Tuning (SEHR_GUT) [Performance], Stakeholder-Reporting (SEHR_GUT) [Soft Skills]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2014-06-01
+    - ISTQB Certified Tester Performance Testing (CT-PT) | true | 2019-08-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, performance, senior]
+
+- id: profile-security-tester
+  text: |-
+    Position: Senior Security Tester
+
+    Sprachen: Deutsch (C2), Englisch (C2)
+
+    Werdegang:
+    - Senior Penetration Tester | 2016-09-01
+      Penetration Testing von Web- und API-Anwendungen für Banken, Versicherungen und Healthcare-Kunden. OWASP Top 10, OWASP API Security, manuelle und tool-gestützte Tests mit Burp Suite Pro und ZAP. Reporting nach CVSS, Stakeholder-Workshops.
+      Skills: Burp Suite (SEHR_GUT) [Security Testing], OWASP ZAP (SEHR_GUT) [Security Testing], OWASP Top 10 (SEHR_GUT) [Security Testing], API Security Testing (SEHR_GUT) [Security Testing], CVSS (SEHR_GUT) [Security Testing], SAST (GUT) [Security Testing], Nessus (GUT) [Security Testing]
+
+    - Application Security Engineer | 2013-04-01
+      Aufbau eines SAST/DAST-Pipelines in einem DevSecOps-Setup. Schulung von 25 Entwicklern in Secure Coding.
+      Skills: SonarQube (SEHR_GUT) [SAST], DevSecOps (SEHR_GUT) [Security Testing], Secure Coding (SEHR_GUT) [Security Testing], Coaching (GUT) [Soft Skills]
+
+    Ausbildung:
+    - IT-Security | 2007-10-01 - 2012-09-30 | Master of Science (TU)
+
+    Projekte:
+    - Red-Team-Engagement Großbank
+      6-wöchiges Red-Team-Engagement mit Initial Access via Phishing → Domain Admin.
+      Skills: Red Teaming (SEHR_GUT) [Security Testing], Social Engineering (GUT) [Security Testing], Active Directory (GUT) [Infrastruktur]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2013-01-01
+    - ISTQB Certified Tester Advanced Level Security Tester (CTAL-SEC) | true | 2017-05-01
+    - Offensive Security Certified Professional (OSCP) | true | 2018-10-01
+    - Burp Suite Certified Practitioner | true | 2022-03-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, security, senior]
+
+- id: profile-mobile-tester
+  text: |-
+    Position: Mobile Test Engineer
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Mobile QA Engineer | 2020-04-01
+      Test einer iOS/Android-Banking-App. Automation mit Appium und XCUITest, manuelles exploratives Testing auf >40 Realgeräten via BrowserStack. Accessibility-Tests gegen WCAG.
+      Skills: Appium (SEHR_GUT) [Testautomation], XCUITest (GUT) [Testautomation], Espresso (GUT) [Testautomation], BrowserStack (SEHR_GUT) [Testing], Charles Proxy (SEHR_GUT) [Testing], WCAG (GUT) [Accessibility], iOS (SEHR_GUT) [Mobile], Android (SEHR_GUT) [Mobile]
+
+    - Junior Tester | 2018-10-01
+      Manuelles Testing einer E-Commerce-App, Bug-Reproduktion über Logcat und Xcode Instruments.
+      Skills: Manuelles Testing (SEHR_GUT) [Testing], Logcat (GUT) [Mobile], Xcode (GUT) [Mobile]
+
+    Ausbildung:
+    - Fachinformatiker Anwendungsentwicklung | 2015-08-01 - 2018-07-31 | Ausbildung (IHK)
+
+    Projekte:
+    - Accessibility-Audit Banking-App
+      Komplettes WCAG-2.1-AA-Audit, Befundung von 38 Findings, Remediation-Begleitung über 2 Releases.
+      Skills: WCAG (SEHR_GUT) [Accessibility], VoiceOver (SEHR_GUT) [Accessibility], TalkBack (SEHR_GUT) [Accessibility]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2019-06-01
+    - ISTQB Certified Tester Mobile Application Testing (CT-MAT) | true | 2021-11-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, mobile, mid]
+
+- id: profile-agile-test-lead
+  text: |-
+    Position: Agile Test Lead (SAFe)
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Agile Test Lead | 2019-01-01
+      Test Lead in einer SAFe-Organisation (4 ARTs, 35 Teams). Verantwortung für Test-Strategie auf Programm-Ebene, Coaching von 8 QA-Leads, Aufbau gemeinsamer Test-Automatisierungs-Standards.
+      Skills: SAFe (SEHR_GUT) [Vorgehensmodelle], Scrum (SEHR_GUT) [Vorgehensmodelle], Kanban (SEHR_GUT) [Vorgehensmodelle], Test Strategy (SEHR_GUT) [Testmanagement], Coaching (SEHR_GUT) [Soft Skills], Stakeholder-Management (SEHR_GUT) [Soft Skills]
+
+    - Scrum Master & Tester | 2015-07-01
+      Dual-Rolle Scrum Master/QA in einem agilen Versicherungs-Team. Aufbau Definition-of-Done, Testautomatisierung in Karate (API) und Selenide (UI).
+      Skills: Karate (SEHR_GUT) [API Testing], Selenide (GUT) [Testautomation], Scrum (SEHR_GUT) [Vorgehensmodelle], Definition of Done (SEHR_GUT) [Vorgehensmodelle]
+
+    Ausbildung:
+    - BWL | 2008-10-01 - 2012-07-31 | Bachelor of Arts
+
+    Projekte:
+    - SAFe-Rollout in 4 ARTs
+      Begleitung eines SAFe-Rollouts, inkl. Definition gemeinsamer Test-Definitions-of-Done und Inspect&Adapt-Workshops.
+      Skills: SAFe (SEHR_GUT) [Vorgehensmodelle], Workshop-Moderation (SEHR_GUT) [Soft Skills], Change Management (GUT) [Soft Skills]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2014-09-01
+    - ISTQB Certified Tester Foundation Level Agile Tester (CTFL-AT) | true | 2016-02-01
+    - ISTQB Agile Test Leadership at Scale | true | 2021-06-01
+    - SAFe 5 Practitioner Consultant (SPC) | true | 2020-04-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, agile, lead, senior]
+
+- id: profile-embedded-automotive-tester
+  text: |-
+    Position: Embedded Test Engineer Automotive
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Test Engineer ADAS | 2019-09-01
+      Test von ADAS-Funktionen (ACC, LKA) auf HIL- und SIL-Prüfständen. CAPL-Programmierung in Vector CANoe, Test-Spezifikation nach ISO 26262 ASIL-B/C.
+      Skills: Vector CANoe (SEHR_GUT) [Embedded Testing], CAPL (SEHR_GUT) [Programmierung], HIL-Testing (SEHR_GUT) [Embedded Testing], SIL-Testing (SEHR_GUT) [Embedded Testing], ISO 26262 (SEHR_GUT) [Compliance], MISRA-C (GUT) [Programmierung], AUTOSAR (GUT) [Embedded], CAN (SEHR_GUT) [Embedded]
+
+    - Test Engineer Steuergeräte | 2016-04-01
+      Komponententest von Steuergeräten im Powertrain. Aufbau von Testskripten in Python für automatisierte Regressionsläufe.
+      Skills: Python (SEHR_GUT) [Programmierung], pytest (SEHR_GUT) [Testautomation], Steuergerätetest (SEHR_GUT) [Embedded Testing], Powertrain (GUT) [Automotive]
+
+    Ausbildung:
+    - Elektrotechnik | 2010-10-01 - 2015-09-30 | Diplom-Ingenieur (TU)
+
+    Projekte:
+    - Homologation Frontkamera-Steuergerät
+      ASPICE Level 2, Verifikation gegen ISO 26262 ASIL-C-Anforderungen, Abnahme durch TÜV.
+      Skills: ASPICE (SEHR_GUT) [Compliance], ISO 26262 (SEHR_GUT) [Compliance], Anforderungsmanagement (GUT) [Anforderungen]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2016-10-01
+    - ISTQB Certified Tester Automotive Software Tester (CT-AuT) | true | 2018-05-01
+    - A-SPICE Provisional Assessor | true | 2021-09-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, embedded, automotive, mid]
+
+- id: profile-manual-functional-tester-senior
+  text: |-
+    Position: Senior Funktionstester
+
+    Sprachen: Deutsch (Muttersprache), Englisch (B1)
+
+    Werdegang:
+    - Senior Tester | 2003-08-01
+      22 Jahre Erfahrung im manuellen Funktionstest in den Domänen Versicherung, Logistik und öffentlicher Dienst. Tiefes Domänenwissen, präzises Bug-Reporting, Mentor für Junior-Tester. Bewusst keine Testautomatisierung — Fokus auf exploratives Testen und Edge Cases.
+      Skills: Manuelles Testing (SEHR_GUT) [Testing], Exploratives Testing (SEHR_GUT) [Testarten], Defektmanagement (SEHR_GUT) [Defektmanagement], HP ALM (SEHR_GUT) [Testmanagement], Jira (SEHR_GUT) [Defektmanagement], Bug-Reporting (SEHR_GUT) [Soft Skills], V-Modell (SEHR_GUT) [Vorgehensmodelle], Domänenwissen Versicherung (SEHR_GUT) [Versicherung], Mentoring (GUT) [Soft Skills]
+
+    Ausbildung:
+    - Bürokauffrau | 1999-08-01 - 2002-07-31 | Ausbildung (IHK)
+
+    Projekte:
+    - Migration Bestandssystem Versicherung
+      4 Jahre Begleitung, Testfallabdeckung 4800 Fälle, Lead Manueller Test.
+      Skills: Manuelles Testing (SEHR_GUT) [Testing], Testfallerstellung (SEHR_GUT) [Testing], Domänenwissen (SEHR_GUT) [Versicherung]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2008-03-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, manual, senior, no-automation]
+
+- id: profile-technical-test-analyst
+  text: |-
+    Position: Technical Test Analyst
+
+    Sprachen: Deutsch (C2), Englisch (C1)
+
+    Werdegang:
+    - Technical Test Analyst | 2018-02-01
+      Whitebox- und Integrationstest in einem Microservice-Umfeld. Code-Reviews, Static-Analysis-Pipelines (SonarQube, Checkmarx), Test-Datenmanagement mit synthetischen Daten. Risikobasierte Test-Priorisierung gemeinsam mit Architektur.
+      Skills: SonarQube (SEHR_GUT) [SAST], Checkmarx (GUT) [SAST], JUnit (SEHR_GUT) [Unit Testing], Mockito (SEHR_GUT) [Unit Testing], REST Assured (SEHR_GUT) [API Testing], Microservices (SEHR_GUT) [Architektur], Java (SEHR_GUT) [Programmierung], Risikobasiertes Testen (SEHR_GUT) [Testmanagement]
+
+    - Tester | 2014-08-01
+      Integrationstests und Test-Datenaufbau in einem Logistik-System. SQL-basierte Datenprüfung, manuelle und semi-automatisierte Tests.
+      Skills: SQL (SEHR_GUT) [Datenbank], Postman (SEHR_GUT) [API Testing], Manuelles Testing (GUT) [Testing], Integrationstest (SEHR_GUT) [Testarten]
+
+    Ausbildung:
+    - Informatik | 2009-10-01 - 2014-07-31 | Bachelor of Science (FH)
+
+    Projekte:
+    - Aufbau Vertragstest-Suite für Microservices
+      Pact-basierte Consumer-Driven Contract Tests für 18 Services.
+      Skills: Pact (SEHR_GUT) [Contract Testing], Microservices (SEHR_GUT) [Architektur], Consumer Driven Contracts (SEHR_GUT) [Testarten]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2015-04-01
+    - ISTQB Certified Tester Advanced Level Technical Test Analyst (CTAL-TTA) | true | 2019-09-01
+    - Oracle Certified Associate Java SE 8 | true | 2016-11-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, technical, mid]
+
+- id: profile-ai-tester
+  text: |-
+    Position: AI Test Engineer
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C2)
+
+    Werdegang:
+    - AI Test Engineer | 2022-05-01
+      Test von ML-Modellen in einer Empfehlungsmaschine. Bias-Testing, Data-Drift-Monitoring, Aufbau von Test-Datensätzen mit synthetischen Edge Cases. Evaluierung von Modellen auf Robustheit und Fairness.
+      Skills: Python (SEHR_GUT) [Programmierung], pytest (SEHR_GUT) [Testautomation], PyTorch (GUT) [ML], scikit-learn (SEHR_GUT) [ML], Bias Testing (SEHR_GUT) [AI Testing], MLflow (GUT) [ML], Great Expectations (SEHR_GUT) [Data Testing], Data Drift (SEHR_GUT) [AI Testing]
+
+    - Data Quality Analyst | 2020-10-01
+      Aufbau eines automatisierten Datenqualitäts-Frameworks (Great Expectations) für einen Data-Lake.
+      Skills: Great Expectations (SEHR_GUT) [Data Testing], dbt (GUT) [Data Engineering], Snowflake (GUT) [Datenbank], SQL (SEHR_GUT) [Datenbank]
+
+    Ausbildung:
+    - Data Science | 2017-10-01 - 2020-09-30 | Master of Science
+
+    Projekte:
+    - Bias-Audit Empfehlungssystem
+      Quantitatives Bias-Audit gegen demografische Subgruppen, 4-wöchige Tiefenanalyse.
+      Skills: Bias Testing (SEHR_GUT) [AI Testing], Fairness Metrics (SEHR_GUT) [AI Testing], Statistik (SEHR_GUT) [Data Science]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2021-03-01
+    - ISTQB Certified Tester AI Testing (CT-AI) | true | 2023-04-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, ai, junior, ml]
+
+- id: profile-uat-coordinator-healthcare
+  text: |-
+    Position: UAT-Koordinator Healthcare
+
+    Sprachen: Deutsch (Muttersprache), Englisch (B2)
+
+    Werdegang:
+    - UAT-Koordinator | 2017-04-01
+      Koordination von User Acceptance Tests für ein Klinik-Informationssystem (KIS). Steuerung von 35 Fachanwendern aus 12 Kliniken, Abnahme nach ISO 13485 und MDR. Erstellung von Abnahmekonzepten und Testprotokollen.
+      Skills: UAT (SEHR_GUT) [Testarten], ISO 13485 (SEHR_GUT) [Compliance], MDR (SEHR_GUT) [Compliance], Abnahmekonzept (SEHR_GUT) [Testmanagement], Fachanwender-Koordination (SEHR_GUT) [Soft Skills], Polarion (SEHR_GUT) [Anforderungen], Klinische Workflows (SEHR_GUT) [Healthcare]
+
+    - Testkoordinator | 2012-08-01
+      Testkoordination eines Labor-Informationssystems. Funktionstests, Abnahme durch Laborleitung.
+      Skills: Funktionstest (SEHR_GUT) [Testarten], LIS (GUT) [Healthcare], HP QC (SEHR_GUT) [Testmanagement]
+
+    Ausbildung:
+    - Medizinische Dokumentation | 2008-10-01 - 2011-07-31 | Bachelor of Science
+
+    Projekte:
+    - MDR-Konformitäts-Migration KIS
+      Begleitung der Migration eines Bestands-KIS auf MDR-Konformität, inkl. Re-Validation von 1200 Testfällen.
+      Skills: MDR (SEHR_GUT) [Compliance], Re-Validation (SEHR_GUT) [Compliance], Risikoanalyse (SEHR_GUT) [Testmanagement]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2013-06-01
+    - ISTQB Certified Tester Acceptance Testing (CT-AcT) | true | 2020-10-01
+    - Datenschutzbeauftragter (TÜV) | true | 2019-03-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, healthcare, uat, mid]
+
+- id: profile-usability-tester
+  text: |-
+    Position: Usability & UX Tester
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - UX Researcher & Usability Tester | 2019-02-01
+      Moderierte und unmoderierte Usability-Tests (Lookback, UserTesting), A/B-Testing mit Optimizely, Accessibility-Audits (WCAG 2.2 AA). Begleitung von 14 Produkten von Discovery bis Launch.
+      Skills: Usability Testing (SEHR_GUT) [Usability], A/B Testing (SEHR_GUT) [Usability], Optimizely (SEHR_GUT) [Usability], Lookback (SEHR_GUT) [Usability], UserTesting (SEHR_GUT) [Usability], WCAG 2.2 (SEHR_GUT) [Accessibility], Figma (GUT) [Design], Heuristic Evaluation (SEHR_GUT) [Usability], Interview-Moderation (SEHR_GUT) [Soft Skills]
+
+    - Junior UX Researcher | 2016-09-01
+      Card Sorting, Tree Testing und remote Usability-Studien für einen E-Commerce-Kunden.
+      Skills: Card Sorting (SEHR_GUT) [Usability], Tree Testing (GUT) [Usability], OptimalWorkshop (SEHR_GUT) [Usability]
+
+    Ausbildung:
+    - Mensch-Computer-Interaktion | 2011-10-01 - 2016-07-31 | Master of Science
+
+    Projekte:
+    - Accessibility-Re-Design Banking-Portal
+      Begleitung eines Re-Designs mit Fokus auf WCAG 2.2 AA, Steigerung der Task-Completion-Rate von 71% auf 92%.
+      Skills: WCAG 2.2 (SEHR_GUT) [Accessibility], User Journey Mapping (SEHR_GUT) [Usability], Stakeholder-Workshop (SEHR_GUT) [Soft Skills]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2017-05-01
+    - ISTQB Certified Tester Usability Testing (CT-UT) | true | 2020-09-01
+    - Nielsen Norman Group UX Certification | true | 2018-11-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, usability, mid]
+
+- id: profile-game-tester
+  text: |-
+    Position: Game QA Tester
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C2), Japanisch (B1)
+
+    Werdegang:
+    - Game QA Tester | 2020-06-01
+      QA für Multiplayer-Titel auf Unity und Unreal. Exploratives Testing, Replay-Capture, Lokalisationstests in 8 Sprachen, Compliance-Testing für Sony/Microsoft/Nintendo TRC/XR/Lotcheck.
+      Skills: Unity (SEHR_GUT) [Game Engines], Unreal (GUT) [Game Engines], Exploratives Testing (SEHR_GUT) [Testarten], Compliance Testing (SEHR_GUT) [Game Testing], TRC (SEHR_GUT) [Compliance], Lokalisationstest (SEHR_GUT) [Testarten], Jira (SEHR_GUT) [Defektmanagement], TestRail (SEHR_GUT) [Testmanagement]
+
+    - Junior QA Tester | 2018-10-01
+      Manuelles Testing eines Mobile-Game-Titels, Crash-Reproduktion mit ADB-Logs.
+      Skills: Manuelles Testing (SEHR_GUT) [Testing], ADB (GUT) [Mobile], Charles Proxy (GUT) [Testing]
+
+    Ausbildung:
+    - Game Design | 2014-09-01 - 2018-07-31 | Bachelor of Arts
+
+    Projekte:
+    - Launch-Vorbereitung Cross-Platform-Titel
+      6-monatige Pre-Launch-Phase, Koordination von 12 externen Testern, Compliance-Submit-Pässe für 3 Plattformen.
+      Skills: Compliance Testing (SEHR_GUT) [Game Testing], Externe Tester-Koordination (SEHR_GUT) [Soft Skills], Release-Management (GUT) [Vorgehensmodelle]
+
+    Zertifikate/Schulungen:
+    - keine ISTQB-Zertifikate vorhanden | false | -
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, gaming, mid, no-istqb]
+
+- id: profile-test-architect-expert
+  text: |-
+    Position: Test-Architekt (Expert Level)
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C2), Französisch (C1)
+
+    Werdegang:
+    - Test-Architekt | 2014-11-01
+      Test-Architektur-Verantwortung in einem Konzern (Telco). Definition konzernweiter Test-Standards, modellbasierte Testfallgenerierung, Aufbau eines zentralen Test-Daten-Service. Sparring für 6 Test-Manager.
+      Skills: Test-Architektur (SEHR_GUT) [Testmanagement], Model-Based Testing (SEHR_GUT) [Testarten], MBT-Tools (SEHR_GUT) [Testautomation], Testdaten-Service (SEHR_GUT) [Testmanagement], Enterprise Architecture (GUT) [Architektur], Sparring (SEHR_GUT) [Soft Skills], Konzernweite Standards (SEHR_GUT) [Testmanagement]
+
+    - Senior Testmanager | 2008-04-01
+      Testmanagement für 4 parallele Großprojekte im Telco-Umfeld, Verantwortung für 80 Tester über mehrere Standorte.
+      Skills: Testmanagement (SEHR_GUT) [Testmanagement], Multi-Site-Steuerung (SEHR_GUT) [Soft Skills], V-Modell (SEHR_GUT) [Vorgehensmodelle]
+
+    - Testkoordinator | 2002-09-01
+      Einstieg im Telco-Umfeld, Testkoordination und Aufbau erster Reporting-Strukturen.
+      Skills: Testkoordination (SEHR_GUT) [Testmanagement], Reporting (SEHR_GUT) [Testmanagement]
+
+    Ausbildung:
+    - Informatik | 1996-10-01 - 2002-07-31 | Diplom-Informatiker (Uni)
+
+    Projekte:
+    - Konzernweites Testdaten-Service-Programm
+      3-jähriges Programm, Konsolidierung von 14 Test-Daten-Silos auf eine zentrale Plattform.
+      Skills: Testdatenmanagement (SEHR_GUT) [Testmanagement], Programm-Steuerung (SEHR_GUT) [Soft Skills], Architekturentscheidungen (SEHR_GUT) [Architektur]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2003-05-01
+    - ISTQB Certified Tester Advanced Level Test Manager (CTAL-TM) | true | 2007-09-01
+    - ISTQB Certified Tester Expert Level Test Management (CTEL-TM) | true | 2013-04-01
+    - ISTQB Certified Tester Model-Based Tester (CT-MBT) | true | 2016-10-01
+    - TOGAF 9 Certified | true | 2015-11-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, architect, expert, senior]
+
+- id: profile-quereinsteiger-from-dev
+  text: |-
+    Position: Junior Tester (Quereinsteiger Entwicklung)
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Junior QA Engineer | 2024-08-01
+      Wechsel aus der Entwicklung in den Test, da Interesse an Qualitätssicherung größer als an reiner Feature-Entwicklung. Aufbau erster automatisierter Tests in Playwright, Code-Reviews aus QA-Perspektive.
+      Skills: Playwright (MITTEL) [Testautomation], TypeScript (SEHR_GUT) [Programmierung], Code Review (SEHR_GUT) [Programmierung], pytest (GUT) [Testautomation], Unit Tests (SEHR_GUT) [Unit Testing], Git (SEHR_GUT) [DevOps]
+
+    - Software Developer | 2020-03-01
+      4 Jahre Full-Stack-Entwicklung (Node.js/React) in einem SaaS-Startup. Erfahrung mit TDD, kein dediziertes QA-Team — Entwickler waren für eigene Tests verantwortlich.
+      Skills: Node.js (SEHR_GUT) [Programmierung], React (SEHR_GUT) [Programmierung], PostgreSQL (SEHR_GUT) [Datenbank], TDD (SEHR_GUT) [Vorgehensmodelle], Docker (GUT) [DevOps]
+
+    Ausbildung:
+    - Informatik | 2016-10-01 - 2020-02-29 | Bachelor of Science (FH)
+
+    Projekte:
+    - Aufbau erster QA-Pipeline
+      Integration von Playwright in eine GitLab-CI-Pipeline für ein Greenfield-Produkt.
+      Skills: Playwright (MITTEL) [Testautomation], GitLab CI (SEHR_GUT) [CI/CD]
+
+    Zertifikate/Schulungen:
+    - keine Testing-Zertifikate vorhanden | false | -
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, junior, quereinsteiger, no-istqb]
+
+- id: profile-public-sector-tester
+  text: |-
+    Position: Testkoordinator E-Government
+
+    Sprachen: Deutsch (Muttersprache), Englisch (B2)
+
+    Werdegang:
+    - Testkoordinator Bund | 2018-05-01
+      Testkoordination in einem E-Government-Programm auf Bundesebene. V-Modell XT, Anforderungsmanagement in DOORS, Testfallerstellung in HP ALM. Begleitung von Auftragnehmern (Prüfung der Testkonzepte) und Abnahmen.
+      Skills: V-Modell XT (SEHR_GUT) [Vorgehensmodelle], DOORS (SEHR_GUT) [Anforderungen], HP ALM (SEHR_GUT) [Testmanagement], Anforderungsmanagement (SEHR_GUT) [Anforderungen], Auftragnehmer-Steuerung (SEHR_GUT) [Soft Skills], BSI Grundschutz (GUT) [Compliance], EVB-IT (GUT) [Vergabe]
+
+    - Tester | 2014-03-01
+      Funktionstests von Bürger-Online-Diensten. Manuelles Testing, Abnahme-Begleitung, Dokumentation nach V-Modell.
+      Skills: Manuelles Testing (SEHR_GUT) [Testing], V-Modell (SEHR_GUT) [Vorgehensmodelle], Dokumentation (SEHR_GUT) [Soft Skills]
+
+    Ausbildung:
+    - Verwaltungsinformatik | 2009-10-01 - 2013-09-30 | Diplom-Verwaltungsinformatiker (FH)
+
+    Projekte:
+    - Online-Antragsdienst Bürgeramt
+      Testkoordination der bundesweiten Roll-out-Phase, 16 Bundesländer, Abnahme durch Innenministerien.
+      Skills: Multi-Stakeholder-Steuerung (SEHR_GUT) [Soft Skills], Abnahmebegleitung (SEHR_GUT) [Testmanagement]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2014-10-01
+    - V-Modell XT Anwender | true | 2016-04-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, public-sector, mid]
+
+- id: profile-telco-tester
+  text: |-
+    Position: Testanalyst Telco BSS/OSS
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Senior Testanalyst BSS/OSS | 2016-03-01
+      Test von Billing- und Provisioning-Systemen für einen Telekommunikationsanbieter. End-to-End-Testing über 14 Systeme, Test-Datenaufbau in Oracle und Cassandra, API-Test mit SoapUI und Postman.
+      Skills: BSS (SEHR_GUT) [Telco], OSS (SEHR_GUT) [Telco], SoapUI (SEHR_GUT) [API Testing], Postman (SEHR_GUT) [API Testing], Oracle (SEHR_GUT) [Datenbank], Cassandra (GUT) [Datenbank], End-to-End Testing (SEHR_GUT) [Testarten], TMF Open APIs (GUT) [Telco]
+
+    - Testanalyst | 2011-08-01
+      Funktionstests von Tarif- und Aktivierungssystemen. Erstellung detaillierter Testfälle, enge Abstimmung mit Produktmanagement.
+      Skills: Testfallerstellung (SEHR_GUT) [Testing], HP QC (SEHR_GUT) [Testmanagement], SQL (SEHR_GUT) [Datenbank], Produktmanagement-Abstimmung (GUT) [Soft Skills]
+
+    Ausbildung:
+    - Wirtschaftsinformatik | 2006-10-01 - 2011-07-31 | Diplom-Wirtschaftsinformatiker (FH)
+
+    Projekte:
+    - Migration auf neue Billing-Plattform
+      End-to-End-Testverantwortung über 8 Monate, Migration von 12 Mio Bestandskunden.
+      Skills: Billing (SEHR_GUT) [Telco], Migrationstest (SEHR_GUT) [Testarten], Massendaten (SEHR_GUT) [Telco]
+
+    Zertifikate/Schulungen:
+    - ISTQB Certified Tester Foundation Level (CTFL) | true | 2012-02-01
+    - ISTQB Certified Tester Advanced Level Test Analyst (CTAL-TA) | true | 2015-09-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, telco, senior]
+
+- id: profile-not-a-tester-developer
+  text: |-
+    Position: Backend Developer (Bewerbung passt nicht — Negativbeispiel)
+
+    Sprachen: Deutsch (Muttersprache), Englisch (C1)
+
+    Werdegang:
+    - Senior Backend Developer | 2019-04-01
+      Backend-Entwicklung in Java/Spring Boot und Kotlin für eine Logistik-Plattform. Microservice-Architektur, Kafka-Eventing, Cloud-Deployment auf AWS. Testaktivitäten beschränken sich auf eigene Unit- und Integrationstests (JUnit, Testcontainers) — keine dedizierte Testing-Rolle.
+      Skills: Java (SEHR_GUT) [Programmierung], Kotlin (SEHR_GUT) [Programmierung], Spring Boot (SEHR_GUT) [Programmierung], Kafka (SEHR_GUT) [Messaging], AWS (SEHR_GUT) [Cloud], Microservices (SEHR_GUT) [Architektur], JUnit (SEHR_GUT) [Unit Testing], Testcontainers (SEHR_GUT) [Unit Testing], Docker (SEHR_GUT) [DevOps], Kubernetes (GUT) [Cloud]
+
+    - Junior Developer | 2015-08-01
+      Einstieg in der Java-Entwicklung, vorwiegend Feature-Entwicklung, klassisches Wasserfall-Modell.
+      Skills: Java (SEHR_GUT) [Programmierung], SQL (SEHR_GUT) [Datenbank], Wasserfallmodell (GUT) [Vorgehensmodelle]
+
+    Ausbildung:
+    - Informatik | 2010-10-01 - 2015-07-31 | Master of Science (TU)
+
+    Projekte:
+    - Re-Plattform Logistik-Backend
+      Re-Plattform-Projekt von Monolith zu 12 Microservices, Architektur-Leitung, Code-Verantwortung.
+      Skills: Microservices (SEHR_GUT) [Architektur], Refactoring (SEHR_GUT) [Programmierung], Software-Architektur (SEHR_GUT) [Architektur]
+
+    Zertifikate/Schulungen:
+    - AWS Certified Solutions Architect Associate | true | 2021-06-01
+    - Oracle Certified Professional Java SE 11 | true | 2020-03-01
+  severity: LOW
+  mode: single
+  tags: [profiler, profile, developer, no-testing-role, negative-match]
