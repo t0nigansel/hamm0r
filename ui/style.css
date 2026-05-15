@@ -833,7 +833,7 @@ input, select, textarea {
 #view-targets.view.active,
 #view-prompts.view.active,
 #view-scenarios.view.active,
-#view-runs.view.active {
+#view-engagements.view.active {
   overflow: visible;
   /* Keep the flex height constraint so .view-content's overflow-y:auto
      can scroll. Without min-height:0, min-height:auto wins and the view
@@ -894,7 +894,7 @@ input, select, textarea {
   padding: 1.5rem;
 }
 
-#view-runs .view-content {
+#view-engagements .view-content {
   display: flex;
   flex-direction: column;
   min-height: 0;

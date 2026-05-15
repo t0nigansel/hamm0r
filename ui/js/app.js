@@ -448,7 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ($('#view-home').classList.contains('active')) {
       loadHomeRecentEngagements();
     }
-    if ($('#view-runs').classList.contains('active')) loadEngagementList({ autoOpen: false });
+    if ($('#view-engagements').classList.contains('active')) loadEngagementList({ autoOpen: false });
   }
 
   checkDatabaseStatus();
@@ -459,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'view-requests': 'requests',
     'view-prompts': 'prompts',
     'view-scenarios': 'scenarios',
-    'view-runs': 'runs',
+    'view-engagements': 'engagements',
   };
 
   function showView(viewId) {
@@ -478,12 +478,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (viewId === 'view-home') loadHomeRecentEngagements();
     if (viewId === 'view-prompts') loadPrompts();
     if (viewId === 'view-requests') loadRequestList();
-    if (viewId === 'view-runs') loadEngagementList();
-    if (viewId !== 'view-runs') {
+    if (viewId === 'view-engagements') loadEngagementList();
+    if (viewId !== 'view-engagements') {
       stopEngagementProgressPoll();
       stopEngagementResultsPoll();
     }
-    if (viewId !== 'view-runs') clearEngagementRoute({ replace: true });
+    if (viewId !== 'view-engagements') clearEngagementRoute({ replace: true });
     if (dbOpen) {
       if (viewId === 'view-scenarios') loadScenarioList();
     }
@@ -620,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function quickResumeEngagement(eng) {
-    showView('view-runs');
+    showView('view-engagements');
     await openEngagementDetail(eng, { syncRoute: true });
     toast(`Resumed: ${eng.name}`, 'success');
   }
@@ -695,7 +695,7 @@ document.addEventListener('DOMContentLoaded', () => {
       await API.call('open_db', { path: eng.slug });
       const result = await API.call('start_scenario', { scenario_id: scenario.id });
       toast(`Run started (${result.run_id || result.id})`, 'success');
-      showView('view-runs');
+      showView('view-engagements');
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -820,7 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : { enabled: false, mode: 'scenario', title: 'Select a scenario to fire' };
     }
 
-    if (activeViewId === 'view-runs') {
+    if (activeViewId === 'view-engagements') {
       if (!engagementDetail.slug) {
         return { enabled: false, mode: 'engagement', title: 'Select an engagement to fire' };
       }
@@ -2719,7 +2719,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    const isRunsViewActive = $('#view-runs').classList.contains('active');
+    const isRunsViewActive = $('#view-engagements').classList.contains('active');
     updateEngagementActionButtons();
     if (!isRunsViewActive) return;
     if (!engagementDetail.activeRunId || engagementDetail.activeRunId !== runId) return;
@@ -2816,7 +2816,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!run || String(run.status || '').toLowerCase() !== 'running') return;
 
     engagementResultsPollTimer = setInterval(async () => {
-      if (!$('#view-runs').classList.contains('active')) return;
+      if (!$('#view-engagements').classList.contains('active')) return;
       if (!engagementDetail.slug || engagementDetail.slug !== engagementSlug) {
         stopEngagementResultsPoll();
         return;
@@ -2857,7 +2857,7 @@ document.addEventListener('DOMContentLoaded', () => {
         stopEngagementProgressPoll();
         return;
       }
-      if (!$('#view-runs').classList.contains('active')) return;
+      if (!$('#view-engagements').classList.contains('active')) return;
 
       try {
         const runningRuns = (engagementDetail.runs || []).filter((r) => String(r.status || '').toLowerCase() === 'running');
@@ -3795,8 +3795,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = getEngagementSlugFromRoute();
     if (!slug) return false;
 
-    if (!$('#view-runs').classList.contains('active')) {
-      showView('view-runs');
+    if (!$('#view-engagements').classList.contains('active')) {
+      showView('view-engagements');
     } else {
       await loadEngagementList({ preferredSlug: slug, autoOpen: true, syncRoute: false });
     }
