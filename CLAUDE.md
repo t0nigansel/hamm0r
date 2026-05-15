@@ -214,26 +214,6 @@ _Flag names are illustrative; see current CLI for exact syntax._
 - `cargo clippy --workspace --all-targets -- -D warnings` — linting
 - `cargo fmt --all` — formatting
 
-## e2e test system
-
-Playwright tests live in `tests/e2e/`. They are maintained by agents via
-the `hamm0r-testmanager` MCP server — see `docs/e2ePlan.md`.
-
-As a developer, the only setup step needed per clone is:
-
-```bash
-git config core.hooksPath .githooks
-cd scripts/mcp-testmanager && npm install
-cd tests/e2e && npm ci && npx playwright install chromium
-```
-
-After that, committing changes to `ui/`, `req.md`, or `test.md` automatically
-triggers the sync agent via the post-commit hook.
-
-To sync manually: type `/sync-tests` in Claude Code.
-Auto-repair on CI failure is intentionally not implemented — the API key will
-not be stored in GitHub. Use `/repair-tests` locally instead.
-
 ## When something is missing
 
 If you read this file and something is unclear: that is a defect of this

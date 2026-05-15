@@ -83,9 +83,6 @@ followed the first-class Requests work in `RequestPlan.md`.
   Scenario, propagated through `RunSummary` to the engagement-detail
   header so the legacy step-sequence name guess is replaced with a
   real lookup.
-- ❌ **Phase 2 tests** — e2e Playwright spec for the auth-chain
-  matrix flow not yet written; only meaningful work remaining.
-
 Workspace test count: **149 passing** (-8 from removing legacy step
 integration + helper tests; zero functional regressions).
 
@@ -207,8 +204,6 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
       kept in the DOM (display:none) so existing save/test-request JS
       stays functional. Will be removed entirely with the Target view.
 - [x] Test request still works — tests the picker's primary Request.
-- [ ] e2e smoke (Playwright). **Not done.** Folded into the Phase 2 e2e
-      work.
 
 ---
 
@@ -338,11 +333,6 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
       template + 1 wiremock integration.
 - [x] Runner tests for matrix expansion (Phase 2C): 2 wiremock
       integration tests covering shared_session true and false.
-- [ ] **End-to-end Playwright spec.** Not written. The plan says:
-      create Request, create login-chain Request that binds a token,
-      create Scenario referencing both with a library subset, fire,
-      observe N×M attempts in the run JSONL with one prerequisite
-      firing.
 
 ### 2.7  Docs
 
@@ -361,10 +351,9 @@ Independent of the rewrite. Pure UI cleanup. Shipped.
 
 ## What's still open — work-list
 
-1. **End-to-end Playwright spec** for the auth-chain matrix flow.
-   Closes the Definition of Done for Phase 2. Owned by the
-   `hamm0r-testmanager` MCP workflow (`/sync-tests`), not by ad-hoc
-   spec writing.
+Nothing structural. The auth-chain matrix flow has runner-level
+integration coverage; an end-to-end UI test is deferred — the e2e
+test infrastructure was removed for now.
 
 The polish items below all shipped:
 
@@ -432,7 +421,6 @@ the blast radius small.
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` clean.
       Last verified clean modulo a pre-existing 9-tuple warning in
       `targets.rs` (which goes away with Target deletion).
-- [ ] e2e Playwright spec passing.
 - [ ] Manual smoke: install fresh hamm0r → create Request with `bind:
       bearer_token` → create chat Request that references it →
       build matrix Scenario → Fire from Home → see N×M attempts +

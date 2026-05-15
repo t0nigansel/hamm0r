@@ -10,9 +10,6 @@ target/
 artifacts/
 *.db-wal
 *.db-shm
-node_modules/
-playwright-report/
-test-results/
 
 # analyz0r source and manifest folders are part of this repo:
 # - analyzer/
