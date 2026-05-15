@@ -34,13 +34,22 @@ pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Vec<PromptEntry>>>
             .unwrap_or("")
             .to_owned();
 
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[storage] skipping {}: cannot read: {}", path.display(), e);
+                continue;
+            }
+        };
 
-        let prompts: Vec<PromptEntry> = serde_yaml::from_str(&raw)
-            .with_context(|| format!("cannot parse {}", path.display()))?;
-
-        map.insert(stem, prompts);
+        match serde_yaml::from_str::<Vec<PromptEntry>>(&raw) {
+            Ok(prompts) => {
+                map.insert(stem, prompts);
+            }
+            Err(e) => {
+                eprintln!("[storage] skipping {}: cannot parse: {}", path.display(), e);
+            }
+        }
     }
 
     Ok(map)

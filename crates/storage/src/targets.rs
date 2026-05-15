@@ -30,13 +30,22 @@ pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Target>> {
             .unwrap_or("")
             .to_owned();
 
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[storage] skipping {}: cannot read: {}", path.display(), e);
+                continue;
+            }
+        };
 
-        let target: Target = serde_yaml::from_str(&raw)
-            .with_context(|| format!("cannot parse {}", path.display()))?;
-
-        map.insert(stem, target);
+        match serde_yaml::from_str::<Target>(&raw) {
+            Ok(target) => {
+                map.insert(stem, target);
+            }
+            Err(e) => {
+                eprintln!("[storage] skipping {}: cannot parse: {}", path.display(), e);
+            }
+        }
     }
 
     Ok(map)

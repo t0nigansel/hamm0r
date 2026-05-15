@@ -75,13 +75,22 @@ pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Request>> {
             .unwrap_or("")
             .to_owned();
 
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[storage] skipping {}: cannot read: {}", path.display(), e);
+                continue;
+            }
+        };
 
-        let request: Request = serde_yaml::from_str(&raw)
-            .with_context(|| format!("cannot parse {}", path.display()))?;
-
-        map.insert(stem, request);
+        match serde_yaml::from_str::<Request>(&raw) {
+            Ok(request) => {
+                map.insert(stem, request);
+            }
+            Err(e) => {
+                eprintln!("[storage] skipping {}: cannot parse: {}", path.display(), e);
+            }
+        }
     }
 
     Ok(map)
@@ -157,6 +166,29 @@ mod tests {
     fn load_all_empty_dir() {
         let dir = TempDir::new().unwrap();
         assert!(load_all(dir.path()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn load_all_skips_malformed_files() {
+        let dir = TempDir::new().unwrap();
+        save(dir.path(), &sample_request()).unwrap();
+        atomic_write(
+            &dir.path().join("broken.yaml"),
+            b"this: is: not: valid: yaml: at: all\n",
+        )
+        .unwrap();
+        atomic_write(
+            &dir.path().join("missing-auth.yaml"),
+            b"version: 1\nid: x\nname: x\nmethod: GET\nurl: http://x\n",
+        )
+        .unwrap();
+
+        let map = load_all(dir.path()).unwrap();
+
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key("openai-chat"));
+        assert!(!map.contains_key("broken"));
+        assert!(!map.contains_key("missing-auth"));
     }
 
     #[test]
