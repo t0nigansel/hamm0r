@@ -347,6 +347,7 @@ async fn dispatch_matrix_scenario(
         registry,
         request_ids: scenario.request_ids.clone(),
         payloads,
+        repeat: scenario.repeat.max(1),
         shared_session: scenario.shared_session,
         session_strategy,
         runner_version: env!("CARGO_PKG_VERSION").to_owned(),
