@@ -1,5 +1,11 @@
 /* hamm0r UI — plain CSS, no preprocessor */
 
+/* Visibility utility. Prefer this over `style="display:none"` /
+   `el.style.display = 'none'` so the natural display value (flex,
+   block, grid) stays in CSS and JS only toggles a class. */
+.is-hidden { display: none !important; }
+
+
 /* ═══════════════════════════════════════════════════════════════════════
    Design tokens
    ═══════════════════════════════════════════════════════════════════════ */
@@ -4235,7 +4241,7 @@ iframe.eng-report-preview {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;

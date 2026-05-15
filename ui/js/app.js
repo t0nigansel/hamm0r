@@ -13,6 +13,14 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// Show/hide an element by toggling the .is-hidden utility class. Prefer
+// this over `el.style.display = 'none' | 'flex'` so the natural display
+// value stays in CSS and only one source of truth governs visibility.
+const setHidden = (el, hidden) => {
+  if (!el) return;
+  el.classList.toggle('is-hidden', !!hidden);
+};
+
 // Top-level "always-on" handlers. Registered immediately on script
 // load (not inside DOMContentLoaded) so they survive any synchronous
 // failure that aborts DCL setup. Covers the Settings modal, the
@@ -68,7 +76,7 @@ document.addEventListener('click', (e) => {
   if (settingsBtn) {
     const modal = document.querySelector('#settings-modal');
     if (modal) {
-      modal.style.display = 'flex';
+      setHidden(modal, false);
       window.dispatchEvent(new CustomEvent('settings-modal-opened'));
     }
     return;
@@ -76,12 +84,11 @@ document.addEventListener('click', (e) => {
 
   // Close: X button, Cancel button, or backdrop click.
   if (target.closest?.('#settings-modal-close, #settings-modal-cancel')) {
-    const modal = document.querySelector('#settings-modal');
-    if (modal) modal.style.display = 'none';
+    setHidden(document.querySelector('#settings-modal'), true);
     return;
   }
   if (target.id === 'settings-modal') {
-    target.style.display = 'none';
+    setHidden(target, true);
     return;
   }
 
@@ -502,7 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Engagement management ──────────────────────────────────────────
 
   async function openEngagementDialog() {
-    $('#engagement-dialog').style.display = 'flex';
+    setHidden($('#engagement-dialog'), false);
     const list = $('#engagement-list');
     list.innerHTML = '<div class="eng-list-empty">loading…</div>';
     try {
@@ -524,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
               unarchiveEngagementSlug(eng.slug);
               const result = await API.call('open_db', { path: eng.slug });
               dbOpen = true;
-              $('#engagement-dialog').style.display = 'none';
+              setHidden($('#engagement-dialog'), true);
               onDbOpen(result.name || eng.name, result.slug);
               toast(`Opened: ${result.name || eng.name}`, 'success');
             } catch (err) { toast(err.message, 'error'); }
@@ -686,7 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Phase 2 of docs/RefactorPlan.md: wizard removed. Home CTAs route to
   // Scenarios; "+" buttons open the lightweight engagement-dialog directly.
   function closeRunScenarioPicker() {
-    $('#run-scenario-picker').style.display = 'none';
+    setHidden($('#run-scenario-picker'), true);
   }
 
   async function runPickedScenario(scenario) {
@@ -727,7 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function openScenarioPicker() {
     const list = $('#run-scenario-picker-list');
-    $('#run-scenario-picker').style.display = 'flex';
+    setHidden($('#run-scenario-picker'), false);
     list.innerHTML = '<div class="eng-list-empty">loading…</div>';
     try {
       const scenarios = await API.call('list_scenarios', {});
@@ -835,10 +842,10 @@ document.addEventListener('DOMContentLoaded', () => {
     toast('I believe in you. Swing again.', 'info');
   });
   $('#engagement-dialog-close').addEventListener('click', () => {
-    $('#engagement-dialog').style.display = 'none';
+    setHidden($('#engagement-dialog'), true);
   });
   $('#engagement-dialog-cancel').addEventListener('click', () => {
-    $('#engagement-dialog').style.display = 'none';
+    setHidden($('#engagement-dialog'), true);
   });
   $('#engagement-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -850,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
       unarchiveEngagementSlug(result.slug);
       await API.call('open_db', { path: result.slug });
       dbOpen = true;
-      $('#engagement-dialog').style.display = 'none';
+      setHidden($('#engagement-dialog'), true);
       $('#eng-name').value = '';
       if (seed) {
         await API.call('seed_library', { update: false });
@@ -1474,13 +1481,13 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#req-auth-token-input').value = '';
     $('#req-auth-token-input').type = 'password';
     $('#req-auth-token-reveal').checked = false;
-    $('#req-auth-token-modal').style.display = 'flex';
+    setHidden($('#req-auth-token-modal'), false);
     setTimeout(() => $('#req-auth-token-input').focus(), 0);
   }
 
   function closeRequestAuthTokenModal() {
     $('#req-auth-token-input').value = '';
-    $('#req-auth-token-modal').style.display = 'none';
+    setHidden($('#req-auth-token-modal'), true);
   }
 
   async function saveRequestAuthTokenFromModal() {
@@ -1603,7 +1610,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       refs.appendChild(li);
     });
-    $('#req-delete-dialog').style.display = 'flex';
+    setHidden($('#req-delete-dialog'), false);
   }
 
   if ($('#btn-req-delete')) {
@@ -1613,7 +1620,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if ($('#btn-req-delete-cancel')) {
     $('#btn-req-delete-cancel').addEventListener('click', () => {
-      $('#req-delete-dialog').style.display = 'none';
+      setHidden($('#req-delete-dialog'), true);
       requestEditor.pendingDeleteId = '';
     });
   }
@@ -1624,7 +1631,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         await API.call('delete_request_global', { id, force: true });
         toast('Request deleted (with references cleaned)', 'success');
-        $('#req-delete-dialog').style.display = 'none';
+        setHidden($('#req-delete-dialog'), true);
         requestEditor.pendingDeleteId = '';
         if (requestEditor.currentId === id) {
           requestEditor.currentId = '';
@@ -3849,7 +3856,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="detail-meta-value">${esc(value)}</div>
       </div>
     `).join('');
-    $('#result-detail').style.display = 'flex';
+    setHidden($('#result-detail'), false);
   }
 
   $('#detail-source-tabs').addEventListener('click', (e) => {
@@ -3859,7 +3866,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   $('#result-detail-close').addEventListener('click', () => {
-    $('#result-detail').style.display = 'none';
+    setHidden($('#result-detail'), true);
   });
 
   async function applyEngagementRouteFromLocation() {
@@ -4131,7 +4138,7 @@ function initAnalyzerUI() {
   }
 
   function openSettingsModal() {
-    $('#settings-modal').style.display = 'flex';
+    setHidden($('#settings-modal'), false);
     loadAppSettings().catch(err => {
       $('#settings-save-status').textContent = `Failed to load settings: ${err.message}`;
     });
