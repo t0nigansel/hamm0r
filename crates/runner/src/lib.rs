@@ -2,6 +2,7 @@ pub mod adapter;
 pub mod client;
 pub mod deps;
 pub mod error;
+pub mod redact;
 pub mod run;
 pub mod session;
 pub mod template;

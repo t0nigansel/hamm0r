@@ -575,7 +575,7 @@ const API = (() => {
     },
 
     async import_csv() { throw new Error('CSV import coming in a future milestone'); },
-    async seed_library() { return { seeded: 0 }; },
+    async seed_library({ update } = {}) { return invoke('seed_library', { update: !!update }); },
     async get_mutations() { return []; },
     async get_db_status() { return { open: !!_activeSlug, slug: _activeSlug }; },
   };

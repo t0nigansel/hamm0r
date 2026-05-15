@@ -18,8 +18,6 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 minijinja = "2"
 # JSONPath extraction for response.extract (Datamodel.md)
 serde_json_path = "0.7"
-# SHA-256 for headers_hash (Datamodel.md invariant 10)
-sha2 = "0.10"
 # Byte buffer type returned by reqwest::Response::bytes()
 bytes = "1"
 # Regex extraction for response.extract

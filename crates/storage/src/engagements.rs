@@ -65,13 +65,28 @@ pub fn list(engagements_dir: &Path) -> anyhow::Result<Vec<EngagementMeta>> {
             continue;
         }
 
-        let raw = std::fs::read_to_string(&meta_path)
-            .with_context(|| format!("cannot read {}", meta_path.display()))?;
+        let raw = match std::fs::read_to_string(&meta_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!(
+                    "[storage] skipping {}: cannot read: {}",
+                    meta_path.display(),
+                    e
+                );
+                continue;
+            }
+        };
 
-        let meta: EngagementMeta = serde_yaml::from_str(&raw)
-            .with_context(|| format!("cannot parse {}", meta_path.display()))?;
-
-        results.push(meta);
+        match serde_yaml::from_str::<EngagementMeta>(&raw) {
+            Ok(meta) => results.push(meta),
+            Err(e) => {
+                eprintln!(
+                    "[storage] skipping {}: cannot parse: {}",
+                    meta_path.display(),
+                    e
+                );
+            }
+        }
     }
 
     // Stable order: sort by slug so the UI sees engagements in creation-date order.

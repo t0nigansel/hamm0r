@@ -156,7 +156,7 @@ fn log_test_request(
         format!("request.url={}", request.url),
         format!(
             "request.headers={}",
-            format_headers(&request_headers_for_log(request))
+            format_headers(&runner::redact::request_headers_for_log(request))
         ),
         format!("response.status={status}"),
         format!("response.headers={}", format_headers(response_headers)),
@@ -175,33 +175,13 @@ fn log_test_request(
     logger.info("request-test", None, &lines.join("\n"));
 }
 
-fn request_headers_for_log(request: &Request) -> HashMap<String, String> {
-    let mut headers = request.headers.clone();
-    redact_known_secret_headers(&mut headers);
-
-    match &request.auth {
-        storage::types::AuthConfig::Bearer { .. } => {
-            upsert_masked_header(&mut headers, "Authorization", "Bearer <redacted>");
-        }
-        storage::types::AuthConfig::Basic { .. } => {
-            upsert_masked_header(&mut headers, "Authorization", "Basic <redacted>");
-        }
-        storage::types::AuthConfig::CustomHeader { header_name, .. } => {
-            upsert_masked_header(&mut headers, header_name, "<redacted>");
-        }
-        storage::types::AuthConfig::None => {}
-    }
-
-    headers
-}
-
 fn render_request_preview(
     request: &Request,
     session_strategy: &SessionStrategy,
     session_value: &str,
     prompt: &str,
 ) -> Result<RenderedRequestPreview, CommandError> {
-    let mut headers = request_headers_for_log(request);
+    let mut headers = runner::redact::request_headers_for_log(request);
     if let SessionStrategy::Header { header_name } = session_strategy {
         headers.insert(header_name.clone(), session_value.to_owned());
     }
@@ -216,11 +196,8 @@ fn render_request_preview(
                     session_strategy,
                     session_value,
                 );
-                let body_str = serde_json::to_string(&body).map_err(anyhow::Error::from)?;
-                let rendered =
-                    runner::template::render(&body_str, prompt).map_err(anyhow::Error::from)?;
-                let json: serde_json::Value =
-                    serde_json::from_str(&rendered).map_err(anyhow::Error::from)?;
+                let json = runner::template::render_json_value(body, prompt)
+                    .map_err(anyhow::Error::from)?;
                 serde_json::to_string_pretty(&json).map_err(anyhow::Error::from)?
             }
             storage::types::BodyFormat::Form => {
@@ -278,37 +255,6 @@ fn inject_session_body_field(
     } else {
         body
     }
-}
-
-fn redact_known_secret_headers(headers: &mut HashMap<String, String>) {
-    const SECRET_HEADERS: &[&str] = &[
-        "authorization",
-        "proxy-authorization",
-        "x-api-key",
-        "api-key",
-        "x-auth-token",
-    ];
-
-    for (name, value) in headers.iter_mut() {
-        if SECRET_HEADERS
-            .iter()
-            .any(|secret| name.eq_ignore_ascii_case(secret))
-        {
-            *value = "<redacted>".to_owned();
-        }
-    }
-}
-
-fn upsert_masked_header(headers: &mut HashMap<String, String>, header_name: &str, masked: &str) {
-    if let Some((_, value)) = headers
-        .iter_mut()
-        .find(|(name, _)| name.eq_ignore_ascii_case(header_name))
-    {
-        *value = masked.to_owned();
-        return;
-    }
-
-    headers.insert(header_name.to_owned(), masked.to_owned());
 }
 
 fn format_headers(headers: &HashMap<String, String>) -> String {
@@ -414,7 +360,8 @@ pub fn delete_request_global(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_session_strategy, render_request_preview, request_headers_for_log};
+    use super::{parse_session_strategy, render_request_preview};
+    use runner::redact::request_headers_for_log;
     use runner::session::SessionStrategy;
     use std::collections::HashMap;
     use storage::types::{
@@ -450,6 +397,7 @@ mod tests {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 50,
@@ -482,6 +430,7 @@ mod tests {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 50,
