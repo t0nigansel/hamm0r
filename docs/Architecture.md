@@ -62,6 +62,7 @@ space with core, and core never compiles in an LLM runtime. See
             ~/hamm0r/  (user's on-disk library)
             ├── prompts/
             ├── requests/
+            ├── scenarios/
             ├── analyzer/         (only if activated)
             └── engagements/<slug>/
                 ├── engagement.yaml
@@ -343,9 +344,11 @@ The HTML report is rendered via `minijinja` (already in core) — no
 extra rendering dependency.
 
 Core must build and run on a machine with no analyzer dependencies
-installed. The analyzer's dependencies live behind the `analyzer`
-Cargo feature and are only pulled in when that feature is enabled or
-the analyzer bundle is loaded at runtime.
+installed. The analyzer ships as a separate executable
+(`crates/analyzor-cli/`) that core spawns as a subprocess; core itself
+does not link against `llama-cpp-2` or any inference runtime, and the
+analyzer binary is only present after the user runs the in-app
+"Download & Install" flow.
 
 ---
 

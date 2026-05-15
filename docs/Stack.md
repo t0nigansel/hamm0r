@@ -179,14 +179,18 @@ hamm0r/
 │   ├── hamm0r/            (binary, Tauri shell + commands)
 │   ├── runner/            (HTTP firing line)
 │   ├── storage/           (filesystem I/O)
-│   └── analyzer/          (opt-in, behind `analyzer` feature)
+│   ├── analyzer/          (library: judge + report generation)
+│   └── analyzor-cli/      (standalone binary, spawned as subprocess)
 ├── ui/                    (HTML/CSS/JS, served by Tauri)
-└── prompts/               (starter library, copied to ~/hamm0r/ on first run)
+├── prompts/               (starter library, copied to ~/hamm0r/ on first run)
+├── requests/              (starter Request templates, copied on first run)
+└── examples/              (opt-in demo content, not seeded)
 ```
 
-The `analyzer` crate is a dependency of `hamm0r` only when the
-`analyzer` Cargo feature is enabled. Default builds omit it
-entirely.
+Core (`hamm0r` + `runner` + `storage`) never links against
+`crates/analyzer/`. The analyzer ships as a standalone `analyzor-cli`
+binary that core spawns as a subprocess after the user runs the in-app
+"Download & Install" flow.
 
 ## What is explicitly forbidden
 

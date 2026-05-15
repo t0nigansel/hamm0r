@@ -271,6 +271,28 @@ as the "LLM's answer". This is what the analyzer evaluates. Types:
 - `raw` — treat the entire body as the answer.
 - `regex` — extract the first match group.
 
+`response.result_columns` (array, optional) defines request-specific
+values shown as dynamic columns in the Engagement results table. It
+does not affect runner execution or analyzer input. Each column has:
+
+- `id` - stable short identifier.
+- `label` - table heading.
+- `path` - simple dot path into a JSON response, for example
+  `total` or `scores.total`.
+
+```yaml
+response:
+  extract:
+    type: raw
+  result_columns:
+    - id: qa
+      label: QA
+      path: qualifications
+    - id: total
+      label: Total
+      path: total
+```
+
 ### Request dependencies (Phase 2 of `RefactorPlan.md`)
 
 Two optional fields turn isolated Requests into a directed acyclic
@@ -341,6 +363,9 @@ slug: 2026-04-24-acme-chatbot
 name: "Acme Corp support chatbot test"
 created_at: 2026-04-24T09:00:00Z
 target:
+  # `target` is a historical wrapper kept for back-compat after the Target
+  # entity was retired in Phase 2; `request_id` is the only load-bearing
+  # field. Renaming the wrapper to `scenario_id` is a follow-up.
   request_id: openai-chat-completion     # filename stem from requests/
   notes: "Staging environment, rate limit 10/s."
 scope:
