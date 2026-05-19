@@ -352,21 +352,16 @@ fn log_level_label(level: &storage::types::LogLevel) -> &'static str {
 
 fn theme_label(theme: &storage::types::Theme) -> &'static str {
     match theme {
-        storage::types::Theme::SpiritTesting => "spirit_testing",
-        storage::types::Theme::Testsolutions => "testsolutions",
-        storage::types::Theme::System
-        | storage::types::Theme::Light
-        | storage::types::Theme::Dark => "default",
+        storage::types::Theme::Light => "light",
+        storage::types::Theme::System | storage::types::Theme::Dark => "default",
     }
 }
 
 fn parse_theme(theme: &str) -> Result<storage::types::Theme, CommandError> {
     match theme.trim().to_ascii_lowercase().as_str() {
-        "" | "default" | "system" | "light" | "dark" => Ok(storage::types::Theme::System),
-        "spirit" | "spirit_testing" | "spirit-testing" => Ok(storage::types::Theme::SpiritTesting),
-        "testsolutions" | "test_solutions" | "test-solutions" => {
-            Ok(storage::types::Theme::Testsolutions)
-        }
+        "" | "default" | "system" | "dark" => Ok(storage::types::Theme::System),
+        "light" | "spirit" | "spirit_testing" | "spirit-testing" | "testsolutions"
+        | "test_solutions" | "test-solutions" => Ok(storage::types::Theme::Light),
         other => Err(anyhow::anyhow!("unsupported theme '{}'", other).into()),
     }
 }
@@ -442,7 +437,7 @@ mod tests {
     fn save_payload_deserializes_without_read_only_settings_fields() {
         let payload = serde_json::json!({
             "ui": {
-                "theme": "spirit_testing"
+                "theme": "light"
             },
             "logging": {
                 "enabled": true,
@@ -469,7 +464,7 @@ mod tests {
 
         let dto: AppSettingsDto =
             serde_json::from_value(payload).expect("frontend save payload should deserialize");
-        assert_eq!(dto.ui.theme, "spirit_testing");
+        assert_eq!(dto.ui.theme, "light");
         assert_eq!(dto.analyzer.judge_mode, "hosted");
         assert_eq!(dto.analyzer.default_judge_prompt_template, "");
         assert!(dto.analyzer.uses_default_judge_prompt);
@@ -493,10 +488,10 @@ mod tests {
     }
 
     #[test]
-    fn save_payload_deserializes_testsolutions_theme() {
+    fn save_payload_deserializes_light_theme() {
         let payload = serde_json::json!({
             "ui": {
-                "theme": "testsolutions"
+                "theme": "light"
             },
             "logging": {
                 "enabled": true,
@@ -507,6 +502,6 @@ mod tests {
 
         let dto: AppSettingsDto =
             serde_json::from_value(payload).expect("frontend save payload should deserialize");
-        assert_eq!(dto.ui.theme, "testsolutions");
+        assert_eq!(dto.ui.theme, "light");
     }
 }
