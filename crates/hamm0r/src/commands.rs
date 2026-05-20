@@ -8,6 +8,7 @@ pub mod runs;
 pub mod scenarios;
 pub mod secrets;
 pub mod starter_requests;
+pub mod triage;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

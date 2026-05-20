@@ -26,6 +26,14 @@ const BUNDLED: &[(&str, &str)] = &[
         "unbounded-consumption.yaml",
         include_str!("../../../../prompts/unbounded-consumption.yaml"),
     ),
+    (
+        "owasp-llm-2025.yaml",
+        include_str!("../../../../prompts/owasp-llm-2025.yaml"),
+    ),
+    (
+        "owasp-agentic-2026.yaml",
+        include_str!("../../../../prompts/owasp-agentic-2026.yaml"),
+    ),
 ];
 
 #[derive(Debug, Serialize)]
@@ -36,15 +44,16 @@ pub struct SeedResult {
 
 /// Write bundled YAMLs into `dir`.
 ///
-/// `update = false` skips files that already exist (first-launch mode,
-/// preserves user edits). `update = true` overwrites every file (Seed button).
-fn write_bundled(dir: &Path, update: bool) -> anyhow::Result<SeedResult> {
+/// Existing files are never overwritten. This is true both for startup
+/// seeding and for the Library seed button: the user's prompt library is
+/// sacred, and starter-library updates arrive as new missing files only.
+fn write_bundled(dir: &Path) -> anyhow::Result<SeedResult> {
     let mut loaded = 0usize;
     let mut skipped = 0usize;
 
     for (filename, contents) in BUNDLED {
         let dest = dir.join(filename);
-        if !update && dest.exists() {
+        if dest.exists() {
             skipped += 1;
             continue;
         }
@@ -58,15 +67,15 @@ fn write_bundled(dir: &Path, update: bool) -> anyhow::Result<SeedResult> {
 /// Called from `first_launch_hook` — seeds missing files only.
 pub fn seed_on_first_launch(dir: &Path) -> anyhow::Result<SeedResult> {
     std::fs::create_dir_all(dir)?;
-    write_bundled(dir, false)
+    write_bundled(dir)
 }
 
 /// Tauri command called by the Library → Seed button.
 #[tauri::command]
-pub fn seed_library(paths: State<'_, AppPaths>, update: bool) -> Result<SeedResult, CommandError> {
+pub fn seed_library(paths: State<'_, AppPaths>, _update: bool) -> Result<SeedResult, CommandError> {
     let dir = paths.0.prompts_dir();
     std::fs::create_dir_all(&dir).map_err(anyhow::Error::from)?;
-    write_bundled(&dir, update).map_err(Into::into)
+    write_bundled(&dir).map_err(Into::into)
 }
 
 // ── Prompt CRUD ───────────────────────────────────────────────────────────────
@@ -341,5 +350,21 @@ mod tests {
         );
         assert_eq!(normalize_owasp_ref(Some("".into())), None);
         assert_eq!(normalize_owasp_ref(None), None);
+    }
+
+    #[test]
+    fn seed_library_never_overwrites_existing_files() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let existing = dir.path().join("library.yaml");
+        storage::atomic_write(&existing, b"# user edited\n[]\n").unwrap();
+
+        let result = seed_on_first_launch(dir.path()).unwrap();
+
+        assert!(result.loaded > 0);
+        assert!(result.skipped > 0);
+        let raw = std::fs::read_to_string(existing).unwrap();
+        assert_eq!(raw, "# user edited\n[]\n");
+        assert!(dir.path().join("owasp-llm-2025.yaml").exists());
+        assert!(dir.path().join("owasp-agentic-2026.yaml").exists());
     }
 }

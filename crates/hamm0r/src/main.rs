@@ -100,6 +100,8 @@ fn main() {
             commands::secrets::forget_secret_ref,
             commands::secrets::bearer_token_status,
             commands::secrets::secret_ref_status,
+            commands::triage::get_triage,
+            commands::triage::set_triage_status,
         ])
         .build(tauri::generate_context!())
         .expect("error building hamm0r");

@@ -1,9 +1,27 @@
 use std::path::Path;
 
-const BUNDLED: &[(&str, &str)] = &[(
-    "ollama-chat-local.yaml",
-    include_str!("../../../../requests/ollama-chat-local.yaml"),
-)];
+const BUNDLED: &[(&str, &str)] = &[
+    (
+        "ollama-chat-local.yaml",
+        include_str!("../../../../requests/ollama-chat-local.yaml"),
+    ),
+    (
+        "openai-chat-completions.yaml",
+        include_str!("../../../../requests/openai-chat-completions.yaml"),
+    ),
+    (
+        "anthropic-messages.yaml",
+        include_str!("../../../../requests/anthropic-messages.yaml"),
+    ),
+    (
+        "azure-openai-chat-completions.yaml",
+        include_str!("../../../../requests/azure-openai-chat-completions.yaml"),
+    ),
+    (
+        "generic-rest-json.yaml",
+        include_str!("../../../../requests/generic-rest-json.yaml"),
+    ),
+];
 
 /// Write bundled request YAMLs into `dir`, skipping files that already exist.
 ///
@@ -34,6 +52,13 @@ mod tests {
 
         let seeded = dir.path().join("ollama-chat-local.yaml");
         assert!(seeded.exists());
+        assert!(dir.path().join("openai-chat-completions.yaml").exists());
+        assert!(dir.path().join("anthropic-messages.yaml").exists());
+        assert!(dir
+            .path()
+            .join("azure-openai-chat-completions.yaml")
+            .exists());
+        assert!(dir.path().join("generic-rest-json.yaml").exists());
     }
 
     #[test]

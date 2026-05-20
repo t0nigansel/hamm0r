@@ -280,11 +280,13 @@ async fn dispatch_matrix_scenario(
     let registry: HashMap<String, Request> = requests::load_all(&paths.0.requests_dir())?;
 
     // Validate every target Request id exists.
-    for id in &scenario.request_ids {
-        if !registry.contains_key(id) {
-            return Err(
-                anyhow::anyhow!("matrix scenario references unknown Request '{id}'").into(),
-            );
+    for entry in &scenario.request_ids {
+        if !registry.contains_key(&entry.id) {
+            return Err(anyhow::anyhow!(
+                "matrix scenario references unknown Request '{}'",
+                entry.id
+            )
+            .into());
         }
     }
 
@@ -345,7 +347,12 @@ async fn dispatch_matrix_scenario(
         run_id: run_id.clone(),
         scenario_id: scenario.id.clone(),
         registry,
-        request_ids: scenario.request_ids.clone(),
+        request_ids: scenario.request_ids.iter().map(|e| e.id.clone()).collect(),
+        per_request_repeat: scenario
+            .request_ids
+            .iter()
+            .filter_map(|e| e.repeat.map(|r| (e.id.clone(), r)))
+            .collect(),
         payloads,
         repeat: scenario.repeat.max(1),
         shared_session: scenario.shared_session,

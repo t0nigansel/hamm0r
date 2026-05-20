@@ -44,7 +44,7 @@ pub fn create_engagement(
         name: name.clone(),
         created_at: runner::run::iso_now(),
         target: EngagementTarget {
-            request_id: String::new(),
+            scenario_id: String::new(),
             notes: None,
         },
         scope: EngagementScope {
