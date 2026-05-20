@@ -11,6 +11,7 @@ pub mod scenarios;
 pub mod secrets;
 pub mod settings;
 pub mod targets;
+pub mod triage;
 pub mod types;
 pub mod verdicts;
 pub mod write;

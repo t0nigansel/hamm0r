@@ -1,0 +1,26 @@
+# hamm0r-starter-version: 2026.05
+# Starter request template. Startup seeding never overwrites user files.
+version: 1
+id: openai-chat-completions
+name: "OpenAI — Chat Completions"
+method: POST
+url: "https://api.openai.com/v1/chat/completions"
+auth:
+  type: bearer
+  token_env: OPENAI_API_KEY
+headers:
+  Content-Type: "application/json"
+body:
+  format: json
+  content:
+    model: "gpt-4.1-mini"
+    messages:
+      - role: user
+        content: "{{prompt}}"
+response:
+  extract:
+    type: jsonpath
+    path: "$.choices[0].message.content"
+timeout_seconds: 60
+adapter: open-ai-compat
+tag: starter-openai

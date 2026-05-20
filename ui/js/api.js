@@ -78,8 +78,20 @@ const API = (() => {
 
   function toUiScenario(s) {
     if (!s) return null;
+    // Backend sends request_ids as [{id, repeat?}]. Normalize to a flat
+    // string array plus a {[id]: number} repeats map for the editor.
+    const rawIds = Array.isArray(s.request_ids) ? s.request_ids : [];
+    const request_ids = rawIds.map(e => (typeof e === 'string' ? e : e.id));
+    const request_repeats = {};
+    rawIds.forEach(e => {
+      if (typeof e === 'object' && e.repeat > 1) {
+        request_repeats[e.id] = e.repeat;
+      }
+    });
     return {
       ...s,
+      request_ids,
+      request_repeats,
       repeat_count: s.repeat || 1,
     };
   }
@@ -246,7 +258,13 @@ const API = (() => {
         repeat: Math.max(1, Number(data.repeat_count || current.repeat || 1)),
       };
       if (Array.isArray(data.request_ids)) {
-        updated.request_ids = data.request_ids;
+        const repeats = (data.request_repeats && typeof data.request_repeats === 'object')
+          ? data.request_repeats
+          : {};
+        updated.request_ids = data.request_ids.map(id => {
+          const r = Number(repeats[id]);
+          return r > 1 ? { id, repeat: r } : { id };
+        });
       }
       if (data.library && typeof data.library === 'object') {
         updated.library = {
@@ -490,6 +508,25 @@ const API = (() => {
           judge_evaluated_at: judged?.judge_evaluated_at || '',
         };
       }));
+    },
+
+    // ── Triage commands ───────────────────────────────────────────────
+
+    async get_triage({ engagement_slug, run_id }) {
+      return invoke('get_triage', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
+      });
+    },
+
+    async set_triage_status({ engagement_slug, run_id, seq, status, note = null }) {
+      return invoke('set_triage_status', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
+        seq,
+        status,
+        note,
+      });
     },
 
     // ── Analyzer commands ─────────────────────────────────────────────

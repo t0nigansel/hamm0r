@@ -30,6 +30,7 @@ fn make_request(url: &str, adapter: AdapterType, extract: ExtractConfig) -> Requ
         },
         response: ResponseConfig {
             extract,
+            result_columns: Vec::new(),
             bind: None,
         },
         timeout_seconds: 10,
@@ -168,6 +169,7 @@ async fn matrix_run_fires_n_times_m_with_shared_session_prerequisite() {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 10,
@@ -192,6 +194,7 @@ async fn matrix_run_fires_n_times_m_with_shared_session_prerequisite() {
             extract: ExtractConfig::Jsonpath {
                 path: "$.jwToken".into(),
             },
+            result_columns: Vec::new(),
             bind: Some("bearer_token".into()),
         },
         timeout_seconds: 10,
@@ -231,7 +234,9 @@ async fn matrix_run_fires_n_times_m_with_shared_session_prerequisite() {
         scenario_id: "test-scenario".into(),
         registry,
         request_ids: vec!["chat".into(), "echo".into()],
+        per_request_repeat: HashMap::new(),
         payloads,
+        repeat: 1,
         shared_session: true,
         session_strategy: SessionStrategy::None,
         runner_version: "test".into(),
@@ -325,6 +330,7 @@ async fn matrix_run_with_shared_session_false_fires_prereq_per_cell() {
             extract: ExtractConfig::Jsonpath {
                 path: "$.jwToken".into(),
             },
+            result_columns: Vec::new(),
             bind: Some("bearer_token".into()),
         },
         timeout_seconds: 10,
@@ -351,6 +357,7 @@ async fn matrix_run_with_shared_session_false_fires_prereq_per_cell() {
         },
         response: ResponseConfig {
             extract: ExtractConfig::Raw,
+            result_columns: Vec::new(),
             bind: None,
         },
         timeout_seconds: 10,
@@ -386,7 +393,9 @@ async fn matrix_run_with_shared_session_false_fires_prereq_per_cell() {
         scenario_id: "test-scenario".into(),
         registry,
         request_ids: vec!["x".into()],
+        per_request_repeat: HashMap::new(),
         payloads,
+        repeat: 1,
         shared_session: false,
         session_strategy: SessionStrategy::None,
         runner_version: "test".into(),
@@ -443,6 +452,7 @@ async fn auth_chain_fires_login_then_injects_bearer_token() {
             extract: ExtractConfig::Jsonpath {
                 path: "$.jwToken".into(),
             },
+            result_columns: Vec::new(),
             bind: Some("bearer_token".into()),
         },
         timeout_seconds: 10,
@@ -470,6 +480,7 @@ async fn auth_chain_fires_login_then_injects_bearer_token() {
         },
         response: ResponseConfig {
             extract: ExtractConfig::Raw,
+            result_columns: Vec::new(),
             bind: None,
         },
         timeout_seconds: 10,
@@ -567,6 +578,7 @@ async fn raw_body_sends_string_verbatim_with_prompt_substitution() {
         },
         response: ResponseConfig {
             extract: ExtractConfig::Raw,
+            result_columns: Vec::new(),
             bind: None,
         },
         timeout_seconds: 10,
@@ -901,4 +913,172 @@ async fn run_cancellation_writes_aborted_footer() {
     let footer = footer.expect("aborted run should still write a footer");
     assert_eq!(footer.status, RunStatus::AbortedByUser);
     assert!(footer.attempts_total < 3);
+}
+
+// ── Per-request repeat (item 5 of docs/ToDo.md) ───────────────────────────────
+
+#[tokio::test]
+async fn per_request_repeat_multiplies_attempt_count() {
+    // login: no per-request repeat (defaults to 1)
+    // chat: per-request repeat = 3
+    // Global repeat = 2, 1 payload.
+    //
+    // Expected target attempts: (1×2 + 3×2) × 1 payload = 8
+    // login fires: 2 (global_repeat × 1)
+    // chat fires: 6 (global_repeat × 3)
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/login"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"token":"t"})))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/chat"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+        .mount(&server)
+        .await;
+
+    let mut registry = HashMap::new();
+    registry.insert(
+        "login".into(),
+        Request {
+            version: 1,
+            id: "login".into(),
+            name: "Login".into(),
+            method: "POST".into(),
+            url: format!("{}/login", server.uri()),
+            auth: AuthConfig::None,
+            headers: HashMap::new(),
+            body: BodyConfig {
+                format: BodyFormat::Json,
+                content: serde_json::json!({}),
+            },
+            response: ResponseConfig {
+                extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
+                bind: None,
+            },
+            timeout_seconds: 5,
+            adapter: AdapterType::CustomRest,
+            tag: None,
+        },
+    );
+    registry.insert(
+        "chat".into(),
+        Request {
+            version: 1,
+            id: "chat".into(),
+            name: "Chat".into(),
+            method: "POST".into(),
+            url: format!("{}/chat", server.uri()),
+            auth: AuthConfig::None,
+            headers: HashMap::new(),
+            body: BodyConfig {
+                format: BodyFormat::Json,
+                content: serde_json::json!({"msg": "{{prompt}}"}),
+            },
+            response: ResponseConfig {
+                extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
+                bind: None,
+            },
+            timeout_seconds: 5,
+            adapter: AdapterType::CustomRest,
+            tag: None,
+        },
+    );
+
+    let payloads = vec![Payload {
+        prompt_id: "cat".into(),
+        payload_id: "p1".into(),
+        text: "attack".into(),
+        session: "default".into(),
+    }];
+
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("runs")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("responses")).unwrap();
+
+    let mut per_request_repeat = HashMap::new();
+    per_request_repeat.insert("chat".into(), 3u32);
+
+    let config = runner::MatrixRunConfig {
+        engagement_dir: tmp.path().to_owned(),
+        run_id: "run-001".into(),
+        scenario_id: "repeat-test".into(),
+        registry,
+        request_ids: vec!["login".into(), "chat".into()],
+        per_request_repeat,
+        payloads,
+        repeat: 2,
+        shared_session: false,
+        session_strategy: SessionStrategy::None,
+        runner_version: "test".into(),
+        body_logging_enabled: false,
+        on_attempt_log: None,
+        cancellation: None,
+    };
+
+    runner::execute_matrix_run(config, |_| {}).await.unwrap();
+
+    let records = storage::runs::read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
+
+    // Count target attempts (kind != "prerequisite").
+    let target_attempts: Vec<_> = records
+        .iter()
+        .filter_map(|r| match r {
+            storage::runs::RunRecord::Attempt(a) if a.kind.as_deref() != Some("prerequisite") => {
+                Some(a.as_ref())
+            }
+            _ => None,
+        })
+        .collect();
+
+    // login: 1 (per_request) × 2 (global) = 2 target firings
+    let login_count = target_attempts
+        .iter()
+        .filter(|a| a.request.url.contains("/login"))
+        .count();
+    // chat: 3 (per_request) × 2 (global) = 6 target firings
+    let chat_count = target_attempts
+        .iter()
+        .filter(|a| a.request.url.contains("/chat"))
+        .count();
+
+    assert_eq!(login_count, 2, "login fires global_repeat × 1 = 2 times");
+    assert_eq!(
+        chat_count, 6,
+        "chat fires global_repeat × per_repeat = 6 times"
+    );
+    assert_eq!(target_attempts.len(), 8, "total target attempts = 8");
+
+    let footer = records.iter().find_map(|r| match r {
+        storage::runs::RunRecord::Footer(f) => Some(f),
+        _ => None,
+    });
+    assert_eq!(footer.unwrap().attempts_total, 8);
+}
+
+#[test]
+fn per_request_repeat_expansion_math() {
+    // Unit test: verify the total calculation without network I/O.
+    // 2 requests (login×1, chat×3), 2 payloads, global repeat=2 → 16 target cells.
+    // (login contributes 1×2 + chat contributes 3×2) × 2 payloads = 16.
+    let request_repeats: HashMap<&str, u32> = [("chat", 3)].into();
+    let request_ids = ["login", "chat"];
+    let payload_count = 2u32;
+    let global_repeat = 2u32;
+
+    let request_repeat_sum: u32 = request_ids
+        .iter()
+        .map(|id| request_repeats.get(id).copied().unwrap_or(1).max(1))
+        .sum();
+    let total = payload_count
+        .saturating_mul(request_repeat_sum)
+        .saturating_mul(global_repeat);
+
+    assert_eq!(request_repeat_sum, 4); // 1 + 3
+    assert_eq!(total, 16); // 2 payloads × 4 × 2 global
 }

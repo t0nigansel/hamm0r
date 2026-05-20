@@ -139,7 +139,8 @@ host hardware.
 Only `crates/analyzor-cli/` (and the parts of `crates/analyzer/`
 reused inside the bundle) depend on `llama-cpp-2`. Core does **not**
 link it — the boundary is the subprocess + the on-disk artifacts
-described in [`docs/analyzorPlan.md`](analyzorPlan.md). There is no
+described in [`Architecture.md` § The analyzer as a separable
+module](Architecture.md#the-analyzer-as-a-separable-module). There is no
 longer a `--features analyzer` Cargo gate; the analyzer is delivered
 as runtime install metadata, not as a build mode.
 

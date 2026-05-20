@@ -6,20 +6,21 @@ Use semantic tokens as the source of truth.
 
 ```css
 :root {
-  --bg-app: #111214;
-  --bg-sidebar: #2D2F33;
-  --bg-surface: #222426;
-  --bg-surface-alt: #1C1E21;
+  --bg-app: #171A22;
+  --bg-sidebar: #0F1118;
+  --bg-surface: #20232D;
+  --bg-surface-alt: #1A1D26;
 
-  --color-accent: #E34A3F;
-  --color-accent-hover: #D94136;
+  --color-accent: #B9C7FF;
+  --color-accent-hover: #CCD6FF;
+  --color-secondary-accent: #FFB08A;
 
-  --color-text-primary: #F2F2F2;
-  --color-text-secondary: #C8C8C8;
-  --color-text-muted: #9B9B9B;
+  --color-text-primary: #E7EAF4;
+  --color-text-secondary: #C5CAD9;
+  --color-text-muted: #8D94A7;
 
-  --color-border: #2F3236;
-  --color-disabled: #7C7C7C;
+  --color-border: #3A4052;
+  --color-disabled: #696F81;
 }
 ```
 
@@ -27,8 +28,10 @@ Rules:
 - App canvas uses `--bg-app`.
 - Navigation rail uses `--bg-sidebar`.
 - Cards/panels use `--bg-surface` and `--bg-surface-alt`.
-- Accent red is reserved for active/selected/primary actions and key status emphasis.
-- Text on accent surfaces stays near-white.
+- Accent periwinkle is reserved for active/selected/primary actions
+  and key status emphasis.
+- Peach is reserved for secondary emphasis and technical callouts.
+- Text on accent surfaces stays high-contrast.
 
 ## 2. Typography
 
@@ -77,7 +80,8 @@ Rules:
 ## 5. Component Treatment
 
 Top chrome:
-- Header bar may use accent red for strong orientation.
+- Header bar may use deep ink with a restrained accent edge for strong
+  orientation.
 - Sidebar remains dark graphite with restrained hover states.
 
 Cards and panels:
@@ -85,7 +89,7 @@ Cards and panels:
 - Avoid glossy effects and heavy shadowing.
 
 Controls:
-- Primary buttons use accent red.
+- Primary buttons use accent periwinkle.
 - Secondary/ghost controls remain neutral gray.
 - Active tabs use accent underline and subtle accent-tint background.
 - Inactive controls use muted text and border contrast.

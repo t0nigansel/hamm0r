@@ -63,6 +63,45 @@ pub fn render_with(
     Ok(tmpl.render(serde_json::Value::Object(ctx))?)
 }
 
+/// Render template markers inside a JSON value while preserving JSON types.
+pub fn render_json_value(
+    value: serde_json::Value,
+    payload: &str,
+) -> Result<serde_json::Value, RunnerError> {
+    render_json_value_with(value, payload, &BindCache::new())
+}
+
+/// Same as `render_json_value`, with bind-cache substitution support.
+pub fn render_json_value_with(
+    value: serde_json::Value,
+    payload: &str,
+    binds: &BindCache,
+) -> Result<serde_json::Value, RunnerError> {
+    match value {
+        serde_json::Value::String(s) => {
+            Ok(serde_json::Value::String(render_with(&s, payload, binds)?))
+        }
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .map(|item| render_json_value_with(item, payload, binds))
+            .collect::<Result<Vec<_>, _>>()
+            .map(serde_json::Value::Array),
+        serde_json::Value::Object(map) => {
+            let rendered = map
+                .into_iter()
+                .map(|(key, value)| {
+                    Ok((
+                        render_with(&key, payload, binds)?,
+                        render_json_value_with(value, payload, binds)?,
+                    ))
+                })
+                .collect::<Result<serde_json::Map<_, _>, RunnerError>>()?;
+            Ok(serde_json::Value::Object(rendered))
+        }
+        other => Ok(other),
+    }
+}
+
 /// Render each header value that contains `{{ prompt }}`.
 pub fn render_headers(
     headers: &std::collections::HashMap<String, String>,
@@ -199,5 +238,51 @@ mod tests {
         let rendered = render_headers(&headers, "attack").unwrap();
         assert_eq!(rendered["X-Payload"], "value=attack");
         assert_eq!(rendered["Content-Type"], "application/json");
+    }
+
+    #[test]
+    fn json_value_rendering_preserves_types() {
+        let input = serde_json::json!({
+            "message": "{{ prompt }}",
+            "enabled": true,
+            "count": 3,
+            "nested": ["prefix {{ prompt }}", null]
+        });
+
+        let rendered = render_json_value(input, "hello").unwrap();
+
+        assert_eq!(
+            rendered,
+            serde_json::json!({
+                "message": "hello",
+                "enabled": true,
+                "count": 3,
+                "nested": ["prefix hello", null]
+            })
+        );
+    }
+
+    #[test]
+    fn json_value_rendering_supports_binds_and_keys() {
+        let mut binds: BindCache = HashMap::new();
+        let mut bs = HashMap::new();
+        bs.insert("field".to_owned(), "token".to_owned());
+        bs.insert("value".to_owned(), "abc123".to_owned());
+        binds.insert("login".to_owned(), bs);
+
+        let input = serde_json::json!({
+            "{{ login.field }}": "{{ login.value }}",
+            "prompt": "{{ prompt }}"
+        });
+
+        let rendered = render_json_value_with(input, "attack", &binds).unwrap();
+
+        assert_eq!(
+            rendered,
+            serde_json::json!({
+                "token": "abc123",
+                "prompt": "attack"
+            })
+        );
     }
 }

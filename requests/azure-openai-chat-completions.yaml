@@ -1,0 +1,26 @@
+# hamm0r-starter-version: 2026.05
+# Starter request template. Startup seeding never overwrites user files.
+version: 1
+id: azure-openai-chat-completions
+name: "Azure OpenAI — Chat Completions"
+method: POST
+url: "https://{{ env.AZURE_OPENAI_RESOURCE }}.openai.azure.com/openai/deployments/{{ env.AZURE_OPENAI_DEPLOYMENT }}/chat/completions?api-version={{ env.AZURE_OPENAI_API_VERSION }}"
+auth:
+  type: custom-header
+  header_name: api-key
+  value_env: AZURE_OPENAI_API_KEY
+headers:
+  Content-Type: "application/json"
+body:
+  format: json
+  content:
+    messages:
+      - role: user
+        content: "{{prompt}}"
+response:
+  extract:
+    type: jsonpath
+    path: "$.choices[0].message.content"
+timeout_seconds: 60
+adapter: open-ai-compat
+tag: starter-azure

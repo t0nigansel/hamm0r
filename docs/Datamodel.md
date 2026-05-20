@@ -128,7 +128,7 @@ analyzer:
     request_timeout_seconds: 60
     max_retries: 1
 ui:
-  theme: system                 # system | light | dark | spirit_testing | testsolutions
+  theme: system                 # system | light | dark
 logging:
   enabled: true
   level: info                   # error | info | debug
@@ -141,9 +141,10 @@ Not synced, not versioned. Lost on reinstall without loss of user work.
 value itself. The Hosted Judge API key is stored in the OS keychain and must
 never be written into `config.yaml`.
 
-`ui.theme` accepts the legacy values `system`, `light`, and `dark`, which
-all resolve to the default hamm0r appearance in the current UI. The
-`spirit_testing` and `testsolutions` values enable alternate color themes.
+`ui.theme` accepts `system`, `light`, and `dark`. The current UI exposes
+the default hamm0r theme plus a `light` theme. Legacy `spirit_testing`
+and `testsolutions` values are read as `light` so older config files do
+not break startup.
 
 ---
 
@@ -349,7 +350,16 @@ grouping; Phase 2 of `RefactorPlan.md` replaced them with `tag`.
 
 Starter Request templates bundled with the app are copied into
 `~/hamm0r/requests/` when their filenames are missing there. Existing
-Request files are never overwritten by startup seeding.
+Request files are never overwritten by startup seeding. Starter files
+include an informational `# hamm0r-starter-version: YYYY.MM` comment.
+
+Bundled starters cover common LLM endpoints:
+
+- `ollama-chat-local.yaml` — local Ollama chat API.
+- `openai-chat-completions.yaml` — OpenAI Chat Completions.
+- `anthropic-messages.yaml` — Anthropic Messages API.
+- `azure-openai-chat-completions.yaml` — Azure OpenAI chat completions.
+- `generic-rest-json.yaml` — editable generic JSON POST template.
 
 ---
 
@@ -364,9 +374,10 @@ name: "Acme Corp support chatbot test"
 created_at: 2026-04-24T09:00:00Z
 target:
   # `target` is a historical wrapper kept for back-compat after the Target
-  # entity was retired in Phase 2; `request_id` is the only load-bearing
-  # field. Renaming the wrapper to `scenario_id` is a follow-up.
-  request_id: openai-chat-completion     # filename stem from requests/
+  # entity was retired in Phase 2. `scenario_id` names the Scenario used
+  # in this engagement. Old files that used `request_id` here are accepted
+  # via a serde alias.
+  scenario_id: acme-matrix              # filename stem from scenarios/
   notes: "Staging environment, rate limit 10/s."
 scope:
   prompt_files:
@@ -479,8 +490,27 @@ only if the user activates the analyzer on this run.
 ### Header
 
 ```json
-{"type":"header","run_id":"run-001","model":"qwen3-4b-q4","analyzer_version":"0.2.0","started_at":"2026-04-24T10:00:00Z"}
+{"type":"header","run_id":"run-001","model":"qwen3-4b-q4","analyzer_version":"0.2.0","started_at":"2026-04-24T10:00:00Z","judge_mode":"local"}
 ```
+
+When the analyzer runs in Hosted Judge mode, the header carries
+additional provider identity fields:
+
+```json
+{"type":"header","run_id":"run-001","model":"azure_openai:gpt-5.2-chat","analyzer_version":"0.2.0","started_at":"2026-05-07T10:00:00Z","judge_mode":"hosted","provider":"azure_openai","deployment":"gpt-5.2-chat"}
+```
+
+Header fields:
+
+- `model` — human-readable model identifier. In local mode this is
+  the GGUF filename stem; in hosted mode it is
+  `<provider>:<deployment>`.
+- `judge_mode` — `local` or `hosted`. Absent in verdict files written
+  before this field was introduced; readers treat absent as `local`.
+- `provider` — hosted provider slug (e.g. `azure_openai`). Present
+  only when `judge_mode` is `hosted`.
+- `deployment` — provider-side deployment or model name. Present only
+  when `judge_mode` is `hosted`.
 
 ### Verdict (one per attempt the analyzer processes)
 
@@ -615,17 +645,23 @@ version: 1
 id: acme-matrix
 name: "Acme matrix"
 request_ids:
-  - login
-  - chat
+  - login               # bare string — fires once per global repeat
+  - id: chat
+    repeat: 5           # fires 5× per global repeat (total = global × 5)
 library:
   owasp_refs: [A01, A03]
   categories: [injection-classics]
 shared_session: true       # one HTTP client across the whole run
-repeat: 1
+repeat: 2
 ```
 
 - `request_ids` lists the Requests to fire. Each is fired against every
-  prompt resolved from `library`.
+  prompt resolved from `library`. Each entry is either a bare string (the
+  request id) or an object with `id` and an optional `repeat` multiplier.
+  The per-request `repeat` multiplies on top of the scenario-level `repeat`:
+  a request with `repeat: 5` inside a scenario with `repeat: 2` fires
+  10 times per payload. Bare strings default to `repeat: 1`. Both forms
+  are accepted in the same `request_ids` list for backward compatibility.
 - `library` resolves at run time: a prompt entry matches if its
   `owasp_ref` is listed **or** its file stem (category) is listed.
 - `shared_session: true` shares one HTTP client and one auth-chain bind

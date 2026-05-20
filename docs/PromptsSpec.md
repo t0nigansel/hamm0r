@@ -26,6 +26,11 @@ is copied here on first launch; afterwards the user's copy is sacred.
 Updates to the starter library are offered as additions to new files,
 never as overwrites of existing ones.
 
+Seeded starter files include a comment marker:
+`# hamm0r-starter-version: YYYY.MM`. The marker is informational and
+kept as a YAML comment so prompt files remain a top-level list of prompt
+entries.
+
 There is no database. The library *is* the YAML files. The `storage`
 crate reads them on demand via `serde_yaml`.
 

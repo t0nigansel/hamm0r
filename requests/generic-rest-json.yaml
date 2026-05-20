@@ -1,0 +1,20 @@
+# hamm0r-starter-version: 2026.05
+# Starter request template. Startup seeding never overwrites user files.
+version: 1
+id: generic-rest-json
+name: "Generic REST — JSON"
+method: POST
+url: "https://example.test/api/chat"
+auth:
+  type: none
+headers:
+  Content-Type: "application/json"
+body:
+  format: json
+  content:
+    message: "{{prompt}}"
+response:
+  extract:
+    type: raw
+timeout_seconds: 30
+tag: starter-generic

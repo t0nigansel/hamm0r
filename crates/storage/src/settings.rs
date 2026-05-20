@@ -66,26 +66,28 @@ mod tests {
     }
 
     #[test]
-    fn roundtrips_spirit_testing_theme() {
+    fn roundtrips_light_theme() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yaml");
         let mut config = AppConfig::defaults("C:/tmp/hamm0r".to_owned());
-        config.ui.theme = Theme::SpiritTesting;
+        config.ui.theme = Theme::Light;
         save(&path, &config).unwrap();
 
         let loaded = load_or_default(&path, "ignored".to_owned()).unwrap();
-        assert_eq!(loaded.ui.theme, Theme::SpiritTesting);
+        assert_eq!(loaded.ui.theme, Theme::Light);
     }
 
     #[test]
-    fn roundtrips_testsolutions_theme() {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.yaml");
-        let mut config = AppConfig::defaults("C:/tmp/hamm0r".to_owned());
-        config.ui.theme = Theme::Testsolutions;
-        save(&path, &config).unwrap();
+    fn legacy_brand_theme_values_load_as_light() {
+        for legacy_theme in ["spirit_testing", "testsolutions"] {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("config.yaml");
+            let yaml =
+                format!("version: 1\nhamm0r_root: C:/tmp/hamm0r\nui:\n  theme: {legacy_theme}\n",);
+            atomic_write(&path, yaml.as_bytes()).unwrap();
 
-        let loaded = load_or_default(&path, "ignored".to_owned()).unwrap();
-        assert_eq!(loaded.ui.theme, Theme::Testsolutions);
+            let loaded = load_or_default(&path, "ignored".to_owned()).unwrap();
+            assert_eq!(loaded.ui.theme, Theme::Light);
+        }
     }
 }

@@ -33,10 +33,16 @@ const THEME_CACHE_KEY = 'hamm0r.ui.theme.v1';
 
 function normalizeTheme(theme) {
   const value = String(theme || '').trim().toLowerCase();
-  if (value === 'spirit' || value === 'spirit-testing') return 'spirit_testing';
-  if (value === 'spirit_testing') return 'spirit_testing';
-  if (value === 'testsolutions' || value === 'test-solutions' || value === 'test_solutions') {
-    return 'testsolutions';
+  if (
+    value === 'light' ||
+    value === 'spirit' ||
+    value === 'spirit-testing' ||
+    value === 'spirit_testing' ||
+    value === 'testsolutions' ||
+    value === 'test-solutions' ||
+    value === 'test_solutions'
+  ) {
+    return 'light';
   }
   return 'default';
 }
@@ -199,10 +205,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeViewId = 'view-home';
   let editingPromptId = null;
   let currentScenarioId = null;
+  let currentScenario = null;
   // Matrix-mode editor state. A Scenario fires every selected Request
   // against every prompt resolved from the library subset.
   let currentScenarioMatrix = {
-    request_ids: [],            // selected Request ids
+    request_ids: [],            // selected Request ids (strings)
+    request_repeats: {},        // {[req_id]: localRepeatCount} — only when > 1
     owasp_refs: [],             // e.g. ["A01", "A03"]
     categories: [],             // prompt-file stems
     shared_session: false,
@@ -240,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeRunId: null,
     runs: [],
     resultsByRunId: new Map(),
+    triageByRunId: new Map(),
     scenarios: [],
     targetMatch: null,
     activeScenarioId: null,
@@ -455,6 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#breadcrumb-engagement').textContent = name;
     if ($('#view-home').classList.contains('active')) {
       loadHomeRecentEngagements();
+      updateHomeCtas();
     }
     if ($('#view-engagements').classList.contains('active')) loadEngagementList({ autoOpen: false });
   }
@@ -766,6 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const HOME_CTA_ACTIONS = {
+    open_engagement: openEngagementDialog,
     run_scenario: openScenarioPicker,
     open_scenarios: () => showView('view-scenarios'),
     open_requests: () => showView('view-requests'),
@@ -794,7 +805,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let tiles;
-    if (requestCount === 0) {
+    if (!dbOpen) {
+      tiles = [
+        { action: 'open_engagement', primary: true, eyebrow: 'Start here',
+          title: 'Open or create an Engagement',
+          desc: 'An Engagement is your workspace. Everything runs inside one.' },
+        { action: 'open_prompts', primary: false, eyebrow: 'Browse',
+          title: 'Explore the Prompt library',
+          desc: 'Look at the bundled OWASP attacks while you set up.' },
+      ];
+    } else if (requestCount === 0) {
       tiles = [
         { action: 'open_requests', primary: true, eyebrow: 'Start', title: 'Create your first Request',
           desc: 'Define an HTTP endpoint to attack. An Ollama starter is bundled.' },
@@ -1999,12 +2019,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#btn-new-scenario').addEventListener('click', createNewScenario);
   $('#btn-scenario-get-started')?.addEventListener('click', createNewScenario);
+  $('#btn-scenario-go-to-requests')?.addEventListener('click', () => showView('view-requests'));
 
   async function openScenario(scenarioId) {
     currentScenarioId = scenarioId;
     try {
       const s = await API.call('get_scenario', { id: scenarioId });
       if (!s) return;
+      currentScenario = s;
 
       $('#scenario-empty').style.display = 'none';
       $('#scenario-builder').style.display = '';
@@ -2017,6 +2039,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Matrix-mode state. Read from the scenario YAML's matrix fields.
       currentScenarioMatrix = {
         request_ids: Array.isArray(s.request_ids) ? [...s.request_ids] : [],
+        request_repeats: s.request_repeats && typeof s.request_repeats === 'object'
+          ? { ...s.request_repeats }
+          : {},
         owasp_refs: Array.isArray(s.library?.owasp_refs) ? [...s.library.owasp_refs] : [],
         categories: Array.isArray(s.library?.categories) ? [...s.library.categories] : [],
         shared_session: !!s.shared_session,
@@ -2070,27 +2095,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const checked = new Set(currentScenarioMatrix.request_ids);
     all.forEach((req) => {
+      const isChecked = checked.has(req.id);
+      const localRepeat = currentScenarioMatrix.request_repeats[req.id] || 1;
       const row = document.createElement('div');
-      row.className = 'target-request-pick-row' + (checked.has(req.id) ? ' active' : '');
+      row.className = 'target-request-pick-row' + (isChecked ? ' active' : '');
       row.innerHTML = `
         <label class="pick-checkbox">
-          <input type="checkbox" data-req-id="${esc(req.id)}" ${checked.has(req.id) ? 'checked' : ''}>
+          <input type="checkbox" data-req-id="${esc(req.id)}" ${isChecked ? 'checked' : ''}>
           <span class="pick-name">${esc(req.name || req.id)}</span>
           <span class="pick-meta">${esc((req.method || 'POST') + ' · ' + (req.url || '').replace(/^https?:\/\//, ''))}</span>
         </label>
+        <span class="pick-repeat" ${isChecked ? '' : 'style="display:none;"'}>
+          <label class="pick-repeat-label" for="repeat-${esc(req.id)}">×</label>
+          <input type="number" id="repeat-${esc(req.id)}" class="pick-repeat-input"
+            min="1" value="${localRepeat}" data-req-id="${esc(req.id)}"
+            title="Per-request repeat — multiplies the global Repeat count">
+        </span>
       `;
-      row.querySelector('input[type=checkbox]').addEventListener('change', (e) => {
+      const checkbox = row.querySelector('input[type=checkbox]');
+      const repeatSpan = row.querySelector('.pick-repeat');
+      const repeatInput = row.querySelector('.pick-repeat-input');
+
+      checkbox.addEventListener('change', (e) => {
         if (e.target.checked) {
           if (!currentScenarioMatrix.request_ids.includes(req.id)) {
             currentScenarioMatrix.request_ids.push(req.id);
           }
+          repeatSpan.style.display = '';
         } else {
           currentScenarioMatrix.request_ids = currentScenarioMatrix.request_ids
             .filter((id) => id !== req.id);
+          delete currentScenarioMatrix.request_repeats[req.id];
+          repeatInput.value = 1;
+          repeatSpan.style.display = 'none';
         }
         row.classList.toggle('active', e.target.checked);
         updateMatrixPromptCounter();
       });
+
+      repeatInput.addEventListener('input', () => {
+        const v = Math.max(1, parseInt(repeatInput.value, 10) || 1);
+        if (v <= 1) {
+          delete currentScenarioMatrix.request_repeats[req.id];
+        } else {
+          currentScenarioMatrix.request_repeats[req.id] = v;
+        }
+        updateMatrixPromptCounter();
+      });
+
       root.appendChild(row);
     });
   }
@@ -2164,9 +2216,12 @@ document.addEventListener('DOMContentLoaded', () => {
         currentScenarioMatrix.categories.includes(cat)
       );
     }).length;
-    const requestCount = currentScenarioMatrix.request_ids.length;
-    const total = matched * Math.max(1, requestCount);
-    out.textContent = `${matched} prompts × ${requestCount} request(s) = ${total} attempts (plus auth-chain prereqs).`;
+    // Sum per-request repeats so "chat×3" is counted as 3 firings.
+    const requestRepeatSum = currentScenarioMatrix.request_ids
+      .reduce((sum, id) => sum + (currentScenarioMatrix.request_repeats[id] || 1), 0);
+    const repeat = Math.max(1, parseInt($('#sc-repeat')?.value, 10) || 1);
+    const total = matched * Math.max(1, requestRepeatSum) * repeat;
+    out.textContent = `${matched} prompts × ${requestRepeatSum} request firing(s) × ${repeat} repeat = ${total} attempts (plus auth-chain prereqs).`;
   }
 
   function estimateCurrentScenarioTotal() {
@@ -2179,9 +2234,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentScenarioMatrix.categories.includes(cat)
       );
     }).length;
-    const requestCount = currentScenarioMatrix.request_ids.length;
+    const requestRepeatSum = currentScenarioMatrix.request_ids
+      .reduce((sum, id) => sum + (currentScenarioMatrix.request_repeats[id] || 1), 0);
     const repeat = Math.max(1, parseInt($('#sc-repeat')?.value, 10) || 1);
-    return matched * Math.max(1, requestCount) * repeat;
+    return matched * Math.max(1, requestRepeatSum) * repeat;
   }
 
   // Listen on the shared-session checkbox.
@@ -2190,6 +2246,8 @@ document.addEventListener('DOMContentLoaded', () => {
       currentScenarioMatrix.shared_session = !!e.target.checked;
     }
   });
+
+  $('#sc-repeat')?.addEventListener('input', updateMatrixPromptCounter);
 
   // ── Save scenario header ───────────────────────────────────────────
   $('#btn-save-scenario').addEventListener('click', async () => {
@@ -2201,6 +2259,7 @@ document.addEventListener('DOMContentLoaded', () => {
       repeat_count: parseInt($('#sc-repeat').value) || 1,
       // Matrix fields fed straight to the Scenario YAML.
       request_ids: [...currentScenarioMatrix.request_ids],
+      request_repeats: { ...currentScenarioMatrix.request_repeats },
       library: {
         owasp_refs: [...currentScenarioMatrix.owasp_refs],
         categories: [...currentScenarioMatrix.categories],
@@ -2224,6 +2283,7 @@ document.addEventListener('DOMContentLoaded', () => {
       await API.call('delete_scenario', { id });
       if (currentScenarioId === id) {
         currentScenarioId = null;
+        currentScenario = null;
         $('#scenario-builder').style.display = 'none';
         $('#scenario-empty').style.display = '';
         updateGlobalFireButton();
@@ -2233,9 +2293,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) { toast(err.message, 'error'); }
   }
 
-  $('#btn-delete-scenario').addEventListener('click', async () => {
+  $('#btn-delete-scenario').addEventListener('click', async (e) => {
+    e.preventDefault();
     if (!currentScenarioId) return;
-    deleteScenarioFromUi(currentScenarioId);
+    await deleteScenarioFromUi(currentScenario || currentScenarioId);
   });
 
   // ── Run scenario ───────────────────────────────────────────────────
@@ -2541,12 +2602,47 @@ document.addEventListener('DOMContentLoaded', () => {
       .join('');
     $('#results-head-row').innerHTML = `
       <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
-      <th>Verdict</th>
+      <th>Verdict</th><th>Triage</th>
       ${metricHeaders}
       <th class="col-wide">Request</th>
       <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
       <th>Latency</th>`;
   }
+
+  const TRIAGE_LABELS = {
+    unreviewed:     'Unreviewed',
+    confirmed:      'Confirmed',
+    false_positive: 'False Positive',
+    needs_review:   'Needs Review',
+  };
+
+  function triageBadgeHtml(status) {
+    const label = TRIAGE_LABELS[status] || 'Unreviewed';
+    return `<span class="triage-badge triage-${status || 'unreviewed'}">${esc(label)}</span>`;
+  }
+
+  let _triageActiveFilter = 'all';
+
+  function applyTriageFilter() {
+    const filter = _triageActiveFilter;
+    const rows = document.querySelectorAll('#results-tbody tr[data-triage-status]');
+    rows.forEach((row) => {
+      const status = row.dataset.triageStatus || 'unreviewed';
+      const visible = filter === 'all' || status === filter;
+      row.style.display = visible ? '' : 'none';
+    });
+  }
+
+  // Wire filter-bar chip clicks once (delegated from #triage-filter-bar).
+  document.getElementById('triage-filter-bar')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-triage-filter]');
+    if (!chip) return;
+    _triageActiveFilter = chip.dataset.triageFilter;
+    document.querySelectorAll('.triage-filter-chip').forEach(c =>
+      c.classList.toggle('active', c === chip)
+    );
+    applyTriageFilter();
+  });
 
   async function tryRenderRunReportHtml(engagementSlug, runId, preview) {
     try {
@@ -3341,9 +3437,14 @@ document.addEventListener('DOMContentLoaded', () => {
         $('#run-results-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
       }
 
-      const results = await API.call('get_results', { engagement_slug: engagementSlug, run_id: runId });
-      const diagnostics = await API.call('get_run_diagnostics', { engagement_slug: engagementSlug, run_id: runId });
+      const [results, diagnostics, triageEntries] = await Promise.all([
+        API.call('get_results', { engagement_slug: engagementSlug, run_id: runId }),
+        API.call('get_run_diagnostics', { engagement_slug: engagementSlug, run_id: runId }),
+        API.call('get_triage', { engagement_slug: engagementSlug, run_id: runId }).catch(() => []),
+      ]);
+      const triageBySeq = new Map((triageEntries || []).map(e => [Number(e.seq), e]));
       engagementDetail.resultsByRunId.set(runId, results);
+      engagementDetail.triageByRunId.set(runId, triageBySeq);
       const runSummary = engagementDetail.runs.find(r => r.id === runId) || null;
       const runIsRunning = String(runSummary?.status || '').toLowerCase() === 'running';
       const resultColumns = resultColumnsForResults(results);
@@ -3360,22 +3461,106 @@ document.addEventListener('DOMContentLoaded', () => {
         const metricCells = resultColumns
           .map((col) => `<td>${esc(resultMetricValue(r, col) || '-')}</td>`)
           .join('');
+        const triage = triageBySeq.get(Number(r.seq));
+        const triageStatus = triage?.status || 'unreviewed';
+
         const tr = document.createElement('tr');
         tr.className = 'clickable';
+        tr.dataset.triageStatus = triageStatus;
         tr.innerHTML = `
           <td>${r.step_order || '-'}</td>
           <td>${esc(r.session_label || '-')}</td>
           <td><code>${esc(r.prompt_id)}</code></td>
           <td><span class="${statusClass}">${statusText}</span></td>
           <td>${engagementVerdictBadgeHtml(r)}</td>
+          <td class="triage-cell"></td>
           ${metricCells}
           <td><div class="cell-text">${esc(requestText || '-')}</div></td>
           <td><div class="cell-text">${esc(r.prompt_text)}</div></td>
           <td><div class="cell-text">${esc(r.response_text || (running ? '(running)' : (pending ? '(pending)' : '')))}</div></td>
           <td>${r.latency_ms != null ? r.latency_ms + 'ms' : '-'}</td>`;
+
+        // Build triage cell: status select + optional note field.
+        const triageCell = tr.querySelector('.triage-cell');
+        const select = document.createElement('select');
+        select.className = `triage-select triage-select-${triageStatus}`;
+        [
+          ['unreviewed',     'Unreviewed'],
+          ['confirmed',      'Confirmed'],
+          ['needs_review',   'Needs Review'],
+          ['false_positive', 'False Positive'],
+        ].forEach(([val, label]) => {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = label;
+          if (val === triageStatus) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        const noteBtn = document.createElement('button');
+        noteBtn.className = 'triage-note-btn';
+        noteBtn.title = triage?.note ? `Note: ${triage.note}` : 'Add note';
+        noteBtn.textContent = triage?.note ? '📝' : '○';
+        noteBtn.setAttribute('aria-label', 'Toggle note');
+
+        const noteField = document.createElement('input');
+        noteField.type = 'text';
+        noteField.className = 'triage-note-input is-hidden';
+        noteField.placeholder = 'Add a note…';
+        noteField.value = triage?.note || '';
+        noteField.maxLength = 500;
+
+        const saveTriageChange = async (newStatus, newNote) => {
+          try {
+            const saved = await API.call('set_triage_status', {
+              engagement_slug: engagementSlug,
+              run_id: runId,
+              seq: Number(r.seq),
+              status: newStatus,
+              note: newNote || null,
+            });
+            tr.dataset.triageStatus = saved.status;
+            select.className = `triage-select triage-select-${saved.status}`;
+            noteBtn.title = saved.note ? `Note: ${saved.note}` : 'Add note';
+            noteBtn.textContent = saved.note ? '📝' : '○';
+            triageBySeq.set(Number(r.seq), saved);
+            applyTriageFilter();
+          } catch (err) {
+            toast(`Triage save failed: ${err.message}`, 'error');
+          }
+        };
+
+        select.addEventListener('change', (e) => {
+          e.stopPropagation();
+          saveTriageChange(select.value, noteField.value);
+        });
+        select.addEventListener('click', (e) => e.stopPropagation());
+
+        noteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const hidden = noteField.classList.toggle('is-hidden');
+          if (!hidden) noteField.focus();
+        });
+
+        noteField.addEventListener('click', (e) => e.stopPropagation());
+        noteField.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            saveTriageChange(select.value, noteField.value);
+            noteField.classList.add('is-hidden');
+          } else if (e.key === 'Escape') {
+            noteField.classList.add('is-hidden');
+          }
+        });
+
+        triageCell.appendChild(select);
+        triageCell.appendChild(noteBtn);
+        triageCell.appendChild(noteField);
+
         tr.addEventListener('click', () => showResultDetail(r));
         tbody.appendChild(tr);
       });
+      applyTriageFilter();
 
       const latest = [...results].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0)).at(-1);
       if (latest) {
@@ -3407,6 +3592,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>-</td>
           <td><code>-</code></td>
           <td><span class="${live?.error ? 'status-error' : 'status-ok'}">${live?.error ? 'ERROR' : 'PENDING'}</span></td>
+          <td><span style="color:var(--text-3);">—</span></td>
           <td><span style="color:var(--text-3);">—</span></td>
           <td><div class="cell-text">${esc(live?.request || diagnostics?.request_url || '-')}</div></td>
           <td><div class="cell-text">(attempt in progress)</div></td>
@@ -3455,9 +3641,11 @@ document.addEventListener('DOMContentLoaded', () => {
       ``,
       `## Results`,
       ``,
-      `| Step | Session | Prompt ID | Status | Request | Prompt | Response | Latency |`,
-      `| --- | --- | --- | --- | --- | --- | --- | --- |`,
+      `| Step | Session | Prompt ID | Status | Triage | Note | Request | Prompt | Response | Latency |`,
+      `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |`,
     ];
+
+    const triageBySeq = engagementDetail.triageByRunId.get(run?.id || '') || new Map();
 
     results
       .sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0))
@@ -3468,7 +3656,10 @@ document.addEventListener('DOMContentLoaded', () => {
           .join(' ') || '-';
         const promptText = String(r.prompt_text || '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
         const responseText = String(r.response_text || r.error_message || '').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
-        lines.push(`| ${r.step_order || '-'} | ${r.session_label || '-'} | ${r.prompt_id || '-'} | ${statusText} | ${requestText.replace(/\|/g, '\\|')} | ${promptText || '-'} | ${responseText || '-'} | ${r.latency_ms != null ? `${r.latency_ms}ms` : '-'} |`);
+        const triage = triageBySeq.get(Number(r.seq));
+        const triageLabel = TRIAGE_LABELS[triage?.status] || TRIAGE_LABELS['unreviewed'];
+        const triageNote = String(triage?.note || '').replace(/\|/g, '\\|');
+        lines.push(`| ${r.step_order || '-'} | ${r.session_label || '-'} | ${r.prompt_id || '-'} | ${statusText} | ${triageLabel} | ${triageNote || '-'} | ${requestText.replace(/\|/g, '\\|')} | ${promptText || '-'} | ${responseText || '-'} | ${r.latency_ms != null ? `${r.latency_ms}ms` : '-'} |`);
       });
 
     return lines.join('\n');

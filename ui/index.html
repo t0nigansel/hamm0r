@@ -16,7 +16,7 @@
        ================================================================ -->
   <div class="topbar">
     <div class="brand">
-      <img class="brand-banner" src="images/hamm0r_banner_transparent.png" alt="hamm0r">
+      <span class="brand-name">hamm<span class="brand-zero">0</span>r</span>
     </div>
     <div class="breadcrumb">
       <span id="breadcrumb-view">home</span>
@@ -63,15 +63,6 @@
       </svg>
       <span class="label">Requests</span>
     </button>
-    <button class="nav-item sidebar-item" data-view="view-prompts" title="Prompts">
-      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="m16 6 4 14" />
-        <path d="M12 6v14" />
-        <path d="M8 8v12" />
-        <path d="M4 4v16" />
-      </svg>
-      <span class="label">Prompts</span>
-    </button>
     <button class="nav-item sidebar-item" data-view="view-scenarios" title="Scenarios">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect width="8" height="8" x="3" y="3" rx="2" />
@@ -81,6 +72,15 @@
       <span class="label">Scenarios</span>
     </button>
     <div class="nav-spacer"></div>
+    <button class="nav-item sidebar-item" data-view="view-prompts" title="Prompts">
+      <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m16 6 4 14" />
+        <path d="M12 6v14" />
+        <path d="M8 8v12" />
+        <path d="M4 4v16" />
+      </svg>
+      <span class="label">Prompts</span>
+    </button>
     <button class="nav-item sidebar-item" data-nav="settings" title="Settings">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
@@ -100,6 +100,15 @@
          ============================================================== -->
     <section id="view-home" class="view">
       <div class="landing-wrap">
+        <div class="flow-strip">
+          <span class="flow-step">1 · Engagement</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-step">2 · Requests</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-step">3 · Scenarios</span>
+          <span class="flow-arrow">→</span>
+          <span class="flow-step">4 · Run</span>
+        </div>
         <div class="landing-cta-grid" id="home-cta-grid">
           <!-- Populated by updateHomeCtas() — tiles adapt to whether the
                user has Requests / runnable Scenarios yet. -->
@@ -151,11 +160,14 @@
           <div id="request-welcome" style="display:none; text-align:center; padding:3rem 2rem;">
             <h2>Requests</h2>
             <p class="muted" style="margin:1rem 0;">
-              Reusable HTTP requests for your LLM endpoints. Use
+              Reusable HTTP endpoints for your LLM targets. Use
               <code>{{prompt}}</code> in the body to mark where attack payloads
               get substituted at run time.
             </p>
-            <button id="btn-request-get-started" class="btn btn-primary" style="margin-top:1.5rem;">+ Create request</button>
+            <p class="muted" style="margin:0.5rem 0 1.5rem;font-size:12px;">
+              Make sure an Engagement is open first — use the <strong>+</strong> button in the toolbar.
+            </p>
+            <button id="btn-request-get-started" class="btn btn-primary">+ Create request</button>
           </div>
 
           <form id="request-form" style="display:none">
@@ -487,14 +499,15 @@
           <div id="scenario-empty" style="text-align:center;padding:3rem 2rem;">
             <h2>Scenarios</h2>
             <p class="muted" style="margin:1rem 0;">
-              A Scenario fires a Cartesian product of <strong>Requests</strong>
-              (from the Requests view) × a <strong>library subset</strong>
-              (OWASP refs and/or prompt categories). Auth-chain prerequisites
-              declared via the <code>bind</code> field on Requests are
-              resolved automatically.
+              A Scenario pairs one or more <strong>Requests</strong> with a
+              set of attack prompts from the library — hamm0r fires every
+              combination and records the results.
             </p>
-            <p class="muted" style="margin:0.5rem 0 1.5rem 0;font-size:12px;">
-              Pick a scenario from the list, or click below to start a new one.
+            <p class="muted" style="margin:0.5rem 0 0.25rem;font-size:12px;">
+              You need at least one Request before building a Scenario.
+            </p>
+            <p style="margin:0 0 1.5rem;">
+              <button id="btn-scenario-go-to-requests" class="btn btn-ghost btn-small">→ Go to Requests</button>
             </p>
             <button id="btn-scenario-get-started" class="btn btn-primary">+ Create scenario</button>
           </div>
@@ -516,8 +529,8 @@
                 <input id="sc-tester" type="text" placeholder="Your name" value="default">
               </div>
               <div class="editor-actions">
-                <button id="btn-save-scenario" class="btn btn-primary">Save Scenario</button>
-                <button id="btn-delete-scenario" class="btn btn-danger">Delete</button>
+                <button id="btn-save-scenario" type="button" class="btn btn-primary">Save Scenario</button>
+                <button id="btn-delete-scenario" type="button" class="btn btn-danger">Delete</button>
               </div>
             </div>
 
@@ -532,7 +545,8 @@
               <div id="sc-matrix-requests" class="target-request-picker"></div>
               <div class="hint">
                 Pick the Requests to fire. Each selected Request is fired
-                against every prompt in the library subset.
+                against every prompt in the library subset. Use the × field
+                to repeat one Request more often than the Scenario repeat.
               </div>
             </div>
             <div class="form-row">
@@ -605,10 +619,14 @@
             <h2>Engagements</h2>
             <p class="muted" style="margin:1rem 0;">
               An engagement is a folder on disk that holds your runs,
-              responses, and (if installed) verdicts. Create one to fire
-              your first Scenario.
+              responses, and (if installed) verdicts. It's your workspace —
+              open or create one before building Requests or Scenarios.
             </p>
-            <button id="btn-engagement-get-started" class="btn btn-primary" style="margin-top:1.5rem;">+ Create engagement</button>
+            <p class="muted" style="margin:0.5rem 0 1.5rem;font-size:12px;">
+              Use the <strong>+</strong> button in the toolbar, or create one below.
+              Runs are stored here automatically when you fire a Scenario.
+            </p>
+            <button id="btn-engagement-get-started" class="btn btn-primary">+ Create engagement</button>
           </div>
 
           <div id="eng-detail" style="display:none">
@@ -651,12 +669,20 @@
 
                 <div id="run-results-section" style="display:none">
                   <h3 id="run-results-title" style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin:1.5rem 0 0.75rem;color:var(--text-2);">Results</h3>
+                  <div id="triage-filter-bar" class="triage-filter-bar">
+                    <span class="triage-filter-label">Show:</span>
+                    <button class="triage-filter-chip active" data-triage-filter="all">All</button>
+                    <button class="triage-filter-chip" data-triage-filter="confirmed">Confirmed</button>
+                    <button class="triage-filter-chip" data-triage-filter="needs_review">Needs Review</button>
+                    <button class="triage-filter-chip" data-triage-filter="unreviewed">Unreviewed</button>
+                    <button class="triage-filter-chip" data-triage-filter="false_positive">False Positive</button>
+                  </div>
                   <div class="table-wrap">
                     <table id="results-table">
                       <thead>
                         <tr id="results-head-row">
                           <th>Step</th><th>Session</th><th>Prompt ID</th><th>Status</th>
-                          <th>Verdict</th>
+                          <th>Verdict</th><th>Triage</th>
                           <th class="col-wide">Request</th>
                           <th class="col-wide">Prompt</th><th class="col-wide">Response</th>
                           <th>Latency</th>
@@ -911,8 +937,7 @@
                 <label for="settings-theme">Theme</label>
                 <select id="settings-theme">
                   <option value="default">hamm0r (default)</option>
-                  <option value="spirit_testing">Spirit Testing</option>
-                  <option value="testsolutions">TestSolutions</option>
+                  <option value="light">Light</option>
                 </select>
               </div>
             </div>

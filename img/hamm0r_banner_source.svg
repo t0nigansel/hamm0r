@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="96" viewBox="0 0 320 96">
+  <rect width="320" height="96" fill="none"/>
+  <g font-family="Inter, Arial, Helvetica, sans-serif" font-size="70" font-weight="800" letter-spacing="0">
+    <text x="0" y="68" fill="#F3F5FF">hamm</text>
+    <text x="192" y="68" fill="#7CB7FF">0</text>
+    <text x="240" y="68" fill="#F3F5FF">r</text>
+  </g>
+</svg>

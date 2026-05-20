@@ -77,7 +77,36 @@ pub fn delete(dir: &Path, id: &str) -> anyhow::Result<()> {
     let path = dir.join(format!("{id}.yaml"));
     if path.exists() {
         std::fs::remove_file(&path).with_context(|| format!("cannot delete {}", path.display()))?;
+        return Ok(());
     }
+
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    for entry in std::fs::read_dir(dir)
+        .with_context(|| format!("cannot read scenarios directory: {}", dir.display()))?
+    {
+        let entry = entry?;
+        let candidate = entry.path();
+        if candidate.extension().and_then(|e| e.to_str()) != Some("yaml") {
+            continue;
+        }
+
+        let raw = match std::fs::read_to_string(&candidate) {
+            Ok(raw) => raw,
+            Err(_) => continue,
+        };
+        let Ok(scenario) = serde_yaml::from_str::<Scenario>(&raw) else {
+            continue;
+        };
+        if scenario.id == id {
+            std::fs::remove_file(&candidate)
+                .with_context(|| format!("cannot delete {}", candidate.display()))?;
+            return Ok(());
+        }
+    }
+
     Ok(())
 }
 
@@ -138,5 +167,18 @@ mod tests {
 
         delete(dir.path(), &s.id).unwrap();
         assert!(load(dir.path(), &s.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_falls_back_to_scenario_id_inside_yaml() {
+        let dir = TempDir::new().unwrap();
+        let s = sample_scenario();
+        let yaml = serde_yaml::to_string(&s).unwrap();
+        let path = dir.path().join("renamed-file.yaml");
+        atomic_write(&path, yaml.as_bytes()).unwrap();
+
+        delete(dir.path(), &s.id).unwrap();
+
+        assert!(!path.exists());
     }
 }

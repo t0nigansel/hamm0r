@@ -219,3 +219,6 @@ _Flag names are illustrative; see current CLI for exact syntax._
 If you read this file and something is unclear: that is a defect of this
 file, not a reason to guess. Open an issue with the label
 `docs:claude-md` before starting the implementation.
+
+## Guidelines
+Respect /skills/guidelines.md

@@ -239,6 +239,7 @@ fn build_login_request(login_id: &str, target_name: &str, http_login: &HttpLogin
 
     let response = ResponseConfig {
         extract: ExtractConfig::Jsonpath { path: token_path },
+        result_columns: Vec::new(),
         bind: Some("bearer_token".to_owned()),
     };
 
@@ -300,6 +301,7 @@ mod tests {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 30,

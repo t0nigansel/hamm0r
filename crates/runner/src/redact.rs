@@ -55,7 +55,11 @@ pub fn redact_known_secret_headers(headers: &mut HashMap<String, String>) {
 /// Insert or overwrite a header in `headers` with `masked`. Matches the
 /// existing key case-insensitively so we don't end up with two entries that
 /// differ only by case.
-pub fn upsert_masked_header(headers: &mut HashMap<String, String>, header_name: &str, masked: &str) {
+pub fn upsert_masked_header(
+    headers: &mut HashMap<String, String>,
+    header_name: &str,
+    masked: &str,
+) {
     if let Some((_, value)) = headers
         .iter_mut()
         .find(|(name, _)| name.eq_ignore_ascii_case(header_name))

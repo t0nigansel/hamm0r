@@ -1,3 +1,5 @@
+# hamm0r-starter-version: 2026.05
+# Starter request template. Startup seeding never overwrites user files.
 version: 1
 id: ollama-chat-local
 name: "Ollama (local) — chat"

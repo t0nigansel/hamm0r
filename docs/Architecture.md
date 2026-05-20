@@ -24,7 +24,10 @@ single app; the architecture keeps the two components isolated.
 Core invokes the analyzer as a **subprocess**, not as a linked library.
 That is the deliberate boundary: the analyzer never shares an address
 space with core, and core never compiles in an LLM runtime. See
-[`docs/analyzorPlan.md`](analyzorPlan.md) for the install plan.
+[*The analyzer as a separable module*](#the-analyzer-as-a-separable-module)
+below for the install plan and
+[`plans/cloudLLMPlan.md`](plans/cloudLLMPlan.md) for the hosted judge
+plan.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐

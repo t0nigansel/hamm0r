@@ -401,6 +401,7 @@ mod tests {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
                 bind: bind.map(str::to_owned),
             },
             timeout_seconds: 30,

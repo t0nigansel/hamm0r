@@ -127,7 +127,7 @@ mod tests {
             name: format!("Test engagement {slug}"),
             created_at: "2026-04-25T09:00:00Z".into(),
             target: EngagementTarget {
-                request_id: "openai-chat".into(),
+                scenario_id: "openai-chat".into(),
                 notes: None,
             },
             scope: EngagementScope {

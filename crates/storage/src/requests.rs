@@ -40,7 +40,7 @@ pub fn references(
     }
 
     for scenario in scenarios::load_all(scenarios_dir)?.values() {
-        if scenario.request_ids.iter().any(|id| id == request_id) {
+        if scenario.request_ids.iter().any(|e| e.id == request_id) {
             refs.push(RequestReference::Scenario {
                 id: scenario.id.clone(),
                 name: scenario.name.clone(),
@@ -198,6 +198,10 @@ mod tests {
         let map = load_all(&requests_dir).unwrap();
 
         assert!(map.contains_key("ollama-chat-local"));
+        assert!(map.contains_key("openai-chat-completions"));
+        assert!(map.contains_key("anthropic-messages"));
+        assert!(map.contains_key("azure-openai-chat-completions"));
+        assert!(map.contains_key("generic-rest-json"));
     }
 
     #[test]

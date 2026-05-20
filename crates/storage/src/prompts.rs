@@ -194,6 +194,46 @@ mod tests {
         assert!(map.contains_key("library"));
         assert!(map.contains_key("injection-classics"));
         assert!(map.contains_key("exfil"));
+        assert!(map.contains_key("owasp-llm-2025"));
+        assert!(map.contains_key("owasp-agentic-2026"));
+    }
+
+    #[test]
+    fn owasp_starter_sets_have_minimum_category_coverage_and_baselines() {
+        let prompts_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../prompts");
+        let map = load_all(&prompts_dir).unwrap();
+
+        let llm = map.get("owasp-llm-2025").unwrap();
+        for idx in 1..=10 {
+            let reference = format!("A{idx:02}");
+            let count = llm
+                .iter()
+                .filter(|p| p.owasp_ref.as_deref() == Some(reference.as_str()))
+                .count();
+            assert!(
+                count >= 3,
+                "expected at least 3 prompts for {reference}, got {count}"
+            );
+        }
+        assert!(llm.iter().any(
+            |p| p.tags.iter().any(|t| t == "baseline") && p.tags.iter().any(|t| t == "benign")
+        ));
+
+        let agentic = map.get("owasp-agentic-2026").unwrap();
+        for idx in 1..=10 {
+            let reference = format!("ASI{idx:02}");
+            let count = agentic
+                .iter()
+                .filter(|p| p.owasp_ref.as_deref() == Some(reference.as_str()))
+                .count();
+            assert!(
+                count >= 3,
+                "expected at least 3 prompts for {reference}, got {count}"
+            );
+        }
+        assert!(agentic.iter().any(
+            |p| p.tags.iter().any(|t| t == "baseline") && p.tags.iter().any(|t| t == "benign")
+        ));
     }
 
     #[test]

@@ -113,7 +113,9 @@
       "Bash(awk -F: '$1+0 > 326 && $1+0 < 3128 && /\\\\$\\\\\\(/')",
       "Bash(grep -rn \"source: Some\\\\|source: None\\\\|owasp_ref: Some.*\\\\$\\\\|, source:\" c:/workspace/hamm0r/crates)",
       "Bash(gh issue *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(git -C /Users/tonigansel/workspace/hamm0r diff --stat HEAD -- ui/style.css docs/STYLEGUIDE.md)",
+      "Bash(git -C /Users/tonigansel/workspace/hamm0r status --short)"
     ]
   }
 }

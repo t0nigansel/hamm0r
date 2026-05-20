@@ -105,8 +105,19 @@ pub enum ExtractConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResultColumnConfig {
+    pub id: String,
+    pub label: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResponseConfig {
     pub extract: ExtractConfig,
+    /// Request-specific values shown as dynamic columns in the Engagement
+    /// results table. They do not affect execution or analyzer input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub result_columns: Vec<ResultColumnConfig>,
     /// Phase 2 of docs/RefactorPlan.md: name the extracted value so other
     /// Requests can reference it via `{{<request_id>.<bind>}}` interpolation
     /// (URL, headers, body — runtime DAG resolver does the substitution).
@@ -268,6 +279,55 @@ impl Target {
 // Request), executed as a Cartesian product. Auth-chain prerequisites are
 // resolved automatically via `Request.response.bind` on the registry.
 
+/// One entry in `Scenario.request_ids`. Accepts both the legacy bare-string
+/// form (`- login`) and the struct form (`- id: login\n  repeat: 5`).
+///
+/// `repeat` is a per-request multiplier applied on top of the global
+/// `Scenario.repeat`. A request with `repeat: 5` inside a scenario with
+/// `repeat: 10` fires 50 times per payload.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RequestEntry {
+    pub id: String,
+    /// Per-request repeat multiplier. `None` means "use the global repeat only"
+    /// (equivalent to `Some(1)`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<u32>,
+}
+
+impl<'de> Deserialize<'de> for RequestEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Id(String),
+            Full {
+                id: String,
+                #[serde(default)]
+                repeat: Option<u32>,
+            },
+        }
+        match Raw::deserialize(deserializer)? {
+            Raw::Id(id) => Ok(RequestEntry { id, repeat: None }),
+            Raw::Full { id, repeat } => Ok(RequestEntry { id, repeat }),
+        }
+    }
+}
+
+impl From<String> for RequestEntry {
+    fn from(id: String) -> Self {
+        RequestEntry { id, repeat: None }
+    }
+}
+
+impl From<&str> for RequestEntry {
+    fn from(id: &str) -> Self {
+        RequestEntry {
+            id: id.to_owned(),
+            repeat: None,
+        }
+    }
+}
+
 /// Library-subset half of a matrix Scenario.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct LibrarySubset {
@@ -292,9 +352,11 @@ pub struct Scenario {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Requests to fire (each one against every prompt resolved from
-    /// `library`).
+    /// `library`). Each entry is either a bare request id string (backward
+    /// compatible) or a struct with an optional per-request `repeat`
+    /// multiplier.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub request_ids: Vec<String>,
+    pub request_ids: Vec<RequestEntry>,
     /// Prompt library subset to fire against each Request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library: Option<LibrarySubset>,
@@ -324,8 +386,11 @@ pub struct EngagementScope {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EngagementTarget {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub request_id: String,
+    /// The scenario associated with this engagement. Serialized as
+    /// `scenario_id`; the old `request_id` key is accepted as an alias
+    /// so existing `engagement.yaml` files continue to load.
+    #[serde(default, skip_serializing_if = "String::is_empty", alias = "request_id")]
+    pub scenario_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
 }
@@ -348,10 +413,16 @@ pub struct EngagementMeta {
 pub enum Theme {
     #[default]
     System,
+    #[serde(
+        alias = "spirit_testing",
+        alias = "spirit-testing",
+        alias = "spirittesting",
+        alias = "testsolutions",
+        alias = "test_solutions",
+        alias = "test-solutions"
+    )]
     Light,
     Dark,
-    SpiritTesting,
-    Testsolutions,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -550,6 +621,28 @@ impl Default for AppConfig {
     }
 }
 
+// ── Triage ────────────────────────────────────────────────────────────────────
+// Stored in ~/hamm0r/engagements/<slug>/runs/<run_id>.triage.yaml.
+// Schema defined in docs/Datamodel.md §"Triage".
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriageStatus {
+    Unreviewed,
+    Confirmed,
+    FalsePositive,
+    NeedsReview,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TriageEntry {
+    pub seq: u32,
+    pub status: TriageStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    pub updated_at: String,
+}
+
 // ── Round-trip tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -641,6 +734,7 @@ mod tests {
                 extract: ExtractConfig::Jsonpath {
                     path: "$.choices[0].message.content".into(),
                 },
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 30,
@@ -669,6 +763,7 @@ mod tests {
             },
             response: ResponseConfig {
                 extract: ExtractConfig::Raw,
+                result_columns: Vec::new(),
                 bind: None,
             },
             timeout_seconds: 30,
@@ -731,6 +826,7 @@ mod tests {
                 extract: ExtractConfig::Jsonpath {
                     path: "$.jwToken".into(),
                 },
+                result_columns: Vec::new(),
                 bind: Some("bearer_token".into()),
             },
             timeout_seconds: 60,
@@ -777,7 +873,16 @@ timeout_seconds: 30
             name: "Acme matrix".into(),
             repeat: 1,
             description: Some("Auth login + chat fired against A01 prompts.".into()),
-            request_ids: vec!["login".into(), "chat".into()],
+            request_ids: vec![
+                RequestEntry {
+                    id: "login".into(),
+                    repeat: None,
+                },
+                RequestEntry {
+                    id: "chat".into(),
+                    repeat: None,
+                },
+            ],
             library: Some(LibrarySubset {
                 owasp_refs: vec!["A01".into()],
                 categories: vec!["injection-classics".into()],
@@ -785,6 +890,73 @@ timeout_seconds: 30
             shared_session: true,
         };
         assert_eq!(file_roundtrip(&dir, "scenario.yaml", &scenario), scenario);
+    }
+
+    #[test]
+    fn request_entry_bare_string_deserializes() {
+        // Legacy YAML with plain strings must still parse.
+        let yaml = "- login\n- chat\n";
+        let entries: Vec<RequestEntry> = serde_yaml::from_str(yaml).expect("parse");
+        assert_eq!(entries[0].id, "login");
+        assert_eq!(entries[0].repeat, None);
+        assert_eq!(entries[1].id, "chat");
+    }
+
+    #[test]
+    fn request_entry_struct_with_repeat_roundtrip() {
+        let entry = RequestEntry {
+            id: "chat".into(),
+            repeat: Some(5),
+        };
+        assert_eq!(yaml_roundtrip(&entry), entry);
+    }
+
+    #[test]
+    fn scenario_with_per_request_repeat_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let scenario = Scenario {
+            version: 1,
+            id: "repeat-test".into(),
+            name: "Repeat test".into(),
+            repeat: 2,
+            description: None,
+            request_ids: vec![
+                RequestEntry {
+                    id: "login".into(),
+                    repeat: None,
+                },
+                RequestEntry {
+                    id: "chat".into(),
+                    repeat: Some(5),
+                },
+            ],
+            library: Some(LibrarySubset {
+                owasp_refs: vec!["A01".into()],
+                categories: Vec::new(),
+            }),
+            shared_session: false,
+        };
+        assert_eq!(file_roundtrip(&dir, "scenario.yaml", &scenario), scenario);
+    }
+
+    #[test]
+    fn scenario_request_ids_mixed_forms_parse() {
+        // A YAML with one bare string and one struct entry must both parse.
+        let yaml = r#"
+version: 1
+id: mixed
+name: Mixed
+repeat: 1
+request_ids:
+  - login
+  - id: chat
+    repeat: 3
+"#;
+        let s: Scenario = serde_yaml::from_str(yaml).expect("parse");
+        assert_eq!(s.request_ids[0].id, "login");
+        assert_eq!(s.request_ids[0].repeat, None);
+        assert_eq!(s.request_ids[1].id, "chat");
+        assert_eq!(s.request_ids[1].repeat, Some(3));
     }
 
     #[test]
@@ -822,7 +994,7 @@ repeat: 1
             name: "Acme Corp support chatbot test".into(),
             created_at: "2026-04-25T09:00:00Z".into(),
             target: EngagementTarget {
-                request_id: "openai-chat".into(),
+                scenario_id: "openai-chat".into(),
                 notes: Some("Staging environment.".into()),
             },
             scope: EngagementScope {
@@ -830,6 +1002,24 @@ repeat: 1
             },
         };
         assert_eq!(file_roundtrip(&dir, "engagement.yaml", &meta), meta);
+    }
+
+    #[test]
+    fn engagement_meta_legacy_request_id_alias_parses() {
+        // Old `engagement.yaml` files used `request_id` under `target`.
+        // The serde alias must accept that key and map it to `scenario_id`.
+        let yaml = r#"
+version: 1
+slug: 2026-04-25-legacy
+name: Legacy engagement
+created_at: 2026-04-25T09:00:00Z
+target:
+  request_id: openai-chat
+scope:
+  prompt_files: []
+"#;
+        let meta: EngagementMeta = serde_yaml::from_str(yaml).expect("legacy parse");
+        assert_eq!(meta.target.scenario_id, "openai-chat");
     }
 
     #[test]

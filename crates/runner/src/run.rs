@@ -10,9 +10,9 @@ use storage::runs::{
     RequestEnvelope, ResponseEnvelope, RunAttempt, RunFooter, RunHeader, RunRecord, RunStatus,
     Timing,
 };
-use storage::types::{BodyFormat, Request, SessionConfig};
 #[cfg(test)]
 use storage::types::AuthConfig;
+use storage::types::{BodyFormat, Request, SessionConfig};
 use storage::{atomic_write, runs};
 use tokio::sync::Notify;
 use tokio::sync::Semaphore;
@@ -64,6 +64,10 @@ pub struct MatrixRunConfig {
     pub registry: HashMap<String, Request>,
     /// Target Request ids to fire (each one against every payload).
     pub request_ids: Vec<String>,
+    /// Per-request repeat multipliers, keyed by request id. A request whose
+    /// id is absent here defaults to 1. Applied on top of `repeat`:
+    /// total firings for a request = `repeat` × `per_request_repeat[id]`.
+    pub per_request_repeat: HashMap<String, u32>,
     /// Prompts (already resolved from a library subset upstream).
     pub payloads: Vec<Payload>,
     /// Number of independent passes over the request × payload matrix.
@@ -485,8 +489,22 @@ where
     // prerequisite firings are bookkeeping — they get their own RunAttempt
     // records but don't count toward "X of N done".
     let repeat = config.repeat.max(1);
+    // Sum of per-request repeats across all target requests. A request absent
+    // from the map contributes 1 (the global repeat handles the rest).
+    let request_repeat_sum: u32 = config
+        .request_ids
+        .iter()
+        .map(|id| {
+            config
+                .per_request_repeat
+                .get(id)
+                .copied()
+                .unwrap_or(1)
+                .max(1)
+        })
+        .sum();
     let target_total = (config.payloads.len() as u32)
-        .saturating_mul(config.request_ids.len() as u32)
+        .saturating_mul(request_repeat_sum)
         .saturating_mul(repeat);
 
     let mut session_manager = SessionManager::new(
@@ -519,88 +537,106 @@ where
     'outer: for iteration in 1..=repeat {
         for payload in &config.payloads {
             for request_id in &config.request_ids {
-                if cancellation
-                    .as_ref()
-                    .is_some_and(RunCancellation::is_cancelled)
-                {
-                    write_footer(
-                        &run_path,
-                        &config.run_id,
-                        seq,
-                        attempts_failed,
-                        RunStatus::AbortedByUser,
-                    )?;
-                    on_progress(RunProgress {
-                        run_id: config.run_id.clone(),
-                        seq: target_seq,
-                        total: target_seq,
-                        status: 0,
-                        error: None,
-                        finished: true,
-                    });
-                    return Ok(());
-                }
-
-                let target_req = match config.registry.get(request_id) {
-                    Some(r) => r,
-                    None => {
-                        seq += 1;
-                        target_seq += 1;
-                        attempts_failed += 1;
-                        let synthetic_err = RunnerError::Extraction {
-                            reason: format!("matrix references unknown Request '{request_id}'"),
-                        };
-                        write_synthetic_failed_attempt(
+                let local_repeat = config
+                    .per_request_repeat
+                    .get(request_id)
+                    .copied()
+                    .unwrap_or(1)
+                    .max(1);
+                for _local_iter in 0..local_repeat {
+                    if cancellation
+                        .as_ref()
+                        .is_some_and(RunCancellation::is_cancelled)
+                    {
+                        write_footer(
                             &run_path,
                             &config.run_id,
                             seq,
-                            request_id,
-                            payload,
-                            Some(iteration),
-                            &synthetic_err,
+                            attempts_failed,
+                            RunStatus::AbortedByUser,
                         )?;
                         on_progress(RunProgress {
                             run_id: config.run_id.clone(),
                             seq: target_seq,
-                            total: target_total,
+                            total: target_seq,
                             status: 0,
-                            error: Some(synthetic_err.to_string()),
-                            finished: false,
+                            error: None,
+                            finished: true,
                         });
-                        continue;
+                        return Ok(());
                     }
-                };
 
-                let session_client = session_manager
-                    .client_for_with_timeout(&payload.session, target_req.timeout_seconds)?;
-
-                // Per-cell cache when not shared.
-                let mut local_cache = crate::template::BindCache::new();
-                let cache: &mut crate::template::BindCache =
-                    shared_cache.as_mut().unwrap_or(&mut local_cache);
-
-                let send_time = Instant::now();
-                let chain_result = if let Some(cancel) = &cancellation {
-                    tokio::select! {
-                        _ = cancel.until_cancelled() => {
-                            write_footer(
+                    let target_req = match config.registry.get(request_id) {
+                        Some(r) => r,
+                        None => {
+                            seq += 1;
+                            target_seq += 1;
+                            attempts_failed += 1;
+                            let synthetic_err = RunnerError::Extraction {
+                                reason: format!("matrix references unknown Request '{request_id}'"),
+                            };
+                            write_synthetic_failed_attempt(
                                 &run_path,
                                 &config.run_id,
                                 seq,
-                                attempts_failed,
-                                RunStatus::AbortedByUser,
+                                request_id,
+                                payload,
+                                Some(iteration),
+                                &synthetic_err,
                             )?;
                             on_progress(RunProgress {
                                 run_id: config.run_id.clone(),
                                 seq: target_seq,
-                                total: target_seq,
+                                total: target_total,
                                 status: 0,
-                                error: None,
-                                finished: true,
+                                error: Some(synthetic_err.to_string()),
+                                finished: false,
                             });
-                            return Ok(());
+                            continue;
                         }
-                        result = crate::deps::fire_chain(
+                    };
+
+                    let session_client = session_manager
+                        .client_for_with_timeout(&payload.session, target_req.timeout_seconds)?;
+
+                    // Per-cell cache when not shared.
+                    let mut local_cache = crate::template::BindCache::new();
+                    let cache: &mut crate::template::BindCache =
+                        shared_cache.as_mut().unwrap_or(&mut local_cache);
+
+                    let send_time = Instant::now();
+                    let chain_result = if let Some(cancel) = &cancellation {
+                        tokio::select! {
+                            _ = cancel.until_cancelled() => {
+                                write_footer(
+                                    &run_path,
+                                    &config.run_id,
+                                    seq,
+                                    attempts_failed,
+                                    RunStatus::AbortedByUser,
+                                )?;
+                                on_progress(RunProgress {
+                                    run_id: config.run_id.clone(),
+                                    seq: target_seq,
+                                    total: target_seq,
+                                    status: 0,
+                                    error: None,
+                                    finished: true,
+                                });
+                                return Ok(());
+                            }
+                            result = crate::deps::fire_chain(
+                                session_client,
+                                &config.registry,
+                                request_id,
+                                &payload.text,
+                                &config.session_strategy,
+                                &payload.session,
+                                cache,
+                            ) => result
+                        }
+                    } else {
+                        crate::deps::fire_chain(
                             session_client,
                             &config.registry,
                             request_id,
@@ -608,178 +644,171 @@ where
                             &config.session_strategy,
                             &payload.session,
                             cache,
-                        ) => result
-                    }
-                } else {
-                    crate::deps::fire_chain(
-                        session_client,
-                        &config.registry,
-                        request_id,
-                        &payload.text,
-                        &config.session_strategy,
-                        &payload.session,
-                        cache,
-                    )
-                    .await
-                };
+                        )
+                        .await
+                    };
 
-                match chain_result {
-                    Ok(outcome) => {
-                        // Persist each prerequisite as its own attempt with
-                        // kind=prerequisite, in topological order.
-                        for (prereq_id, resp) in outcome.prerequisites {
-                            let prereq_req = config
-                                .registry
-                                .get(&prereq_id)
-                                .expect("prereq exists in registry");
+                    match chain_result {
+                        Ok(outcome) => {
+                            // Persist each prerequisite as its own attempt with
+                            // kind=prerequisite, in topological order.
+                            for (prereq_id, resp) in outcome.prerequisites {
+                                let prereq_req = config
+                                    .registry
+                                    .get(&prereq_id)
+                                    .expect("prereq exists in registry");
+                                seq += 1;
+                                let outcome_log = RequestOutcome::from_adapter(
+                                    Ok(resp),
+                                    send_time.elapsed().as_millis() as u64,
+                                );
+                                let prereq_meta = AttemptMeta {
+                                    seq,
+                                    prompt_id: payload.prompt_id.clone(),
+                                    payload_id: format!("prereq:{prereq_id}"),
+                                    step_id: None,
+                                    iteration: Some(iteration),
+                                    session: Some(payload.session.clone()),
+                                    prompt_text: None,
+                                    kind: Some("prerequisite".to_owned()),
+                                };
+                                if outcome_log.error.is_some() {
+                                    attempts_failed += 1;
+                                }
+                                let attempt = build_attempt(
+                                    prereq_meta,
+                                    &outcome_log,
+                                    &config.run_id,
+                                    prereq_req,
+                                    iso_now(),
+                                    iso_now(),
+                                    &responses_dir,
+                                )?;
+                                runs::append(&run_path, &attempt)
+                                    .map_err(|e| anyhow::anyhow!(e))?;
+                            }
+
+                            // Now the target attempt.
                             seq += 1;
-                            let outcome_log = RequestOutcome::from_adapter(
-                                Ok(resp),
+                            target_seq += 1;
+                            let target_outcome = RequestOutcome::from_adapter(
+                                Ok(outcome.target),
                                 send_time.elapsed().as_millis() as u64,
                             );
-                            let prereq_meta = AttemptMeta {
+                            let progress_status = target_outcome.status;
+                            let progress_error = target_outcome.error.clone();
+                            if target_outcome.error.is_some() {
+                                attempts_failed += 1;
+                            }
+                            let target_meta = AttemptMeta {
                                 seq,
                                 prompt_id: payload.prompt_id.clone(),
-                                payload_id: format!("prereq:{prereq_id}"),
+                                payload_id: payload.payload_id.clone(),
                                 step_id: None,
                                 iteration: Some(iteration),
                                 session: Some(payload.session.clone()),
-                                prompt_text: None,
-                                kind: Some("prerequisite".to_owned()),
+                                prompt_text: Some(payload.text.clone()),
+                                kind: None,
                             };
-                            if outcome_log.error.is_some() {
-                                attempts_failed += 1;
-                            }
+                            let response_status = progress_status;
+                            let response_headers = target_outcome.response_headers.clone();
+                            let response_body_size = target_outcome
+                                .body_bytes
+                                .as_ref()
+                                .map(|b| b.len() as u64)
+                                .unwrap_or(0);
+                            let response_body = render_response_body_for_log(
+                                target_outcome.body_bytes.as_ref(),
+                                config.body_logging_enabled,
+                            );
+                            let request_log = render_request_for_log(
+                                target_req,
+                                &payload.text,
+                                &config.session_strategy,
+                                &payload.session,
+                                config.body_logging_enabled,
+                            );
+
                             let attempt = build_attempt(
-                                prereq_meta,
-                                &outcome_log,
+                                target_meta,
+                                &target_outcome,
                                 &config.run_id,
-                                prereq_req,
+                                target_req,
                                 iso_now(),
                                 iso_now(),
                                 &responses_dir,
                             )?;
                             runs::append(&run_path, &attempt).map_err(|e| anyhow::anyhow!(e))?;
-                        }
 
-                        // Now the target attempt.
-                        seq += 1;
-                        target_seq += 1;
-                        let target_outcome = RequestOutcome::from_adapter(
-                            Ok(outcome.target),
-                            send_time.elapsed().as_millis() as u64,
-                        );
-                        let progress_status = target_outcome.status;
-                        let progress_error = target_outcome.error.clone();
-                        if target_outcome.error.is_some() {
-                            attempts_failed += 1;
-                        }
-                        let target_meta = AttemptMeta {
-                            seq,
-                            prompt_id: payload.prompt_id.clone(),
-                            payload_id: payload.payload_id.clone(),
-                            step_id: None,
-                            iteration: Some(iteration),
-                            session: Some(payload.session.clone()),
-                            prompt_text: Some(payload.text.clone()),
-                            kind: None,
-                        };
-                        let response_status = progress_status;
-                        let response_headers = target_outcome.response_headers.clone();
-                        let response_body_size = target_outcome
-                            .body_bytes
-                            .as_ref()
-                            .map(|b| b.len() as u64)
-                            .unwrap_or(0);
-                        let response_body = render_response_body_for_log(
-                            target_outcome.body_bytes.as_ref(),
-                            config.body_logging_enabled,
-                        );
-                        let request_log = render_request_for_log(
-                            target_req,
-                            &payload.text,
-                            &config.session_strategy,
-                            &payload.session,
-                            config.body_logging_enabled,
-                        );
+                            if let Some(on_attempt_log) = &on_attempt_log {
+                                let (request_headers, request_body_size, request_body) =
+                                    match &request_log {
+                                        Ok(log) => (
+                                            log.headers.clone(),
+                                            log.body_size,
+                                            log.body_text.clone(),
+                                        ),
+                                        Err(_) => (HashMap::new(), 0, None),
+                                    };
+                                on_attempt_log(AttemptLog {
+                                    run_id: config.run_id.clone(),
+                                    seq,
+                                    request_method: target_req.method.clone(),
+                                    request_url: target_req.url.clone(),
+                                    request_headers,
+                                    request_body_size,
+                                    request_body,
+                                    response_status,
+                                    response_headers,
+                                    response_body_size,
+                                    response_body,
+                                    duration_ms: target_outcome.duration_ms,
+                                    error: progress_error.clone(),
+                                    is_timeout: target_outcome.is_timeout,
+                                });
+                            }
 
-                        let attempt = build_attempt(
-                            target_meta,
-                            &target_outcome,
-                            &config.run_id,
-                            target_req,
-                            iso_now(),
-                            iso_now(),
-                            &responses_dir,
-                        )?;
-                        runs::append(&run_path, &attempt).map_err(|e| anyhow::anyhow!(e))?;
-
-                        if let Some(on_attempt_log) = &on_attempt_log {
-                            let (request_headers, request_body_size, request_body) =
-                                match &request_log {
-                                    Ok(log) => {
-                                        (log.headers.clone(), log.body_size, log.body_text.clone())
-                                    }
-                                    Err(_) => (HashMap::new(), 0, None),
-                                };
-                            on_attempt_log(AttemptLog {
+                            on_progress(RunProgress {
                                 run_id: config.run_id.clone(),
-                                seq,
-                                request_method: target_req.method.clone(),
-                                request_url: target_req.url.clone(),
-                                request_headers,
-                                request_body_size,
-                                request_body,
-                                response_status,
-                                response_headers,
-                                response_body_size,
-                                response_body,
-                                duration_ms: target_outcome.duration_ms,
-                                error: progress_error.clone(),
-                                is_timeout: target_outcome.is_timeout,
+                                seq: target_seq,
+                                total: target_total,
+                                status: progress_status,
+                                error: progress_error,
+                                finished: false,
                             });
                         }
-
-                        on_progress(RunProgress {
-                            run_id: config.run_id.clone(),
-                            seq: target_seq,
-                            total: target_total,
-                            status: progress_status,
-                            error: progress_error,
-                            finished: false,
-                        });
-                    }
-                    Err(err) => {
-                        // Couldn't even resolve / fire prereqs. Synthesize one
-                        // failed target attempt so the row exists in the log.
-                        seq += 1;
-                        target_seq += 1;
-                        attempts_failed += 1;
-                        write_synthetic_failed_attempt(
-                            &run_path,
-                            &config.run_id,
-                            seq,
-                            request_id,
-                            payload,
-                            Some(iteration),
-                            &err,
-                        )?;
-                        on_progress(RunProgress {
-                            run_id: config.run_id.clone(),
-                            seq: target_seq,
-                            total: target_total,
-                            status: 0,
-                            error: Some(err.to_string()),
-                            finished: false,
-                        });
-                        if cancellation
-                            .as_ref()
-                            .is_some_and(RunCancellation::is_cancelled)
-                        {
-                            break 'outer;
+                        Err(err) => {
+                            // Couldn't even resolve / fire prereqs. Synthesize one
+                            // failed target attempt so the row exists in the log.
+                            seq += 1;
+                            target_seq += 1;
+                            attempts_failed += 1;
+                            write_synthetic_failed_attempt(
+                                &run_path,
+                                &config.run_id,
+                                seq,
+                                request_id,
+                                payload,
+                                Some(iteration),
+                                &err,
+                            )?;
+                            on_progress(RunProgress {
+                                run_id: config.run_id.clone(),
+                                seq: target_seq,
+                                total: target_total,
+                                status: 0,
+                                error: Some(err.to_string()),
+                                finished: false,
+                            });
+                            if cancellation
+                                .as_ref()
+                                .is_some_and(RunCancellation::is_cancelled)
+                            {
+                                break 'outer;
+                            }
                         }
                     }
-                }
+                } // end for _local_iter
             }
         }
     }
