@@ -389,7 +389,11 @@ pub struct EngagementTarget {
     /// The scenario associated with this engagement. Serialized as
     /// `scenario_id`; the old `request_id` key is accepted as an alias
     /// so existing `engagement.yaml` files continue to load.
-    #[serde(default, skip_serializing_if = "String::is_empty", alias = "request_id")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        alias = "request_id"
+    )]
     pub scenario_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,

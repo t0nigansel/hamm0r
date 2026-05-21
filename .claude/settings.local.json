@@ -120,7 +120,8 @@
       "Bash(gh issue *)",
       "WebFetch(domain:github.com)",
       "Bash(git -C /Users/tonigansel/workspace/hamm0r diff --stat HEAD -- ui/style.css docs/STYLEGUIDE.md)",
-      "Bash(git -C /Users/tonigansel/workspace/hamm0r status --short)"
+      "Bash(git -C /Users/tonigansel/workspace/hamm0r status --short)",
+      "Bash(file /Users/tonigansel/workspace/hamm0r/ui/js/*.*)"
     ]
   }
 }

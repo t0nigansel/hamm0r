@@ -122,7 +122,10 @@ mod tests {
         save_entry(&eng, "run-001", entry(2, TriageStatus::NeedsReview)).unwrap();
         save_entry(&eng, "run-001", entry(9, TriageStatus::Unreviewed)).unwrap();
         let loaded = list_entries(&eng, "run-001").unwrap();
-        assert_eq!(loaded.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![2, 5, 9]);
+        assert_eq!(
+            loaded.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![2, 5, 9]
+        );
     }
 
     #[test]
