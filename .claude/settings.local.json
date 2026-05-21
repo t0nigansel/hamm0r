@@ -3,6 +3,11 @@
     "allow": [
       "Bash(command -v cargo)",
       "Bash(command -v rustc)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(mypy:*)",
+      "Bash(pytest:*)",
+      "Bash(pyright:*)",
       "Read(//c/Users/Gansel/.cargo/bin/**)",
       "Bash(cargo --version)",
       "Bash(rustc --version)",

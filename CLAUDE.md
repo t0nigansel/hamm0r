@@ -222,3 +222,11 @@ file, not a reason to guess. Open an issue with the label
 
 ## Guidelines
 Respect /skills/guidelines.md
+
+## Dev workflow
+
+After any edit, the PostToolUse hook runs:
+`ruff check --fix . && ruff format --check . && mypy sidecar runner db`
+
+Do not write tests unless explicitly asked.
+Do not run pytest unless asked — UI and schema are still changing.

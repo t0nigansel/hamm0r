@@ -26,3 +26,15 @@ directories = "5"
 # Native OS credential vaults (Win Credential Manager, macOS Keychain,
 # Linux Secret Service). Without these features, keyring uses a no-op mock.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy", "rust-analyzer"]
