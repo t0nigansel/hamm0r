@@ -162,6 +162,18 @@ const API = (() => {
       return meta;
     },
 
+    async set_engagement_scenario({ slug, scenario_id }) {
+      const meta = await invoke('set_engagement_scenario', { slug, scenarioId: scenario_id || '' });
+      if (meta) _engCache[meta.slug] = meta;
+      return meta;
+    },
+
+    async rename_engagement({ slug, name }) {
+      const meta = await invoke('rename_engagement', { slug, name });
+      if (meta) _engCache[meta.slug] = meta;
+      return meta;
+    },
+
     async delete_engagement({ slug }) {
       const result = await invoke('delete_engagement', { slug });
       delete _engCache[slug];

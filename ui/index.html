@@ -672,7 +672,10 @@
           <div id="eng-detail" style="display:none">
             <div class="eng-detail-header">
               <div>
-                <h2 id="eng-detail-title">Engagement Detail</h2>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <h2 id="eng-detail-title" style="margin:0;">Engagement Detail</h2>
+                  <button type="button" id="btn-eng-rename" class="btn-icon" title="Rename engagement" aria-label="Rename engagement" style="display:none;">&#9998;</button>
+                </div>
                 <div class="eng-detail-slug" id="eng-detail-slug">/engagements/—</div>
               </div>
               <div class="eng-detail-actions">
@@ -868,20 +871,18 @@
 <div id="engagement-dialog" class="modal is-hidden">
   <div class="modal-content modal-eng">
     <button class="modal-close" id="engagement-dialog-close">&times;</button>
-    <h3 class="modal-heading">Engagements</h3>
+    <h3 class="modal-heading">New engagement</h3>
 
-    <!-- Existing engagements -->
-    <div class="eng-section-label">Open existing</div>
-    <div id="engagement-list" class="engagement-list">
-      <div class="eng-list-empty">loading…</div>
-    </div>
-
-    <!-- Create new -->
-    <div class="eng-section-label" style="margin-top:1.2rem;">Create new</div>
     <form id="engagement-form" autocomplete="off">
       <div class="form-row">
         <label for="eng-name">Name</label>
         <input id="eng-name" type="text" placeholder="acme-chatbot-2026-q2" required>
+      </div>
+      <div class="form-row">
+        <label for="eng-scenario">Scenario (optional)</label>
+        <select id="eng-scenario">
+          <option value="">— pick later —</option>
+        </select>
       </div>
       <div class="form-row">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">

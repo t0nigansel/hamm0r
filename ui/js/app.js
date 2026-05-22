@@ -554,39 +554,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function openEngagementDialog() {
     setHidden($('#engagement-dialog'), false);
-    const list = $('#engagement-list');
-    list.innerHTML = '<div class="eng-list-empty">loading…</div>';
-    try {
-      const engagements = (await API.call('list_engagements', {}))
-        .filter(eng => !isEngagementArchived(eng.slug));
-      list.innerHTML = '';
-      if (engagements.length === 0) {
-        list.innerHTML = '<div class="eng-list-empty">no engagements yet — create one below</div>';
-      } else {
-        engagements.forEach(eng => {
-          const card = document.createElement('div');
-          card.className = 'engagement-card';
-          const date = eng.created_at ? eng.created_at.substring(0, 10) : '';
-          card.innerHTML = `
-            <span class="eng-name">${esc(eng.name)}</span>
-            <span class="eng-meta">${esc(eng.slug)}${date ? ' · ' + esc(date) : ''}</span>`;
-          card.addEventListener('click', async () => {
-            try {
-              unarchiveEngagementSlug(eng.slug);
-              const result = await API.call('open_db', { path: eng.slug });
-              dbOpen = true;
-              setHidden($('#engagement-dialog'), true);
-              onDbOpen(result.name || eng.name, result.slug);
-              toast(`Opened: ${result.name || eng.name}`, 'success');
-            } catch (err) { toast(err.message, 'error'); }
-          });
-          list.appendChild(card);
+    $('#eng-name').value = '';
+    const sel = $('#eng-scenario');
+    if (sel) {
+      sel.innerHTML = '<option value="">loading…</option>';
+      try {
+        const scenarios = await API.call('list_scenarios', {});
+        const opts = ['<option value="">— pick later —</option>'];
+        scenarios.forEach((s) => {
+          opts.push(`<option value="${esc(s.id)}">${esc(s.name || s.id)}</option>`);
         });
+        sel.innerHTML = opts.join('');
+      } catch (_err) {
+        sel.innerHTML = '<option value="">— pick later —</option>';
       }
-    } catch (err) {
-      list.innerHTML = '<div class="eng-list-empty">could not load engagements</div>';
-      toast(err.message, 'error');
     }
+    setTimeout(() => $('#eng-name').focus(), 0);
   }
 
   function loadArchivedEngagementSlugs() {
@@ -1126,10 +1109,18 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const name = $('#eng-name').value.trim();
     const seed = $('#eng-seed').checked;
+    const scenarioId = ($('#eng-scenario')?.value || '').trim();
     if (!name) return;
     try {
       const result = await API.call('create_engagement', { name });
       unarchiveEngagementSlug(result.slug);
+      if (scenarioId) {
+        try {
+          await API.call('set_engagement_scenario', { slug: result.slug, scenario_id: scenarioId });
+        } catch (err) {
+          toast(`Engagement created but scenario binding failed: ${err.message}`, 'error');
+        }
+      }
       await API.call('open_db', { path: result.slug });
       dbOpen = true;
       setHidden($('#engagement-dialog'), true);
@@ -3012,9 +3003,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function hydrateEngagementDetailCatalogs() {
-    if (!engagementDetail.scenarios.length) {
-      try { engagementDetail.scenarios = await API.call('list_scenarios', {}); } catch (_err) { engagementDetail.scenarios = []; }
-    }
+    // Always refetch: scenarios created in the Scenarios view between
+    // engagement opens must show up in the header combobox.
+    try { engagementDetail.scenarios = await API.call('list_scenarios', {}); } catch (_err) { engagementDetail.scenarios = []; }
   }
 
   // Populate the scenario combobox in the engagement detail header.
@@ -3435,6 +3426,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     $('#eng-detail-title').textContent = engagementDetail.name;
     $('#eng-detail-slug').textContent = `/engagements/${eng.slug}`;
+    const renameBtn = $('#btn-eng-rename');
+    if (renameBtn) renameBtn.style.display = '';
     setHidden($('#runs-empty'), true);
     setHidden($('#engagements-welcome'), true);
     $('#eng-detail').style.display = '';
@@ -3522,6 +3515,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#btn-runs-new-engagement').addEventListener('click', openEngagementDialog);
   $('#btn-engagement-get-started')?.addEventListener('click', openEngagementDialog);
+
+  $('#btn-eng-rename')?.addEventListener('click', async () => {
+    const slug = engagementDetail.slug;
+    if (!slug) return;
+    const current = engagementDetail.name || '';
+    const next = window.prompt('New engagement name:', current);
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === current) return;
+    try {
+      const meta = await API.call('rename_engagement', { slug, name: trimmed });
+      engagementDetail.name = meta.name;
+      $('#eng-detail-title').textContent = meta.name;
+      breadcrumbState.engagementName = meta.name;
+      updateBreadcrumb();
+      await loadEngagementList({ preferredSlug: slug, autoOpen: false, syncRoute: false });
+      toast('Engagement renamed', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
 
   async function deleteEngagementFromUi(eng) {
     if (!eng || !eng.slug) return;

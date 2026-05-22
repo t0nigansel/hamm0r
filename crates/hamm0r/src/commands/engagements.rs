@@ -66,6 +66,45 @@ pub fn create_engagement(
     Ok(meta)
 }
 
+/// Bind a Scenario to an engagement without starting a run. The binding
+/// is the same field that `start_scenario_run` writes; setting it up-front
+/// lets the user create an engagement and pre-select what it should run.
+/// Passing an empty `scenario_id` clears the binding.
+#[tauri::command]
+pub fn set_engagement_scenario(
+    paths: State<'_, AppPaths>,
+    slug: String,
+    scenario_id: String,
+) -> Result<EngagementMeta, CommandError> {
+    let engagements_dir = paths.0.engagements_dir();
+    let mut meta = engagements::load(&engagements_dir, &slug)?
+        .ok_or_else(|| anyhow::anyhow!("Engagement '{slug}' not found"))?;
+    meta.target.scenario_id = scenario_id;
+    engagements::save_meta(&engagements_dir, &meta)?;
+    Ok(meta)
+}
+
+/// Rename an existing engagement. Only the display name in
+/// `engagement.yaml` is updated; the slug (folder name) stays the same so
+/// run paths, response files, and reports remain valid.
+#[tauri::command]
+pub fn rename_engagement(
+    paths: State<'_, AppPaths>,
+    slug: String,
+    name: String,
+) -> Result<EngagementMeta, CommandError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow::anyhow!("Engagement name must not be empty").into());
+    }
+    let engagements_dir = paths.0.engagements_dir();
+    let mut meta = engagements::load(&engagements_dir, &slug)?
+        .ok_or_else(|| anyhow::anyhow!("Engagement '{slug}' not found"))?;
+    meta.name = trimmed.to_owned();
+    engagements::save_meta(&engagements_dir, &meta)?;
+    Ok(meta)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DeleteEngagementResult {
     pub deleted: bool,

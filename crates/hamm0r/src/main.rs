@@ -72,6 +72,8 @@ fn main() {
             commands::engagements::list_engagements,
             commands::engagements::get_engagement,
             commands::engagements::create_engagement,
+            commands::engagements::rename_engagement,
+            commands::engagements::set_engagement_scenario,
             commands::engagements::delete_engagement,
             commands::engagements::list_runs,
             commands::engagements::get_run_progress,
