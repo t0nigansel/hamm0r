@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+﻿use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-// ── Prompt library ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Prompt library Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Schema defined in docs/PromptsSpec.md.
 // One YAML file = one category; the filename stem is the category name.
 // Each file is a list of PromptEntry values.
@@ -22,6 +22,30 @@ pub enum PromptMode {
     Multiturn,
 }
 
+/// Section 1.4 of `docs/ToDo.md` and `plans/multiSessionPlan.md`. Tags
+/// a prompt with the multi-session phase it belongs to. `Any` is the
+/// default and means "fire whenever" (single-session scenarios always
+/// see `Any`). `Plant` and `Probe` only matter for multi-session
+/// scenarios, which schedule all plants before any probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Phase {
+    #[default]
+    Any,
+    Plant,
+    Probe,
+}
+
+impl Phase {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Phase::Any => "any",
+            Phase::Plant => "plant",
+            Phase::Probe => "probe",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Turn {
     pub role: String,
@@ -32,7 +56,7 @@ pub struct Turn {
 pub struct PromptEntry {
     /// Stable identifier (kebab-case slug), auto-derived from the human
     /// name on save. Cross-referenced from the run JSONL `prompt_id`,
-    /// the verdict log, and Scenario history — must remain stable across
+    /// the verdict log, and Scenario history Ã¢â‚¬â€ must remain stable across
     /// edits, so it's never re-slugged once written.
     pub id: String,
     /// Human-readable label shown in the editor and the prompt list.
@@ -53,10 +77,20 @@ pub struct PromptEntry {
     /// Optional OWASP LLM/Agentic Top 10 reference, e.g. "A01".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub owasp_ref: Option<String>,
+    /// Multi-session phase tag (Section 1.4 of `docs/ToDo.md`).
+    /// Defaults to `Any` so legacy prompt files load unchanged. Plant
+    /// prompts fire first across all sessions; probe prompts fire after
+    /// a barrier. Single-session scenarios ignore this field.
+    #[serde(default, skip_serializing_if = "is_phase_any")]
+    pub phase: Phase,
 }
 
-// ── Request template ──────────────────────────────────────────────────────────
-// Schema defined in docs/Datamodel.md §"Request file".
+fn is_phase_any(p: &Phase) -> bool {
+    *p == Phase::Any
+}
+
+// Ã¢â€â‚¬Ã¢â€â‚¬ Request template Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// Schema defined in docs/Datamodel.md Ã‚Â§"Request file".
 // Stored in ~/hamm0r/requests/<name>.yaml.
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -120,7 +154,7 @@ pub struct ResponseConfig {
     pub result_columns: Vec<ResultColumnConfig>,
     /// Phase 2 of docs/RefactorPlan.md: name the extracted value so other
     /// Requests can reference it via `{{<request_id>.<bind>}}` interpolation
-    /// (URL, headers, body — runtime DAG resolver does the substitution).
+    /// (URL, headers, body Ã¢â‚¬â€ runtime DAG resolver does the substitution).
     /// `None` (the default) means the response value is not exposed to other
     /// Requests; firing the Request still works the same way it always has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -160,10 +194,16 @@ pub struct Request {
     #[serde(default, skip_serializing_if = "is_default_adapter")]
     pub adapter: AdapterType,
     /// Free-text label used to group Requests in the UI (Phase 2 of
-    /// docs/RefactorPlan.md). Not load-bearing — purely an organizational
+    /// docs/RefactorPlan.md). Not load-bearing Ã¢â‚¬â€ purely an organizational
     /// hint. Replaces the Target name as a grouping concept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    /// Last value typed into the "Test payload" field of the Request
+    /// editor, persisted so manual ad-hoc tests round-trip across sessions.
+    /// Not used by Scenario runs (those resolve payloads from the prompt
+    /// library).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_payload: Option<String>,
 }
 
 fn is_default_adapter(a: &AdapterType) -> bool {
@@ -174,7 +214,7 @@ fn default_timeout() -> u32 {
     30
 }
 
-// ── Target ────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Target Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Named endpoint stored in ~/hamm0r/targets/<name>.yaml.
 // A Target references a Request by id and adds engagement-level notes.
 
@@ -273,9 +313,9 @@ impl Target {
     }
 }
 
-// ── Scenario ──────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Scenario Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Stored in ~/hamm0r/scenarios/<slug>.yaml. A Scenario is a matrix:
-// `request_ids` (Requests to fire) × `library` (prompts to fire against each
+// `request_ids` (Requests to fire) Ãƒâ€” `library` (prompts to fire against each
 // Request), executed as a Cartesian product. Auth-chain prerequisites are
 // resolved automatically via `Request.response.bind` on the registry.
 
@@ -365,6 +405,58 @@ pub struct Scenario {
     /// fire once for the run instead of once per attempt. Default false.
     #[serde(default, skip_serializing_if = "is_false")]
     pub shared_session: bool,
+    /// Optional prompt mutation engine config (Section 2 of docs/ToDo.md).
+    /// Absent means "no mutations, fire seed prompts as-is".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutations: Option<MutationConfig>,
+    /// Section 1 of `docs/ToDo.md` and `plans/multiSessionPlan.md`.
+    /// Number of parallel sessions to fire this scenario across.
+    /// Absent or `1` means single-session (legacy behaviour, ignores
+    /// `session_identity` / prompt `phase`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_count: Option<u32>,
+    /// Multi-session identity strategy. Ignored when `session_count`
+    /// is absent or `1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_identity: Option<SessionIdentityConfig>,
+}
+
+/// Section 1.1 of `docs/ToDo.md`. How sessions in a multi-session run
+/// are kept distinct on the wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionIdentityConfig {
+    pub kind: SessionIdentityKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SessionIdentityKind {
+    /// Each session gets its own cookie jar; nothing injected.
+    CookieJar,
+    /// Each session gets a unique conversation id, sent in the named
+    /// header.
+    ConversationHeader { header_name: String },
+    /// Each session gets a unique value in `header_name`. Value is the
+    /// short session label (e.g. `s0`), not the canary.
+    CustomHeader { header_name: String },
+}
+
+/// Configuration of the prompt mutation engine for a single scenario.
+///
+/// Mutator ids are the stable `Mutator::id()` values registered in
+/// `runner::mutation::registry()` (for example `encoding.base64`).
+/// Unknown ids are tolerated on read (forward compatibility) and
+/// silently ignored at run time.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct MutationConfig {
+    /// Mutator ids to enable, in any order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enabled_mutators: Vec<String>,
+    /// Optional cap on the number of *additional* variants the mutators
+    /// may emit per seed prompt. The seed itself is always fired.
+    /// `None` means "no cap".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_variants_per_seed: Option<u32>,
 }
 
 fn default_repeat() -> u32 {
@@ -375,9 +467,9 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-// ── Engagement metadata ───────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Engagement metadata Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Stored as ~/hamm0r/engagements/<slug>/engagement.yaml.
-// Schema defined in docs/Datamodel.md §"engagement.yaml".
+// Schema defined in docs/Datamodel.md Ã‚Â§"engagement.yaml".
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EngagementScope {
@@ -409,7 +501,7 @@ pub struct EngagementMeta {
     pub scope: EngagementScope,
 }
 
-// —— App config ————————————————————————————————————————————————————————————————
+// Ã¢â‚¬â€Ã¢â‚¬â€ App config Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€Ã¢â‚¬â€
 // Stored as ~/hamm0r/config.yaml.
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -625,9 +717,9 @@ impl Default for AppConfig {
     }
 }
 
-// ── Triage ────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Triage Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Stored in ~/hamm0r/engagements/<slug>/runs/<run_id>.triage.yaml.
-// Schema defined in docs/Datamodel.md §"Triage".
+// Schema defined in docs/Datamodel.md Ã‚Â§"Triage".
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -647,7 +739,7 @@ pub struct TriageEntry {
     pub updated_at: String,
 }
 
-// ── Round-trip tests ──────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Round-trip tests Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 #[cfg(test)]
 mod tests {
@@ -686,6 +778,7 @@ mod tests {
             turns: vec![],
             tags: vec!["direct".into(), "classic".into()],
             owasp_ref: Some("A01".into()),
+            phase: Phase::Any,
         };
         assert_eq!(file_roundtrip(&dir, "prompt.yaml", &entry), entry);
     }
@@ -710,6 +803,7 @@ mod tests {
             ],
             tags: vec!["multiturn".into(), "memory".into()],
             owasp_ref: Some("A02".into()),
+            phase: Phase::Any,
         };
         assert_eq!(yaml_roundtrip(&entry), entry);
     }
@@ -744,6 +838,7 @@ mod tests {
             timeout_seconds: 30,
             adapter: Default::default(),
             tag: None,
+            test_payload: None,
         };
         assert_eq!(file_roundtrip(&dir, "request.yaml", &req), req);
     }
@@ -773,6 +868,7 @@ mod tests {
             timeout_seconds: 30,
             adapter: AdapterType::RawHttp,
             tag: None,
+            test_payload: None,
         };
         let roundtripped = file_roundtrip(&dir, "request.yaml", &req);
         assert_eq!(roundtripped, req);
@@ -809,7 +905,7 @@ mod tests {
         assert_eq!(file_roundtrip(&dir, "target.yaml", &target), target);
     }
 
-    // ── Phase 2A schema additions ─────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Phase 2A schema additions Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     #[test]
     fn request_with_tag_and_bind_roundtrip() {
@@ -836,6 +932,7 @@ mod tests {
             timeout_seconds: 60,
             adapter: Default::default(),
             tag: Some("acme-staging".into()),
+            test_payload: None,
         };
         assert_eq!(file_roundtrip(&dir, "request.yaml", &req), req);
     }
@@ -892,6 +989,9 @@ timeout_seconds: 30
                 categories: vec!["injection-classics".into()],
             }),
             shared_session: true,
+            mutations: None,
+            session_count: None,
+            session_identity: None,
         };
         assert_eq!(file_roundtrip(&dir, "scenario.yaml", &scenario), scenario);
     }
@@ -939,6 +1039,9 @@ timeout_seconds: 30
                 categories: Vec::new(),
             }),
             shared_session: false,
+            mutations: None,
+            session_count: None,
+            session_identity: None,
         };
         assert_eq!(file_roundtrip(&dir, "scenario.yaml", &scenario), scenario);
     }
@@ -966,8 +1069,8 @@ request_ids:
     #[test]
     fn legacy_scenario_yaml_with_steps_still_parses() {
         // Pre-Phase-2 scenario YAML had `target_id` and `steps` fields.
-        // Those fields are now ignored — serde drops unknown keys by
-        // default — and the matrix fields default to empty/false. Old
+        // Those fields are now ignored Ã¢â‚¬â€ serde drops unknown keys by
+        // default Ã¢â‚¬â€ and the matrix fields default to empty/false. Old
         // step-based scenarios become inert (no Requests, no library).
         // They still load successfully so the user can open and re-author
         // them as matrix scenarios.
@@ -1045,5 +1148,89 @@ scope:
         };
 
         assert_eq!(file_roundtrip(&dir, "config.yaml", &config), config);
+    }
+
+    // ── Section 1 (multi-session) round-trips ─────────────────────────────
+
+    #[test]
+    fn phase_default_is_any() {
+        assert_eq!(Phase::default(), Phase::Any);
+    }
+
+    #[test]
+    fn phase_serializes_as_lowercase() {
+        let yaml = serde_yaml::to_string(&Phase::Plant).unwrap();
+        assert_eq!(yaml.trim(), "plant");
+    }
+
+    #[test]
+    fn phase_field_on_prompt_entry_round_trips() {
+        for phase in [Phase::Any, Phase::Plant, Phase::Probe] {
+            let entry = PromptEntry {
+                id: "p1".into(),
+                name: None,
+                text: "x".into(),
+                severity: Severity::Low,
+                mode: PromptMode::Single,
+                turns: vec![],
+                tags: vec![],
+                owasp_ref: None,
+                phase,
+            };
+            assert_eq!(yaml_roundtrip(&entry), entry);
+        }
+    }
+
+    #[test]
+    fn legacy_prompt_entry_without_phase_defaults_to_any() {
+        let yaml = "\
+id: legacy
+text: hello
+severity: LOW
+mode: single
+";
+        let entry: PromptEntry = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(entry.phase, Phase::Any);
+    }
+
+    #[test]
+    fn scenario_with_multi_session_round_trips() {
+        let dir = TempDir::new().unwrap();
+        let scenario = Scenario {
+            version: 1,
+            id: "scn-multi".into(),
+            name: "Multi-session".into(),
+            repeat: 1,
+            description: None,
+            request_ids: Vec::new(),
+            library: None,
+            shared_session: false,
+            mutations: None,
+            session_count: Some(2),
+            session_identity: Some(SessionIdentityConfig {
+                kind: SessionIdentityKind::ConversationHeader {
+                    header_name: "X-Conversation-Id".into(),
+                },
+            }),
+        };
+        assert_eq!(file_roundtrip(&dir, "scn.yaml", &scenario), scenario);
+    }
+
+    #[test]
+    fn session_identity_kind_variants_round_trip() {
+        for kind in [
+            SessionIdentityKind::CookieJar,
+            SessionIdentityKind::ConversationHeader {
+                header_name: "X-Conv".into(),
+            },
+            SessionIdentityKind::CustomHeader {
+                header_name: "X-Session".into(),
+            },
+        ] {
+            let cfg = SessionIdentityConfig { kind };
+            let yaml = serde_yaml::to_string(&cfg).unwrap();
+            let back: SessionIdentityConfig = serde_yaml::from_str(&yaml).unwrap();
+            assert_eq!(back, cfg);
+        }
     }
 }

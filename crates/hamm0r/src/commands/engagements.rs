@@ -18,6 +18,9 @@ pub struct RunSummary {
     /// Scenario this run came from. `None` for ad-hoc runs (rerun path).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scenario_id: Option<String>,
+    /// True when a sibling `<run_id>.verdicts.jsonl` exists on disk.
+    /// Drives the "this run has been analyzed" indicator in the runs list.
+    pub analyzed: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,6 +31,14 @@ pub struct ExportFileDto {
 #[tauri::command]
 pub fn list_engagements(paths: State<'_, AppPaths>) -> Result<Vec<EngagementMeta>, CommandError> {
     engagements::list(&paths.0.engagements_dir()).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_engagement(
+    paths: State<'_, AppPaths>,
+    slug: String,
+) -> Result<Option<EngagementMeta>, CommandError> {
+    engagements::load(&paths.0.engagements_dir(), &slug).map_err(Into::into)
 }
 
 /// Create a new engagement directory tree and return its metadata.
@@ -135,11 +146,18 @@ pub fn list_runs(
         if run_id.is_empty() {
             continue;
         }
+        // Replay run files live in the same dir but are not listed at the
+        // top level — they're surfaced inline next to the original attempt.
+        if run_id.contains("-replay-") {
+            continue;
+        }
         let records = read_all(&path)?;
+        let verdicts_path = path.with_extension("verdicts.jsonl");
         summaries.push(summarize_run(
             &run_id,
             &records,
             active_run_ids.contains(&run_id),
+            verdicts_path.exists(),
         ));
     }
 
@@ -170,7 +188,13 @@ pub fn get_run_progress(
         .lock()
         .map_err(|_| anyhow::anyhow!("active run registry poisoned"))?
         .contains_key(&run_id);
-    Ok(Some(summarize_run(&run_id, &records, is_active)))
+    let verdicts_path = run_path.with_extension("verdicts.jsonl");
+    Ok(Some(summarize_run(
+        &run_id,
+        &records,
+        is_active,
+        verdicts_path.exists(),
+    )))
 }
 
 #[tauri::command]
@@ -238,7 +262,12 @@ fn make_slug(name: &str) -> String {
     format!("{today}-{slug_part}")
 }
 
-fn summarize_run(run_id: &str, records: &[RunRecord], is_active: bool) -> RunSummary {
+fn summarize_run(
+    run_id: &str,
+    records: &[RunRecord],
+    is_active: bool,
+    analyzed: bool,
+) -> RunSummary {
     let mut started_at = String::new();
     let mut completed = 0u32;
     let mut total_prompts = 0u32;
@@ -272,6 +301,7 @@ fn summarize_run(run_id: &str, records: &[RunRecord], is_active: bool) -> RunSum
                 }
                 .to_owned();
             }
+            RunRecord::LeakDetected(_) => {}
         }
     }
 
@@ -287,5 +317,6 @@ fn summarize_run(run_id: &str, records: &[RunRecord], is_active: bool) -> RunSum
         errors,
         started_at,
         scenario_id,
+        analyzed,
     }
 }

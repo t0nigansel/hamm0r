@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,7 +21,7 @@ use crate::adapter::{self, AdapterResponse};
 use crate::error::RunnerError;
 use crate::session::{SessionManager, SessionStrategy};
 
-// ── Public API ────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Public API Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 /// One payload to fire in a run.
 #[derive(Debug, Clone)]
@@ -29,8 +29,13 @@ pub struct Payload {
     pub prompt_id: String,
     pub payload_id: String,
     pub text: String,
-    /// Session label — steps sharing a label share auth/cookie state.
+    /// Session label Ã¢â‚¬â€ steps sharing a label share auth/cookie state.
     pub session: String,
+    /// Mutator id that produced this prompt variant, or `"seed"` for the
+    /// unmutated seed prompt. `None` is treated as "seed" on write but
+    /// also accepted from callers that don't use the mutation engine yet.
+    /// See `runner::mutation` (Section 2 of docs/ToDo.md).
+    pub mutation_id: Option<String>,
 }
 
 /// Configuration for a single run.
@@ -44,21 +49,25 @@ pub struct RunConfig {
     pub body_logging_enabled: bool,
     pub on_attempt_log: Option<Arc<dyn Fn(AttemptLog) + Send + Sync>>,
     pub cancellation: Option<RunCancellation>,
+    /// Set when this run is a replay of a single attempt from another
+    /// run. Written verbatim into the JSONL header as `replay_of`.
+    /// See `docs/Datamodel.md Â§"Replay run files"`.
+    pub replay_of: Option<storage::runs::ReplaySource>,
 }
 
 /// Configuration for matrix execution (Phase 2C of `docs/RefactorPlan.md`).
 ///
-/// Fires `request_ids` × `payloads` as a Cartesian product: each prompt
+/// Fires `request_ids` Ãƒâ€” `payloads` as a Cartesian product: each prompt
 /// against each Request, with auth-chain prerequisites resolved via the
-/// `deps` module. This is the only Scenario execution path — the legacy
+/// `deps` module. This is the only Scenario execution path Ã¢â‚¬â€ the legacy
 /// step-based runner was retired in Phase 2 (see `RefactorPlan.md`).
 pub struct MatrixRunConfig {
     pub engagement_dir: PathBuf,
     pub run_id: String,
     /// Source Scenario id, recorded in the run header so the UI can map
-    /// run → scenario name later.
+    /// run Ã¢â€ â€™ scenario name later.
     pub scenario_id: String,
-    /// Every Request reachable from the matrix — targets and any
+    /// Every Request reachable from the matrix Ã¢â‚¬â€ targets and any
     /// prerequisites referenced via `{{<id>.<bind>}}`. The DAG resolver
     /// walks this map.
     pub registry: HashMap<String, Request>,
@@ -66,11 +75,11 @@ pub struct MatrixRunConfig {
     pub request_ids: Vec<String>,
     /// Per-request repeat multipliers, keyed by request id. A request whose
     /// id is absent here defaults to 1. Applied on top of `repeat`:
-    /// total firings for a request = `repeat` × `per_request_repeat[id]`.
+    /// total firings for a request = `repeat` Ãƒâ€” `per_request_repeat[id]`.
     pub per_request_repeat: HashMap<String, u32>,
     /// Prompts (already resolved from a library subset upstream).
     pub payloads: Vec<Payload>,
-    /// Number of independent passes over the request × payload matrix.
+    /// Number of independent passes over the request Ãƒâ€” payload matrix.
     pub repeat: u32,
     /// True: one bind cache shared across the whole run, so auth-chain
     /// prerequisites fire once per run. False: fresh cache per cell.
@@ -91,6 +100,12 @@ pub struct RunProgress {
     pub status: u16,
     pub error: Option<String>,
     pub finished: bool,
+    /// Request id of the attempt this progress notification describes.
+    /// `None` only on the final synthetic "run finished" notification.
+    pub request_id: Option<String>,
+    /// Prompt id (library entry) used for the attempt. `None` for the
+    /// final synthetic notification.
+    pub prompt_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,7 +154,7 @@ impl RunCancellation {
     }
 }
 
-// ── Internal types ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Internal types Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 /// Result of one HTTP exchange, decoded from the adapter response.
 struct RequestOutcome {
@@ -189,6 +204,18 @@ struct AttemptMeta {
     /// Phase 2 of docs/RefactorPlan.md: tags non-user-facing attempts.
     /// `Some("prerequisite")` for auth-chain prerequisite firings.
     kind: Option<String>,
+    /// Request id this attempt was fired against. Persisted to RunAttempt
+    /// for replay (see docs/Datamodel.md Â§"Replay run files").
+    request_id: Option<String>,
+    /// Mutator id that produced this prompt variant (Section 2.9 of
+    /// docs/ToDo.md). `None` for prerequisite or synthetic attempts.
+    mutation_id: Option<String>,
+    /// Section 1.6 of `docs/ToDo.md`. Short session label (`s0`, `s1`,
+    /// …) when fired as part of a multi-session run; `None` otherwise.
+    session_id: Option<String>,
+    /// Section 1.6 of `docs/ToDo.md`. Phase (`plant`, `probe`, `any`)
+    /// the attempt was fired in. `None` on single-session runs.
+    phase: Option<String>,
 }
 
 struct RequestLogPayload {
@@ -202,7 +229,7 @@ enum AttemptTaskResult {
     Cancelled,
 }
 
-// ── Execution ─────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Execution Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 /// Execute a full run: fire all payloads, write a JSONL line per attempt,
 /// emit progress after each one. Returns when all payloads are done.
@@ -218,9 +245,9 @@ where
         .engagement_dir
         .join("runs")
         .join(format!("{}.jsonl", config.run_id));
-    let responses_dir = config.engagement_dir.join("responses").join(&config.run_id);
+    let responses_dir = runs::ensure_response_dir(&config.engagement_dir, &config.run_id)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
-    std::fs::create_dir_all(&responses_dir).map_err(|e| anyhow::anyhow!(e))?;
     write_header(
         &run_path,
         &config.run_id,
@@ -229,6 +256,7 @@ where
         &config.runner_version,
         config.payloads.iter().map(|p| p.prompt_id.clone()),
         None,
+        config.replay_of.clone(),
     )?;
 
     let sem = Arc::new(Semaphore::new(config.parallelism));
@@ -310,6 +338,8 @@ where
             );
             let progress_status = outcome.status;
             let progress_error = outcome.error.clone();
+            let progress_request_id = request.id.clone();
+            let progress_prompt_id = payload.prompt_id.clone();
 
             let meta = AttemptMeta {
                 seq,
@@ -320,9 +350,12 @@ where
                 session: Some(payload.session),
                 prompt_text: Some(payload.text),
                 kind: None,
+                request_id: Some(request.id.clone()),
+                mutation_id: Some(payload.mutation_id.unwrap_or_else(|| "seed".to_owned())),
+                session_id: None,
+                phase: None,
             };
 
-            let response_status = outcome.status;
             let response_headers = outcome.response_headers.clone();
             let response_body_size = outcome
                 .body_bytes
@@ -344,26 +377,18 @@ where
             runs::append(&run_path, &attempt).map_err(|e| anyhow::anyhow!(e))?;
 
             if let Some(on_attempt_log) = &on_attempt_log {
-                let (request_headers, request_body_size, request_body) = match &request_log {
-                    Ok(log) => (log.headers.clone(), log.body_size, log.body_text.clone()),
-                    Err(_) => (HashMap::new(), 0, None),
-                };
-                on_attempt_log(AttemptLog {
-                    run_id: run_id.as_ref().clone(),
+                emit_attempt_log(
+                    on_attempt_log.as_ref(),
+                    run_id.as_ref(),
                     seq,
-                    request_method: request.method.clone(),
-                    request_url: request.url.clone(),
-                    request_headers,
-                    request_body_size,
-                    request_body,
-                    response_status,
+                    &request,
+                    &request_log,
+                    &outcome,
                     response_headers,
                     response_body_size,
                     response_body,
-                    duration_ms: outcome.duration_ms,
-                    error: progress_error.clone(),
-                    is_timeout: outcome.is_timeout,
-                });
+                    progress_error.clone(),
+                );
             }
 
             on_progress(RunProgress {
@@ -373,6 +398,8 @@ where
                 status: progress_status,
                 error: progress_error,
                 finished: false,
+                request_id: Some(progress_request_id),
+                prompt_id: Some(progress_prompt_id),
             });
 
             Ok::<_, RunnerError>(AttemptTaskResult::Written {
@@ -408,34 +435,26 @@ where
     };
     let attempts_total = if cancelled { attempts_written } else { total };
 
-    write_footer(
+    on_progress(finalize_run(
         &run_path,
         &config.run_id,
         attempts_total,
         attempts_failed,
         status,
-    )?;
-
-    on_progress(RunProgress {
-        run_id: config.run_id,
-        seq: attempts_written,
-        total: attempts_total,
-        status: 0,
-        error: None,
-        finished: true,
-    });
-
+        attempts_written,
+        attempts_total,
+    )?);
     Ok(())
 }
 
-// ── Matrix execution (Phase 2C) ───────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Matrix execution (Phase 2C) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
-/// Execute a matrix run: every payload × every Request, sequentially,
+/// Execute a matrix run: every payload Ãƒâ€” every Request, sequentially,
 /// with auth-chain prerequisites resolved via `deps::fire_chain`.
 ///
-/// Iteration order is **prompts outer × requests inner** so a single
+/// Iteration order is **prompts outer Ãƒâ€” requests inner** so a single
 /// prompt's behavior across all Request shapes is contiguous in the
-/// run log — that's the way most users want to read results
+/// run log Ã¢â‚¬â€ that's the way most users want to read results
 /// ("did this attack break any of these endpoints?").
 pub async fn execute_matrix_run<F>(
     config: MatrixRunConfig,
@@ -448,12 +467,12 @@ where
         .engagement_dir
         .join("runs")
         .join(format!("{}.jsonl", config.run_id));
-    let responses_dir = config.engagement_dir.join("responses").join(&config.run_id);
-    std::fs::create_dir_all(&responses_dir).map_err(|e| anyhow::anyhow!(e))?;
+    let responses_dir = runs::ensure_response_dir(&config.engagement_dir, &config.run_id)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     // Header references the first target Request id by convention. Matrix
     // runs cover multiple Requests, but the JSONL header schema requires a
-    // single string — picking the first target gives the right hint.
+    // single string Ã¢â‚¬â€ picking the first target gives the right hint.
     let primary_request_id = config
         .request_ids
         .first()
@@ -483,10 +502,11 @@ where
         &config.runner_version,
         prompt_files,
         scenario_id,
+        None,
     )?;
 
     // User-facing total counts only target attempts (one per cell). The
-    // prerequisite firings are bookkeeping — they get their own RunAttempt
+    // prerequisite firings are bookkeeping Ã¢â‚¬â€ they get their own RunAttempt
     // records but don't count toward "X of N done".
     let repeat = config.repeat.max(1);
     // Sum of per-request repeats across all target requests. A request absent
@@ -548,21 +568,15 @@ where
                         .as_ref()
                         .is_some_and(RunCancellation::is_cancelled)
                     {
-                        write_footer(
+                        on_progress(finalize_run(
                             &run_path,
                             &config.run_id,
                             seq,
                             attempts_failed,
                             RunStatus::AbortedByUser,
-                        )?;
-                        on_progress(RunProgress {
-                            run_id: config.run_id.clone(),
-                            seq: target_seq,
-                            total: target_seq,
-                            status: 0,
-                            error: None,
-                            finished: true,
-                        });
+                            target_seq,
+                            target_seq,
+                        )?);
                         return Ok(());
                     }
 
@@ -591,6 +605,8 @@ where
                                 status: 0,
                                 error: Some(synthetic_err.to_string()),
                                 finished: false,
+                                request_id: Some(request_id.clone()),
+                                prompt_id: Some(payload.prompt_id.clone()),
                             });
                             continue;
                         }
@@ -608,21 +624,15 @@ where
                     let chain_result = if let Some(cancel) = &cancellation {
                         tokio::select! {
                             _ = cancel.until_cancelled() => {
-                                write_footer(
+                                on_progress(finalize_run(
                                     &run_path,
                                     &config.run_id,
                                     seq,
                                     attempts_failed,
                                     RunStatus::AbortedByUser,
-                                )?;
-                                on_progress(RunProgress {
-                                    run_id: config.run_id.clone(),
-                                    seq: target_seq,
-                                    total: target_seq,
-                                    status: 0,
-                                    error: None,
-                                    finished: true,
-                                });
+                                    target_seq,
+                                    target_seq,
+                                )?);
                                 return Ok(());
                             }
                             result = crate::deps::fire_chain(
@@ -671,6 +681,10 @@ where
                                     session: Some(payload.session.clone()),
                                     prompt_text: None,
                                     kind: Some("prerequisite".to_owned()),
+                                    request_id: Some(prereq_id.clone()),
+                                    mutation_id: None,
+                                    session_id: None,
+                                    phase: None,
                                 };
                                 if outcome_log.error.is_some() {
                                     attempts_failed += 1;
@@ -709,8 +723,16 @@ where
                                 session: Some(payload.session.clone()),
                                 prompt_text: Some(payload.text.clone()),
                                 kind: None,
+                                request_id: Some(request_id.clone()),
+                                mutation_id: Some(
+                                    payload
+                                        .mutation_id
+                                        .clone()
+                                        .unwrap_or_else(|| "seed".to_owned()),
+                                ),
+                                session_id: None,
+                                phase: None,
                             };
-                            let response_status = progress_status;
                             let response_headers = target_outcome.response_headers.clone();
                             let response_body_size = target_outcome
                                 .body_bytes
@@ -741,31 +763,18 @@ where
                             runs::append(&run_path, &attempt).map_err(|e| anyhow::anyhow!(e))?;
 
                             if let Some(on_attempt_log) = &on_attempt_log {
-                                let (request_headers, request_body_size, request_body) =
-                                    match &request_log {
-                                        Ok(log) => (
-                                            log.headers.clone(),
-                                            log.body_size,
-                                            log.body_text.clone(),
-                                        ),
-                                        Err(_) => (HashMap::new(), 0, None),
-                                    };
-                                on_attempt_log(AttemptLog {
-                                    run_id: config.run_id.clone(),
+                                emit_attempt_log(
+                                    on_attempt_log.as_ref(),
+                                    &config.run_id,
                                     seq,
-                                    request_method: target_req.method.clone(),
-                                    request_url: target_req.url.clone(),
-                                    request_headers,
-                                    request_body_size,
-                                    request_body,
-                                    response_status,
+                                    target_req,
+                                    &request_log,
+                                    &target_outcome,
                                     response_headers,
                                     response_body_size,
                                     response_body,
-                                    duration_ms: target_outcome.duration_ms,
-                                    error: progress_error.clone(),
-                                    is_timeout: target_outcome.is_timeout,
-                                });
+                                    progress_error.clone(),
+                                );
                             }
 
                             on_progress(RunProgress {
@@ -775,6 +784,8 @@ where
                                 status: progress_status,
                                 error: progress_error,
                                 finished: false,
+                                request_id: Some(request_id.clone()),
+                                prompt_id: Some(payload.prompt_id.clone()),
                             });
                         }
                         Err(err) => {
@@ -799,6 +810,8 @@ where
                                 status: 0,
                                 error: Some(err.to_string()),
                                 finished: false,
+                                request_id: Some(request_id.clone()),
+                                prompt_id: Some(payload.prompt_id.clone()),
                             });
                             if cancellation
                                 .as_ref()
@@ -813,26 +826,20 @@ where
         }
     }
 
-    write_footer(
+    on_progress(finalize_run(
         &run_path,
         &config.run_id,
         seq,
         attempts_failed,
         RunStatus::Completed,
-    )?;
-    on_progress(RunProgress {
-        run_id: config.run_id,
-        seq: target_seq,
-        total: target_total,
-        status: 0,
-        error: None,
-        finished: true,
-    });
+        target_seq,
+        target_total,
+    )?);
     Ok(())
 }
 
 /// Append a synthetic failed attempt to the run log. Used when the chain
-/// fails before producing any AdapterResponse — typically a missing
+/// fails before producing any AdapterResponse Ã¢â‚¬â€ typically a missing
 /// Request, an unresolved env var, or a cycle detected by the resolver.
 fn write_synthetic_failed_attempt(
     run_path: &std::path::Path,
@@ -854,6 +861,15 @@ fn write_synthetic_failed_attempt(
         session: Some(payload.session.clone()),
         prompt_text: Some(payload.text.clone()),
         kind: None,
+        request_id: Some(request_id.to_owned()),
+        mutation_id: Some(
+            payload
+                .mutation_id
+                .clone()
+                .unwrap_or_else(|| "seed".to_owned()),
+        ),
+        session_id: None,
+        phase: None,
         request: RequestEnvelope {
             method: "POST".to_owned(),
             url: format!("matrix:{request_id}"),
@@ -881,8 +897,9 @@ fn write_synthetic_failed_attempt(
     Ok(())
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
+#[allow(clippy::too_many_arguments)]
 fn write_header(
     run_path: &std::path::Path,
     run_id: &str,
@@ -891,6 +908,7 @@ fn write_header(
     runner_version: &str,
     prompt_ids: impl IntoIterator<Item = String>,
     scenario_id: Option<String>,
+    replay_of: Option<storage::runs::ReplaySource>,
 ) -> Result<(), RunnerError> {
     let prompt_files = prompt_ids
         .into_iter()
@@ -909,8 +927,74 @@ fn write_header(
         runner_version: runner_version.to_owned(),
         prompt_files,
         scenario_id,
+        replay_of,
     });
     runs::append(run_path, &header).map_err(|e| anyhow::anyhow!(e).into())
+}
+
+/// Write the footer and return the terminal `RunProgress` event (the one
+/// with `finished: true`) the caller should hand to `on_progress`. Used at
+/// every run-completion site — normal completion, cancellation, and the
+/// mid-loop bail-outs in matrix/multi-session execution.
+#[allow(clippy::too_many_arguments)]
+pub fn finalize_run(
+    run_path: &std::path::Path,
+    run_id: &str,
+    attempts_total: u32,
+    attempts_failed: u32,
+    status: RunStatus,
+    progress_seq: u32,
+    progress_total: u32,
+) -> Result<RunProgress, RunnerError> {
+    write_footer(run_path, run_id, attempts_total, attempts_failed, status)?;
+    Ok(RunProgress {
+        run_id: run_id.to_owned(),
+        seq: progress_seq,
+        total: progress_total,
+        status: 0,
+        error: None,
+        finished: true,
+        request_id: None,
+        prompt_id: None,
+    })
+}
+
+/// Build an `AttemptLog` from the per-attempt context and dispatch it to the
+/// caller's callback. Both `execute_run` and `execute_matrix_run` need to do
+/// this verbatim after every target attempt.
+#[allow(clippy::too_many_arguments)]
+fn emit_attempt_log(
+    callback: &(dyn Fn(AttemptLog) + Send + Sync),
+    run_id: &str,
+    seq: u32,
+    request: &Request,
+    request_log: &Result<RequestLogPayload, RunnerError>,
+    outcome: &RequestOutcome,
+    response_headers: HashMap<String, String>,
+    response_body_size: u64,
+    response_body: Option<String>,
+    error: Option<String>,
+) {
+    let (request_headers, request_body_size, request_body) = match request_log {
+        Ok(log) => (log.headers.clone(), log.body_size, log.body_text.clone()),
+        Err(_) => (HashMap::new(), 0, None),
+    };
+    callback(AttemptLog {
+        run_id: run_id.to_owned(),
+        seq,
+        request_method: request.method.clone(),
+        request_url: request.url.clone(),
+        request_headers,
+        request_body_size,
+        request_body,
+        response_status: outcome.status,
+        response_headers,
+        response_body_size,
+        response_body,
+        duration_ms: outcome.duration_ms,
+        error,
+        is_timeout: outcome.is_timeout,
+    });
 }
 
 fn write_footer(
@@ -970,6 +1054,10 @@ fn build_attempt(
         session: meta.session,
         prompt_text: meta.prompt_text,
         kind: meta.kind,
+        request_id: meta.request_id,
+        mutation_id: meta.mutation_id,
+        session_id: meta.session_id,
+        phase: meta.phase,
         request: RequestEnvelope {
             method: request.method.clone(),
             url: request.url.clone(),
@@ -1160,6 +1248,7 @@ mod tests {
             timeout_seconds: 50,
             adapter: storage::types::AdapterType::CustomRest,
             tag: None,
+            test_payload: None,
         }
     }
 

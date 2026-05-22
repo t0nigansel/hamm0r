@@ -20,18 +20,32 @@
     </div>
     <div class="breadcrumb">
       <span id="breadcrumb-view">home</span>
-      <span class="sep">/</span>
-      <span class="current" id="breadcrumb-engagement">no engagement open</span>
+      <span class="sep" id="breadcrumb-sep-engagement" hidden>/</span>
+      <span id="breadcrumb-engagement" hidden></span>
+      <span class="sep" id="breadcrumb-sep-run" hidden>/</span>
+      <span class="current" id="breadcrumb-run" hidden></span>
     </div>
     <div class="topbar-progress" id="topbar-progress" aria-live="polite">
-      <span id="topbar-progress-bar">[              ]</span>
-      <span id="topbar-progress-count">0/0</span>
+      <button id="topbar-progress-toggle" class="topbar-progress-toggle" type="button"
+              title="Show run details" aria-expanded="false" aria-controls="topbar-progress-detail">
+        <span id="topbar-progress-bar">[                                          ]</span>
+        <span id="topbar-progress-count">0/0</span>
+      </button>
+      <button id="btn-topbar-stop" class="topbar-stop-btn" type="button" title="Stop" aria-label="Stop">
+        <span class="btn-icon-glyph" aria-hidden="true">■</span>
+      </button>
     </div>
-    <div class="topbar-right">
-      <button class="icon-btn" id="btn-new-engagement" title="New or open engagement">+</button>
-      <button class="icon-btn" id="btn-global-fire" title="Fire" aria-label="Fire" disabled>&#9654;</button>
-      <button class="icon-btn" id="btn-help" title="Help">?</button>
-    </div>
+  </div>
+
+  <div id="topbar-progress-detail" class="topbar-progress-detail" hidden>
+    <dl class="topbar-progress-detail-grid">
+      <dt>Run</dt>            <dd id="tpd-run">—</dd>
+      <dt>Elapsed</dt>        <dd id="tpd-elapsed">—</dd>
+      <dt>Attempts</dt>       <dd id="tpd-attempts">—</dd>
+      <dt>Errors</dt>         <dd id="tpd-errors">—</dd>
+      <dt>Current request</dt><dd id="tpd-request">—</dd>
+      <dt>Current prompt</dt> <dd id="tpd-prompt">—</dd>
+    </dl>
   </div>
 
   <!-- ================================================================
@@ -72,14 +86,14 @@
       <span class="label">Scenarios</span>
     </button>
     <div class="nav-spacer"></div>
-    <button class="nav-item sidebar-item" data-view="view-prompts" title="Prompts">
+    <button class="nav-item sidebar-item" data-view="view-prompts" title="Library">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m16 6 4 14" />
         <path d="M12 6v14" />
         <path d="M8 8v12" />
         <path d="M4 4v16" />
       </svg>
-      <span class="label">Prompts</span>
+      <span class="label">Library</span>
     </button>
     <button class="nav-item sidebar-item" data-nav="settings" title="Settings">
       <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -306,6 +320,7 @@
 
             <div class="form-actions">
               <button type="submit" id="btn-req-save" class="btn btn-primary">Save</button>
+              <button type="button" id="btn-req-fire" class="btn btn-ghost" title="Fire this request with the Test payload" aria-label="Fire request">&#9654; Fire</button>
               <button type="button" id="btn-req-cancel" class="btn btn-ghost">Cancel</button>
               <span style="flex:1"></span>
               <button type="button" id="btn-req-delete" class="btn btn-ghost danger" style="display:none;">Delete</button>
@@ -571,17 +586,42 @@
               </label>
             </div>
 
-            <div class="run-controls">
-              <button id="btn-stop-scenario" class="btn btn-large" disabled>■ Stop</button>
+            <div class="form-row">
+              <label>Mutations</label>
+              <div id="sc-matrix-mutations" class="mutation-panel"></div>
+              <div class="form-row" style="margin-top:8px;">
+                <label for="sc-matrix-mutations-cap" class="hint" style="font-weight:normal;">
+                  Max variants per seed (blank = no cap)
+                </label>
+                <input type="number" id="sc-matrix-mutations-cap" min="1" step="1"
+                  style="width:80px;" placeholder="∞">
+              </div>
+              <div class="hint" id="sc-matrix-mutations-counter">
+                Mutations disabled. Each seed prompt fires once.
+              </div>
             </div>
 
-            <div id="scenario-progress" style="display:none">
-              <div class="progress-bar-wrap">
-                <div class="progress-bar" id="sc-progress-bar"></div>
+            <div class="form-row">
+              <label for="sc-matrix-session-count">Multi-session</label>
+              <div style="display:flex;gap:10px;align-items:center;">
+                <input type="number" id="sc-matrix-session-count" min="1" step="1"
+                  value="1" style="width:80px;"
+                  title="Number of parallel sessions. 1 = single-session (legacy behaviour).">
+                <select id="sc-matrix-session-identity-kind"
+                  title="How sessions are kept distinct on the wire."
+                  style="display:none;">
+                  <option value="cookie_jar">Cookie jar only</option>
+                  <option value="conversation_header">Conversation-ID header</option>
+                  <option value="custom_header">Custom header</option>
+                </select>
+                <input type="text" id="sc-matrix-session-header-name"
+                  placeholder="header name (e.g. X-Conversation-Id)"
+                  style="display:none;flex:1;">
               </div>
-              <div class="progress-stats">
-                <span id="sc-progress-completed">0</span> / <span id="sc-progress-total">0</span>
-                completed &nbsp;|&nbsp; <span id="sc-progress-errors">0</span> errors
+              <div class="hint" id="sc-matrix-session-hint">
+                Single-session run. Set >1 to fire plant/probe phases
+                across parallel sessions and scan for cross-session
+                canary leaks (OWASP LLM02).
               </div>
             </div>
 
@@ -635,11 +675,17 @@
                 <h2 id="eng-detail-title">Engagement Detail</h2>
                 <div class="eng-detail-slug" id="eng-detail-slug">/engagements/—</div>
               </div>
+              <div class="eng-detail-actions">
+                <button type="button" id="btn-eng-run" class="btn btn-primary" title="Start a new run for this engagement" aria-label="Run engagement scenario">&#9654; Run</button>
+              </div>
             </div>
 
             <div class="eng-detail-meta">
-              <span>Endpoint: <strong id="eng-detail-target">—</strong></span>
-              <span>Scenario: <strong id="eng-detail-scenario">—</strong></span>
+              <span class="eng-detail-endpoint-cell">Endpoint:
+                <strong id="eng-detail-target" class="eng-detail-endpoint" title="—">—</strong>
+                <button type="button" id="btn-eng-detail-copy-endpoint" class="eng-detail-copy-btn" title="Copy endpoint URL" aria-label="Copy endpoint URL">⧉</button>
+              </span>
+              <span>Scenario: <select id="eng-detail-scenario-select" class="eng-detail-scenario-select" title="Pick the scenario this engagement runs"><option value="">—</option></select></span>
               <span>Status: <strong id="eng-detail-status">—</strong></span>
               <span>Start: <strong id="eng-detail-start">—</strong></span>
               <span>End: <strong id="eng-detail-end">—</strong></span>
@@ -735,6 +781,18 @@
     <div class="detail-section">
       <strong>Response</strong>
       <pre id="detail-response"></pre>
+    </div>
+    <div class="detail-section">
+      <strong>Replay</strong>
+      <div class="replay-controls">
+        <textarea id="replay-prompt" rows="4" spellcheck="false" placeholder="Edit the prompt and fire again — leaves the original run untouched."></textarea>
+        <div class="replay-actions">
+          <button type="button" id="btn-replay-fire" class="btn btn-primary">&#9654; Replay</button>
+          <button type="button" id="btn-replay-reset" class="btn btn-ghost" title="Restore the original prompt text">Reset</button>
+          <span id="replay-status" class="replay-status">—</span>
+        </div>
+        <div id="replay-result" class="replay-result" hidden></div>
+      </div>
     </div>
     <div class="detail-section" id="detail-metrics-section" style="display:none">
       <strong>Metrics</strong>
@@ -834,6 +892,83 @@
       <div class="editor-actions">
         <button type="submit" class="btn btn-primary">Create</button>
         <button type="button" id="engagement-dialog-cancel" class="btn btn-ghost">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================================================================
+     Quick Start (Home → Quick Start CTA, ToDo §10.1)
+     Single-screen: target URL + bearer token + OWASP picks + Fire.
+     Creates a Request, a Scenario, an Engagement and fires immediately.
+     ================================================================ -->
+<div id="quickstart-modal" class="modal is-hidden">
+  <div class="modal-content modal-eng">
+    <button class="modal-close" id="quickstart-close">&times;</button>
+    <h3 class="modal-heading">Quick Start</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 1rem 0;">
+      We create one Scenario and one Engagement for you, then fire. Use the
+      built-in OpenAI-compatible template, or point Quick Start at a Request
+      you've already configured in the Library.
+    </p>
+    <form id="quickstart-form" autocomplete="off">
+      <div class="form-row">
+        <label for="qs-mode">Target Request</label>
+        <select id="qs-mode">
+          <option value="builtin" selected>New (OpenAI-compatible template)</option>
+          <option value="existing">Use existing Request…</option>
+        </select>
+      </div>
+      <div class="form-row qs-existing-row" id="qs-existing-row" style="display:none;">
+        <label for="qs-existing">Pick Request</label>
+        <select id="qs-existing"></select>
+      </div>
+      <div class="form-row qs-existing-row" id="qs-existing-empty-row" style="display:none;">
+        <label></label>
+        <div>
+          <span class="muted" style="font-size:12px;">No Requests yet. </span>
+          <button type="button" id="btn-qs-create-request" class="btn btn-ghost">Create Request…</button>
+        </div>
+      </div>
+      <div class="form-row qs-builtin-row">
+        <label for="qs-url">Endpoint URL</label>
+        <input id="qs-url" type="text" value="https://api.openai.com/v1/chat/completions">
+      </div>
+      <div class="form-row qs-builtin-row">
+        <label for="qs-model">Model</label>
+        <input id="qs-model" type="text" value="gpt-4o-mini">
+      </div>
+      <div class="form-row qs-builtin-row">
+        <label for="qs-auth">Auth</label>
+        <select id="qs-auth">
+          <option value="bearer" selected>Bearer token</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <div class="form-row qs-builtin-row" id="qs-token-row">
+        <label for="qs-token">Bearer token</label>
+        <input id="qs-token" type="password" placeholder="sk-... (stored in OS keychain)">
+      </div>
+      <div class="form-row">
+        <label>OWASP categories</label>
+        <div id="qs-owasp-grid" class="filter-chips" style="gap:6px;flex-wrap:wrap;">
+          <button type="button" class="chip active" data-qs-owasp="ALL">All</button>
+          <button type="button" class="chip" data-qs-owasp="A01">A01</button>
+          <button type="button" class="chip" data-qs-owasp="A02">A02</button>
+          <button type="button" class="chip" data-qs-owasp="A03">A03</button>
+          <button type="button" class="chip" data-qs-owasp="A04">A04</button>
+          <button type="button" class="chip" data-qs-owasp="A05">A05</button>
+          <button type="button" class="chip" data-qs-owasp="A06">A06</button>
+          <button type="button" class="chip" data-qs-owasp="A07">A07</button>
+          <button type="button" class="chip" data-qs-owasp="A08">A08</button>
+          <button type="button" class="chip" data-qs-owasp="A09">A09</button>
+          <button type="button" class="chip" data-qs-owasp="A10">A10</button>
+        </div>
+      </div>
+      <div id="qs-status" class="muted" style="font-size:12px;min-height:1em;margin-top:0.5rem;"></div>
+      <div class="editor-actions" style="margin-top:1rem;">
+        <button type="submit" id="btn-quickstart-fire" class="btn btn-primary">&#9654; Fire</button>
+        <button type="button" id="btn-quickstart-cancel" class="btn btn-ghost">Cancel</button>
       </div>
     </form>
   </div>

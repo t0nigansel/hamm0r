@@ -8,47 +8,7 @@ use crate::write::atomic_write;
 
 /// Load all targets from `dir`, keyed by filename stem.
 pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Target>> {
-    if !dir.exists() {
-        return Ok(HashMap::new());
-    }
-
-    let mut map = HashMap::new();
-
-    for entry in std::fs::read_dir(dir)
-        .with_context(|| format!("cannot read targets directory: {}", dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
-            continue;
-        }
-
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_owned();
-
-        let raw = match std::fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[storage] skipping {}: cannot read: {}", path.display(), e);
-                continue;
-            }
-        };
-
-        match serde_yaml::from_str::<Target>(&raw) {
-            Ok(target) => {
-                map.insert(stem, target);
-            }
-            Err(e) => {
-                eprintln!("[storage] skipping {}: cannot parse: {}", path.display(), e);
-            }
-        }
-    }
-
-    Ok(map)
+    crate::yaml_dir::load_all(dir, "targets")
 }
 
 /// Remove a target YAML file by id. Returns Ok even if the file did not exist.

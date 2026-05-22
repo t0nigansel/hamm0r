@@ -92,6 +92,12 @@ Each file is a top-level list of prompt entries:
 | `turns` | yes (multiturn mode) | list of `{role, content}` | Full conversation sequence. `text` is empty in this mode. |
 | `tags` | no | list of strings | Free-form labels for filtering and search. |
 | `owasp_ref` | no | A01–A10 | OWASP LLM/Agentic Top 10 reference. Stays typed (not folded into tags) because the analyzer's HTML report and the matrix Scenario library resolver both join on it. |
+| `phase` | no | `any` (default) / `plant` / `probe` | Section 1.4 of `ToDo.md`. Multi-session phase tag. `plant` prompts (which typically embed the `{{canary}}` template marker) fire across every session before any `probe` prompt fires; the post-run leak scanner then checks probe responses for cross-session canary leaks. Single-session scenarios ignore this field; absent = `any` (legacy behaviour). |
+
+When `phase: plant`, the prompt text may include the literal marker
+`{{canary}}` — the multi-session runner replaces it with the
+deterministic per-(run, session) canary string before firing
+(`HAMM0R-<11-hex>` format).
 
 `source` was a previous citation field. It was removed because nothing
 downstream read it — use tags or the prompt text itself for citations.

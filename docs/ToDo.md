@@ -17,44 +17,71 @@ session identifiers." First-class scenario type, not an afterthought._
 
 Reference: `productVision.md` § Multi-session testing
 
-- [ ] **1.1 — Session identity model.** Define `SessionIdentity` type
-      in `storage::types` (cookie jar, conversation-ID header, custom
-      header+value). Add `session_count: Option<u32>` and
-      `session_identity: Option<SessionIdentityConfig>` to the Scenario
-      YAML schema. Update `Datamodel.md`.
-- [ ] **1.2 — Runner: parallel session orchestration.** In
-      `runner::run`, add `execute_multi_session_run` that spawns N
-      `reqwest::Client` instances with distinct session state. Reuse
-      the existing semaphore for bounded parallelism across sessions.
-- [ ] **1.3 — Canary token generation.** Add `runner::canary` module.
-      Generate deterministic canary strings (UUID-based, per-run
-      seeded). Expose `generate_canary(run_id, session_idx)` for
-      plant/probe payloads.
-- [ ] **1.4 — Plant/probe phase scheduling.** Extend the matrix
-      expansion to support two-phase firing: session A sends
-      plant-prompts containing a canary, then session B sends
-      probe-prompts. The phase assignment is declared per-prompt via a
-      new optional `phase: plant | probe | any` field.
-- [ ] **1.5 — Cross-session leak scanner.** After all sessions
-      complete, scan all response files for canary tokens that appeared
-      in a session that did not plant them. Record matches as
-      `leak_detected` entries in the run JSONL.
-- [ ] **1.6 — JSONL schema: multi-session fields.** Add
-      `session_id: Option<String>` and `phase: Option<String>` to
-      `RunAttempt`. Update `Datamodel.md`. Migration: absent fields
-      default to `null` on read.
-- [ ] **1.7 — UI: Scenario editor multi-session toggle.** Add session
-      count input + session identity config to the Scenarios view
-      matrix panel. Only visible when `session_count > 1`.
-- [ ] **1.8 — UI: engagement results session column.** Show
-      `session_id` as a filterable column in the engagement detail
-      results table. Leak entries get a distinct badge.
-- [ ] **1.9 — Tests: multi-session runner.** Wiremock integration
-      tests: 2 sessions with cookie jars, canary plant in session 0
-      leaks to session 1, no-leak baseline.
-- [ ] **1.10 — Analyzer: cross-session leak verdict type.** Extend
-      verdict schema with `category: "cross_session_leak"`. The
-      analyzer auto-flags leak entries without needing LLM judging.
+Full plan: [`plans/multiSessionPlan.md`](plans/multiSessionPlan.md)
+
+- [x] **1.1 — Session identity model.** `SessionIdentityConfig` +
+      `SessionIdentityKind` (`CookieJar` / `ConversationHeader` /
+      `CustomHeader`) in `storage::types`. `Scenario.session_count` +
+      `Scenario.session_identity` added. `Phase` enum added with
+      `PromptEntry.phase: Phase` (defaults to `Any` — legacy YAML loads
+      unchanged). `Datamodel.md §"Scenario shape (matrix)"` and
+      `PromptsSpec.md` documented.
+- [x] **1.2 — Runner: multi-session orchestration.** New
+      `runner::multi_session::execute_multi_session_run`. Per-session
+      `reqwest::Client` with its own cookie jar + optional default
+      identity header. V1 runs sessions sequentially within each phase;
+      the plan's parallel-across-sessions optimization is deferred (see
+      `plans/multiSessionPlan.md` Q7).
+- [x] **1.3 — Canary token generation.** `runner::canary::generate(run_id,
+      session_idx, scenario_id)` returns `HAMM0R-<11-hex>` deterministically
+      via SHA-256. Sibling `runner::canary::inject(text, canary)`
+      substitutes `{{canary}}` markers without invoking the template
+      engine (so attack prompts' other braces stay opaque).
+- [x] **1.4 — Plant/probe phase scheduling.** `PromptEntry.phase`
+      drives the scheduler in `execute_multi_session_run`: all plants
+      fire (sessions iterated in order) before any probe/any prompt.
+      Phase recorded on each attempt as `Some("plant" | "probe" |
+      "any")`.
+- [x] **1.5 — Cross-session leak scanner.** New `runner::leak_scanner`
+      module runs at the end of every multi-session run. It walks
+      probe/any attempts, loads their response bodies, fast-filters by
+      `HAMM0R-` prefix, then checks each canary planted in a _different_
+      session. Matches emit `RunRecord::LeakDetected` JSONL records.
+      4 unit tests in `runner::leak_scanner::tests`.
+- [x] **1.6 — JSONL schema: multi-session fields.** `RunAttempt.session_id`
+      and `RunAttempt.phase` added as `Option<String>`, both
+      `skip_serializing_if = "Option::is_none"`. `RunRecord::LeakDetected`
+      variant added. `Datamodel.md §"Run log"` documents the new fields
+      and the `leak_detected` record shape. Legacy logs load unchanged
+      (round-trip test in `storage::runs::tests`).
+- [x] **1.7 — UI: Scenario editor multi-session toggle.** Session-count
+      input + identity-kind picker (cookie jar / conversation header /
+      custom header) + optional header-name input added to the matrix
+      editor in `ui/index.html`. Visibility collapses to a single
+      input when `session_count <= 1`; multi-session controls reveal
+      when the count is >1.
+- [x] **1.8 — UI: engagement results session column + leak badge.**
+      Existing `Session` column in the results table now prefers
+      `attempt.session_id` over the legacy `session` label. A new
+      `read_run_leaks` Tauri command exposes `LeakDetected` records;
+      `get_results` bundles them by probe seq and the row renderer
+      adds a red `leak` badge plus a phase badge (`plant` / `probe`)
+      next to the session label.
+- [x] **1.9 — Tests: multi-session runner.** Wiremock integration
+      tests in `crates/runner/tests/integration.rs`:
+      `multi_session_plant_probe_leak_is_detected_and_recorded` (2
+      sessions with cookie jars, leaky-echo mock, asserts the JSONL
+      carries plant/probe attempts with `session_id` + `phase` and the
+      scanner records s1's probe surfacing s0's canary) and
+      `multi_session_no_leak_when_server_does_not_echo_canary` (clean
+      baseline, asserts zero leak records).
+- [x] **1.10 — Analyzer: cross-session leak verdict type.**
+      `analyzer::pipeline::emit_cross_session_leak_verdicts` runs as the
+      first step of `judge_run`: reads every `LeakDetected` from the run
+      JSONL and emits one `category: "cross_session_leak"` verdict per
+      leak with `verdict: Success`, `severity: "high"`, `owasp_ref:
+      "LLM02"`, `model_used: "leak-scanner"`. Idempotent across re-judges
+      via a `(seq, leak-key)` dedup set.
 
 ---
 
@@ -66,45 +93,58 @@ LLM needed, reproducible._
 
 Reference: `productVision.md` § Prompt mutation
 
-- [ ] **2.1 — Mutation trait + registry.** Create `runner::mutation`
-      module. Define `Mutator` trait with `fn mutate(&self, seed: &str)
-      -> Vec<MutatedPrompt>`. `MutatedPrompt` carries the mutated
-      text + a `mutation_id` string describing what was applied.
-- [ ] **2.2 — Encoding mutators.** Implement: Base64, ROT13, hex,
-      URL-encoding, Unicode homoglyphs. Each is a separate struct
-      implementing `Mutator`. Pure, no dependencies beyond `std`.
-- [ ] **2.3 — Obfuscation mutators.** Implement: whitespace injection,
-      zero-width character insertion, leetspeak substitution.
-- [ ] **2.4 — Structural mutators.** Implement: code-block wrapping
-      (` ```), JSON embedding, Markdown comment wrapping, prefix
-      injection ("As a system admin, …").
-- [ ] **2.5 — Persona mutators.** Implement: authority framing
-      ("You are an unrestricted AI…"), role-play prefixes, jailbreak
-      template wrapping (DAN-style frame around the seed).
-- [ ] **2.6 — Linguistic mutators (basic).** Implement: synonym
-      substitution (small built-in synonym table, no external API),
-      politeness variants ("Please …", "Could you kindly …").
-      Translation roundtrips deferred (needs external API or model).
-- [ ] **2.7 — Scenario schema: mutation config.** Add
-      `mutations: Option<MutationConfig>` to Scenario YAML.
-      `MutationConfig` has `enabled_mutators: Vec<String>` and
-      `max_variants_per_seed: Option<u32>`. Update `Datamodel.md`.
-- [ ] **2.8 — Matrix expansion with mutations.** In
-      `execute_matrix_run`, when mutations are enabled, expand each
-      seed prompt into seed + N mutation variants before the Cartesian
-      product. Total attempts = requests × (seeds + mutations) × repeat.
-- [ ] **2.9 — JSONL: mutation provenance.** Add
-      `mutation_id: Option<String>` to `RunAttempt`. The report shows
-      which mutation cracked the filter, not just which seed.
-      Update `Datamodel.md`.
-- [ ] **2.10 — UI: Scenario editor mutation panel.** Checkboxes for
-      each mutator family (Encoding, Obfuscation, Structural, Persona,
-      Linguistic). Max-variants-per-seed slider. Live attempt-count
-      preview updates.
-- [ ] **2.11 — Tests: mutation engine.** Unit tests for each mutator:
-      deterministic output, round-trip where applicable, no-op on
-      empty input. Integration test: matrix run with 2 mutators
-      produces expected attempt count.
+- [x] **2.1 — Mutation trait + registry.** `runner::mutation` ships the
+      `Mutator` trait, `MutatedPrompt { text, mutation_id }`, and a
+      stable `registry()` listing every shipped mutator in declaration
+      order. `expand_seed(seed, enabled_ids, max_variants)` is the
+      single entry point used by the orchestrator.
+- [x] **2.2 — Encoding mutators.** Base64 (hand-rolled, no new crate),
+      ROT13, hex, URL-encoding (RFC 3986 unreserved passthrough),
+      Cyrillic homoglyph substitution. All in `runner::mutation::encoding`.
+- [x] **2.3 — Obfuscation mutators.** Whitespace injection between
+      ASCII letter pairs, U+200B zero-width insertion between every
+      char, leetspeak vowel/consonant substitution. In
+      `runner::mutation::obfuscation`.
+- [x] **2.4 — Structural mutators.** Triple-backtick code block wrap,
+      JSON `{"task": …}` embedding, HTML/Markdown comment wrap,
+      authority-framing prefix injection. In `runner::mutation::structural`.
+- [x] **2.5 — Persona mutators.** Authority framing, role-play
+      framing, DAN-style jailbreak wrap. In `runner::mutation::persona`.
+- [x] **2.6 — Linguistic mutators (basic).** Built-in synonym table
+      (first-match replace), politeness wrap. Translation roundtrips
+      remain deferred. In `runner::mutation::linguistic`.
+- [x] **2.7 — Scenario schema: mutation config.** `MutationConfig`
+      added to `storage::types` with `enabled_mutators` and optional
+      `max_variants_per_seed`. `Scenario.mutations: Option<MutationConfig>`
+      is absent-by-default and skipped on serialize when unset.
+      `Datamodel.md §"Scenario shape (matrix)"` updated.
+- [x] **2.8 — Matrix expansion with mutations.** `commands::runs`
+      expands each seed payload via `runner::mutation::expand_seed`
+      before constructing `MatrixRunConfig.payloads`, so the matrix
+      runner sees seed + variants up-front. Total target attempts =
+      seeds × (1 + variants_kept) × request_firings × repeat.
+- [x] **2.9 — JSONL: mutation provenance.** `RunAttempt.mutation_id:
+      Option<String>` added; target attempts carry the mutator id (or
+      `"seed"`), prerequisite/synthetic attempts carry `None`. Replay
+      runs inherit the original attempt's `mutation_id`. Field is
+      additive and `#[serde(default, skip_serializing_if =
+      "Option::is_none")]` — legacy run files load unchanged and a
+      truncated last line still terminates cleanly per CLAUDE.md #12.
+      `Datamodel.md §"Run log"` updated.
+- [x] **2.10 — UI: Scenario editor mutation panel.** Mutation fieldset
+      added to the Scenarios matrix editor: per-family checkboxes
+      (Encoding, Obfuscation, Structural, Persona, Linguistic) populated
+      from the new `list_mutators` Tauri command, a Max-variants input,
+      and the existing attempt-count hint updated to include the
+      mutation multiplier.
+- [x] **2.11 — Tests: mutation engine.** 21 unit tests in
+      `runner::mutation::tests` (per-family determinism, encoding
+      round-trips, registry uniqueness, `expand_seed` cap behaviour,
+      empty-input no-op). Integration test
+      `matrix_run_with_mutations_records_mutation_id_per_attempt` in
+      `crates/runner/tests/integration.rs` fires a matrix run with two
+      mutators and asserts the JSONL attempts carry the expected
+      `mutation_id` set.
 
 ---
 
@@ -130,10 +170,18 @@ Reference: `productVision.md` § Pentester workflow — Triage
 - [x] **3.5 — UI: triage filter.** Filter bar above results table:
       All / Confirmed / Needs Review / Unreviewed / False Positive.
       Active filter dims non-matching rows.
-- [ ] **3.6 — Report: triage integration.** Markdown export includes
-      Triage and Note columns. HTML report triage integration (confirmed
-      prominent, false-positives dimmed) deferred — needs analyzer
-      report generation to be extended.
+- [x] **3.6 — Report: triage integration.** `ReportBuildInput` now
+      carries `triage: Vec<TriageEntry>`; `ReportEvidenceRow` exposes
+      `triage_status` (lower-case enum label, defaulting to `unreviewed`
+      when no sidecar entry exists) and `triage_note`. The Markdown
+      evidence section in `render_markdown_report` renders a Triage row
+      per finding and an optional Triage note row when present.
+      `pipeline::generate_report` loads `<run>.triage.yaml` via
+      `storage::triage::list_entries` (errors are non-fatal — missing or
+      unreadable sidecar means every finding renders as `unreviewed`).
+      HTML report triage integration (confirmed prominent, false-positives
+      dimmed) stays deferred per the original ToDo — the existing HTML
+      template doesn't reference the new fields.
 - [x] **3.7 — Tests: triage storage.** Missing-file, round-trip, upsert,
       multi-entry sort, separate runs, all-status-variants — 7 tests, all
       passing (`cargo test --workspace`).
@@ -147,23 +195,28 @@ click, optionally with a tweaked prompt."_
 
 Reference: `productVision.md` § Pentester workflow — Replay
 
-- [ ] **4.1 — Tauri command: replay_attempt.** Takes `engagement,
-      run_id, seq, prompt_override: Option<String>`. Loads the original
-      attempt from the JSONL, resolves the request template, substitutes
-      the original (or overridden) prompt, fires via the runner, appends
-      the result to a new run or the same run (TBD — see 4.2).
-- [ ] **4.2 — Design decision: replay target run.** Decide whether
-      replays append to the original run (simple, but breaks the "run
-      is immutable after footer" invariant) or create a mini-run
-      (`run-NNN-replay-M.jsonl`). Document in `Datamodel.md`.
-- [ ] **4.3 — UI: replay button per result row.** Each row in the
-      engagement detail table gets a replay icon. Clicking opens a
-      small modal pre-filled with the original prompt text (editable).
-      "Fire" button sends the replay command. Result appears inline
-      below the original row.
-- [ ] **4.4 — Tests: replay command.** Wiremock test: replay an
-      attempt with the same prompt, replay with a tweaked prompt,
-      verify the new JSONL entry references the original seq.
+- [x] **4.1 — Tauri command: replay_attempt.** Takes `engagement,
+      run_id, seq, prompt_override: Option<String>`, loads the original
+      attempt, resolves the Request (via the new `RunAttempt.request_id`
+      field, falling back to URL+method match for legacy logs),
+      substitutes the prompt, fires via `execute_run`, and writes a
+      sibling `<run_id>-replay-<n>.jsonl` file. Companion
+      `list_replays` command exposes them.
+- [x] **4.2 — Decision: sibling file.** Replays go to
+      `runs/<run_id>-replay-<n>.jsonl` with `replay_of: {run_id, seq,
+      prompt_overridden}` in the header. Append-to-original was
+      rejected because it violates CLAUDE.md #12 (footer-terminates).
+      Documented in `Datamodel.md §"Replay run files"`.
+- [x] **4.3 — UI: Replay in row detail panel.** The Result Detail
+      modal grew a Replay section: prompt textarea (pre-filled with
+      the original), Reset button, ▶ Replay button. The replay run is
+      polled and its response rendered inline. Replay files are kept
+      out of the top-level runs list and are auto-cleaned when the
+      original run is deleted.
+- [x] **4.4 — Tests.** Wiremock integration test verifies the replay
+      JSONL carries `replay_of` in the header, starts seq at 1, and
+      records the new `request_id`. Storage tests cover the schema
+      round-trip and the delete-cascades-to-replays path.
 
 ---
 
@@ -195,17 +248,19 @@ bar and can be expanded."_
 
 Reference: `productVision.md` § UI conventions — Top bar
 
-- [ ] **6.1 — UI: compact progress bar component.** A minimal
-      `[===.       ] 3/10` indicator anchored in the top bar. Hidden
-      when no run is active. Listens to existing `run-progress` events
-      from the backend.
-- [ ] **6.2 — UI: expand/collapse progress detail.** Clicking the
-      compact bar expands a small panel showing: run name, elapsed
-      time, attempts completed/total, current request being fired,
-      cancel button.
-- [ ] **6.3 — UI: top bar breadcrumb.** Left side of the top bar
-      shows the current view path (e.g. "Engagements › acme-chatbot ›
-      run-003"). No `+`, no global `▶`, no empty help button.
+- [x] **6.1 — UI: compact progress bar component.** Top-bar
+      `[==========     ] 11/32` indicator with an inline Stop button.
+      Hidden when no run is active, fed by the existing `run-progress`
+      events.
+- [x] **6.2 — UI: expand/collapse progress detail.** Clicking the
+      compact bar opens a small floating panel showing run id, elapsed
+      time, attempts, errors, current request id and current prompt id.
+      Cancel sits in the top bar next to the bar (delivered with 6.1).
+      `RunProgress` was extended with `request_id` + `prompt_id`.
+- [x] **6.3 — UI: top bar breadcrumb.** Three-segment path
+      `view › engagement › run` rendered via `updateBreadcrumb()`. The
+      global `+`, `▶` and `?` buttons were removed; creation moves
+      entirely to the Engagements view.
 
 ---
 
@@ -216,15 +271,23 @@ session you have to stay logged into."_
 
 Reference: `productVision.md` § Core product principles #5
 
-- [ ] **7.1 — Markdown report generation.** Add
-      `analyzer::report::render_markdown` that produces a `.md` file
-      alongside the HTML report. Same data, different format. Written
-      to `reports/report-<run>.md`.
-- [ ] **7.2 — UI: export format picker.** After analysis completes,
-      the "Export" button offers HTML and Markdown. PDF is a stretch
-      goal (the user can convert Markdown → PDF externally).
-- [ ] **7.3 — Update `Datamodel.md`.** Document the new report file
-      naming and format.
+- [x] **7.1 — Markdown report generation.** `analyzer::report::render_markdown_report`
+      hand-rolls a Markdown document from the same `ReportData` the HTML
+      template consumes. `pipeline::generate_report` writes the `.md`
+      sibling next to the `.html`; failure to write the `.md` is logged
+      but non-fatal (HTML stays the primary artifact). New helper
+      `markdown_report_path_for(engagement_dir, run_id)` exposes the
+      canonical path.
+- [x] **7.2 — UI: export format picker.** The existing "Export Markdown"
+      button in the runs table now prefers the canonical analyzer
+      `report-<run>.md` (via a new `read_report_md` Tauri command) when
+      the run has been analyzed, falling back to the client-side
+      raw-results markdown for unanalyzed runs. The HTML report is
+      already openable via the existing analyzer flow; PDF stays a
+      stretch goal (the user can convert the Markdown externally).
+- [x] **7.3 — Update `Datamodel.md`.** `§"Reports"` documents the
+      sibling `.md` file, the data source, and the non-fatal write
+      semantics.
 
 ---
 
@@ -242,16 +305,39 @@ Full plan: [`plans/cloudLLMPlan.md`](plans/cloudLLMPlan.md)
       reflected the hosted-judge stance. `Datamodel.md` config.yaml
       already had the `hosted_judge` block; verdict header extended
       with `judge_mode`/`provider`/`deployment` fields.
-- [ ] **8.2 — Config + secret plumbing.** `judge_mode`, hosted judge
-      config schema, keychain secret path, Settings UI.
-- [ ] **8.3 — JudgeBackend abstraction.** `LocalJudgeBackend` +
-      `HostedJudgeBackend` trait implementations.
-- [ ] **8.4 — Azure provider adapter.** `AzureOpenAiAdapter` with
-      `chat_completions` and `responses` API style support.
-- [ ] **8.5 — End-to-end hosted analysis.** Single-result judge,
-      full-run analysis, report generation with hosted verdicts.
-- [ ] **8.6 — Hardening.** Failure messages, hosted status display,
-      usage/cost controls, docs polish.
+- [x] **8.2 — Config + secret plumbing.** `judge_mode`, `HostedJudgeConfig`,
+      enums and defaults live in `storage::types`. Keychain save/read goes
+      through `storage::secrets` (service `hamm0r`, account = `secret_ref`)
+      exposed via Tauri `set_secret_ref` / `forget_secret_ref` /
+      `secret_ref_status`. Settings DTOs in
+      `crates/hamm0r/src/commands/app_settings.rs` round-trip the
+      non-secret fields plus `secret_stored` / `keychain_available` status.
+      Settings UI form (`#settings-analyzer-judge-mode` + hosted-judge
+      fieldset) rendered in `ui/index.html` and wired in `ui/js/app.js`.
+- [ ] **8.3 — JudgeBackend abstraction.** Deferred. The pipeline currently
+      dispatches via direct functions in `crates/analyzer/src/pipeline.rs`
+      (`judge_one_heuristic` / `judge_one_hosted`, `run_heuristic` /
+      `run_hosted` / `run_llm` / `run_ollama`). Functionally equivalent to
+      the plan's trait split; revisit only if a third backend or shared
+      streaming surface justifies the abstraction.
+- [x] **8.4 — Azure provider adapter.** `crates/analyzer/src/hosted.rs`
+      ships the Azure OpenAI adapter for both `chat_completions` and
+      `responses` styles with an `auto` fallback that tries chat first then
+      responses.
+- [x] **8.5 — End-to-end hosted analysis.** `judge_one_hosted` (single
+      result) and `run_hosted` (full run) in `pipeline.rs` are reached from
+      `judge_result` and `judge_all` Tauri commands when `judge_mode ==
+      hosted`. `generate_report` consumes the resulting verdict files.
+- [x] **8.6 — Hardening.** Verdict headers carry `judge_mode`, `provider`,
+      `deployment`; the Settings UI surfaces `secret_stored` /
+      `keychain_available` and disables the Run/Judge buttons with a
+      specific reason when hosted config is incomplete (see
+      `analyzerAvailability` checks in `ui/js/app.js`). Usage controls
+      (`max_input_chars`, `max_output_tokens`, `request_timeout_seconds`,
+      `max_retries`) plumb through to the adapter; hosted errors fail hard
+      with provider-specific messages and no silent fallback. A
+      `test_hosted_judge` command lets the user dry-run the configuration
+      from Settings.
 
 ---
 
@@ -287,10 +373,14 @@ _Vision: "From download to first usable report: under five minutes."_
 
 Reference: `productVision.md` § The five-minute promise
 
-- [ ] **10.1 — First-run guided start.** A single-screen (not a
-      wizard) welcome that shows: paste URL → pick auth → pick
-      prompts → fire. Dismissible, never blocks the full UI.
-      Must respect principle 3 (no wizards).
+- [x] **10.1 — First-run guided start.** "Quick Start" tile on the
+      Home view opens a single modal: endpoint URL + model + optional
+      bearer token + OWASP category chips + ▶ Fire. Behind the scenes
+      it creates an `openai-compat` Request (tag `quickstart`), an
+      ad-hoc Scenario with the chosen OWASP refs, an Engagement, and
+      fires `start_scenario_run`. Closes itself and routes to the
+      engagement detail. One screen, dismissible, never blocks the
+      full UI — respects principle 3.
 - [ ] **10.2 — Installer size audit.** Verify the hamm0r binary
       (without analyzer) is a small download. Flag any crate
       that adds >1 MB to the binary.
@@ -304,12 +394,18 @@ Reference: `productVision.md` § The five-minute promise
 
 Reference: `productVision.md` § UI conventions; `STYLEGUIDE.md`
 
-- [ ] **11.1 — Sidebar audit.** Verify sidebar matches the vision
-      exactly: Home, Engagements, Requests, Scenarios, Library,
-      Settings. Nothing else. One entry per object type.
-- [ ] **11.2 — "Fire from where it belongs" audit.** Verify: Request
-      fires standalone from the Request screen. Scenario fires only
-      inside an Engagement. No global "fire something" button exists.
+- [x] **11.1 — Sidebar audit.** Verified the six entries match the
+      vision (Home, Engagements, Requests, Scenarios, Library, Settings).
+      The only mismatch was the "Prompts" label — renamed to "Library"
+      in the sidebar tooltip and breadcrumb. View internal id stays
+      `view-prompts` to avoid cross-reference churn (the CSS/JS already
+      uses `lib-*` classes for this view).
+- [x] **11.2 — "Fire from where it belongs".** Per-view fire surfaces
+      wired: `▶ Fire` in the Request editor (calls `fireSelectedRequest`),
+      `▶ Run` in the Engagement detail header (calls
+      `fireSelectedEngagementScenario`). The Scenarios view intentionally
+      has no fire button — scenarios fire only inside an engagement per
+      `productVision.md`. The global topbar `▶` was removed in 6.3.
 - [x] **11.3 — App icon.** Current icon quality is not good enough
       (carried over from old ToDo).
 

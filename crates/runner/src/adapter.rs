@@ -217,14 +217,7 @@ async fn execute_custom_rest(
                 session_value,
             );
 
-            let body_str = serde_json::to_string(&body).map_err(|e| RunnerError::Extraction {
-                reason: e.to_string(),
-            })?;
-            let rendered = template::render_with(&body_str, payload, binds)?;
-            let json: serde_json::Value =
-                serde_json::from_str(&rendered).map_err(|e| RunnerError::Extraction {
-                    reason: e.to_string(),
-                })?;
+            let json = template::render_json_value_with(body, payload, binds)?;
             builder.json(&json)
         }
         BodyFormat::Form => {

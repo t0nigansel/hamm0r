@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use anyhow::Context as _;
 use minijinja::{AutoEscape, Environment};
 use serde::Serialize;
+use storage::types::{TriageEntry, TriageStatus};
 use storage::verdicts::{JudgeVerdict, VerdictEntry};
 
 #[derive(Debug, Clone)]
@@ -27,6 +28,11 @@ pub struct ReportBuildInput {
     pub judge_model: Option<String>,
     pub attempts: Vec<ReportAttempt>,
     pub verdicts: Vec<VerdictEntry>,
+    /// Triage entries keyed by `seq`. Absence means the finding has not
+    /// been reviewed yet (treated as `Unreviewed`). Section 3.6 of
+    /// `docs/ToDo.md` — surfaced in the Markdown evidence section so the
+    /// shareable artifact reflects the pentester's judgments.
+    pub triage: Vec<TriageEntry>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -96,6 +102,13 @@ pub struct ReportEvidenceRow {
     pub severity: String,
     pub rationale: String,
     pub response_excerpt: String,
+    /// Pentester triage status (Section 3.6 of `docs/ToDo.md`). Lower-
+    /// case label: `unreviewed`, `confirmed`, `false_positive`,
+    /// `needs_review`. Findings without a triage entry are reported as
+    /// `unreviewed`.
+    pub triage_status: String,
+    /// Free-text triage note. Empty when no note is set.
+    pub triage_note: String,
 }
 
 pub fn build_report_data(input: ReportBuildInput) -> ReportData {
@@ -105,6 +118,11 @@ pub fn build_report_data(input: ReportBuildInput) -> ReportData {
     let mut by_seq: HashMap<u32, VerdictEntry> = HashMap::new();
     for verdict in input.verdicts {
         by_seq.insert(verdict.seq, verdict);
+    }
+
+    let mut triage_by_seq: HashMap<u32, TriageEntry> = HashMap::new();
+    for entry in input.triage {
+        triage_by_seq.insert(entry.seq, entry);
     }
 
     let mut success_total = 0u32;
@@ -191,6 +209,11 @@ pub fn build_report_data(input: ReportBuildInput) -> ReportData {
                 severity,
                 rationale,
                 response_excerpt: trim_excerpt(&attempt.response_excerpt, 200),
+                triage_status: triage_status_label(triage_by_seq.get(&attempt.seq)),
+                triage_note: triage_by_seq
+                    .get(&attempt.seq)
+                    .and_then(|t| t.note.clone())
+                    .unwrap_or_default(),
             }
         })
         .collect();
@@ -220,6 +243,121 @@ pub fn render_html_report(data: &ReportData) -> anyhow::Result<String> {
     template
         .render(data)
         .context("cannot render report template")
+}
+
+/// Render the same report data as a Markdown document. Hand-rolled (no
+/// template engine) so the output stays diff-friendly and dependency-free.
+/// Section 7.1 of `docs/ToDo.md`: shipped alongside the HTML report so
+/// users can share or convert (e.g. to PDF) outside hamm0r.
+pub fn render_markdown_report(data: &ReportData) -> String {
+    let mut out = String::new();
+
+    // Header
+    out.push_str(&format!("# Report — {}\n\n", data.engagement_slug));
+    out.push_str(&format!("- Run: `{}`\n", data.run_id));
+    out.push_str(&format!("- Generated at: {}\n", data.generated_at));
+    out.push_str(&format!("- Started at: {}\n", data.started_at));
+    out.push_str(&format!("- Finished at: {}\n", data.finished_at));
+    out.push_str(&format!(
+        "- Judge: {} · {} · {}\n\n",
+        data.judge.mode, data.judge.provider, data.judge.model
+    ));
+
+    // Summary
+    out.push_str("## Summary\n\n");
+    out.push_str("| Metric | Count |\n|---|---|\n");
+    out.push_str(&format!("| Attempts | {} |\n", data.summary.attempts_total));
+    out.push_str(&format!("| Judged | {} |\n", data.summary.judged_total));
+    out.push_str(&format!(
+        "| Vulnerable (success + partial) | {} |\n",
+        data.summary.vulnerable_total
+    ));
+    out.push_str(&format!("| Success | {} |\n", data.summary.success_total));
+    out.push_str(&format!("| Partial | {} |\n", data.summary.partial_total));
+    out.push_str(&format!("| Fail | {} |\n", data.summary.fail_total));
+    out.push_str(&format!("| Unclear | {} |\n\n", data.summary.unclear_total));
+
+    // OWASP groups
+    if !data.groups_by_owasp.is_empty() {
+        out.push_str("## Findings by OWASP reference\n\n");
+        for group in &data.groups_by_owasp {
+            out.push_str(&format!(
+                "### {} — {} finding(s), {} vulnerable\n\n",
+                group.key, group.findings_total, group.vulnerable_total
+            ));
+            render_findings_table(&mut out, &group.findings);
+        }
+    }
+
+    // Category groups
+    if !data.groups_by_category.is_empty() {
+        out.push_str("## Findings by category\n\n");
+        for group in &data.groups_by_category {
+            out.push_str(&format!(
+                "### {} — {} finding(s), {} vulnerable\n\n",
+                group.key, group.findings_total, group.vulnerable_total
+            ));
+            render_findings_table(&mut out, &group.findings);
+        }
+    }
+
+    // Evidence
+    if !data.evidence_rows.is_empty() {
+        out.push_str("## Evidence\n\n");
+        for row in &data.evidence_rows {
+            out.push_str(&format!(
+                "### #{} · {} · {} · {}\n\n",
+                row.seq, row.prompt_id, row.verdict, row.confidence
+            ));
+            out.push_str("| Field | Value |\n|---|---|\n");
+            out.push_str(&format!("| HTTP status | {} |\n", row.http_status));
+            out.push_str(&format!("| Latency | {} |\n", row.latency_ms));
+            out.push_str(&format!("| Session | {} |\n", row.session));
+            out.push_str(&format!("| Iteration | {} |\n", row.iteration));
+            out.push_str(&format!("| Category | {} |\n", row.category));
+            out.push_str(&format!("| OWASP | {} |\n", row.owasp_ref));
+            out.push_str(&format!("| Severity | {} |\n", row.severity));
+            out.push_str(&format!("| Triage | {} |\n", row.triage_status));
+            if !row.triage_note.is_empty() {
+                out.push_str(&format!(
+                    "| Triage note | {} |\n",
+                    md_escape_inline(&row.triage_note)
+                ));
+            }
+            out.push_str(&format!("| Rationale | {} |\n\n", md_escape_inline(&row.rationale)));
+            if !row.response_excerpt.is_empty() {
+                out.push_str("Response excerpt:\n\n");
+                out.push_str("```\n");
+                out.push_str(&row.response_excerpt);
+                out.push_str("\n```\n\n");
+            }
+        }
+    }
+
+    out
+}
+
+fn render_findings_table(out: &mut String, findings: &[ReportFinding]) {
+    out.push_str("| Seq | Verdict | Confidence | Category | OWASP | Severity | Rationale |\n");
+    out.push_str("|---|---|---|---|---|---|---|\n");
+    for f in findings {
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {} | {} | {} |\n",
+            f.seq,
+            f.verdict,
+            f.confidence,
+            f.category,
+            f.owasp_ref,
+            f.severity,
+            md_escape_inline(&f.rationale)
+        ));
+    }
+    out.push('\n');
+}
+
+/// Escape characters that would break a single-line table cell.
+fn md_escape_inline(s: &str) -> String {
+    s.replace('|', "\\|").replace(['\n', '\r'], " ")
 }
 
 fn build_groups<F, C>(by_seq: &HashMap<u32, VerdictEntry>, key_fn: F, cmp: C) -> Vec<ReportGroup>
@@ -289,6 +427,17 @@ fn verdict_label(verdict: JudgeVerdict) -> String {
         JudgeVerdict::Fail => "FAIL",
         JudgeVerdict::Partial => "PARTIAL",
         JudgeVerdict::Unclear => "UNCLEAR",
+    }
+    .to_owned()
+}
+
+fn triage_status_label(entry: Option<&TriageEntry>) -> String {
+    let status = entry.map(|e| &e.status).unwrap_or(&TriageStatus::Unreviewed);
+    match status {
+        TriageStatus::Unreviewed => "unreviewed",
+        TriageStatus::Confirmed => "confirmed",
+        TriageStatus::FalsePositive => "false_positive",
+        TriageStatus::NeedsReview => "needs_review",
     }
     .to_owned()
 }
@@ -574,6 +723,47 @@ mod tests {
                     evaluated_at: "2026-04-26T10:01:05Z".into(),
                 },
             ],
+            triage: Vec::new(),
+        })
+    }
+
+    fn sample_data_with_triage() -> ReportData {
+        build_report_data(ReportBuildInput {
+            engagement_slug: "2026-04-26-acme-chatbot".into(),
+            run_id: "run-001".into(),
+            generated_at: "2026-04-26T10:02:00Z".into(),
+            started_at: Some("2026-04-26T10:00:00Z".into()),
+            finished_at: Some("2026-04-26T10:01:45Z".into()),
+            judge_model: Some("heuristic-v0".into()),
+            attempts: vec![ReportAttempt {
+                seq: 1,
+                prompt_id: "inj-001".into(),
+                step_id: None,
+                iteration: None,
+                session: None,
+                http_status: 200,
+                latency_ms: Some(100),
+                response_excerpt: "leaked secrets".into(),
+            }],
+            verdicts: vec![VerdictEntry {
+                seq: 1,
+                verdict: JudgeVerdict::Success,
+                confidence: 0.9,
+                category: "injection-classics".into(),
+                tags: vec![],
+                owasp_ref: Some("A01".into()),
+                severity: Some("high".into()),
+                rationale: "leaked".into(),
+                model_output_hash: "sha256:x".into(),
+                model_used: "heuristic-v0".into(),
+                evaluated_at: "2026-04-26T10:01:00Z".into(),
+            }],
+            triage: vec![TriageEntry {
+                seq: 1,
+                status: TriageStatus::Confirmed,
+                note: Some("verified by hand; reproduces".into()),
+                updated_at: "2026-04-26T10:05:00Z".into(),
+            }],
         })
     }
 
@@ -581,6 +771,75 @@ mod tests {
     fn render_report_snapshot() {
         let html = render_html_report(&sample_data()).unwrap();
         assert_snapshot!("html_report", html);
+    }
+
+    #[test]
+    fn evidence_row_defaults_triage_to_unreviewed_when_no_entry() {
+        let data = sample_data();
+        for row in &data.evidence_rows {
+            assert_eq!(row.triage_status, "unreviewed");
+            assert_eq!(row.triage_note, "");
+        }
+    }
+
+    #[test]
+    fn evidence_row_carries_triage_status_and_note_when_present() {
+        let data = sample_data_with_triage();
+        let row = data.evidence_rows.iter().find(|r| r.seq == 1).unwrap();
+        assert_eq!(row.triage_status, "confirmed");
+        assert_eq!(row.triage_note, "verified by hand; reproduces");
+    }
+
+    #[test]
+    fn markdown_evidence_section_renders_triage_status_and_note() {
+        let md = render_markdown_report(&sample_data_with_triage());
+        assert!(md.contains("| Triage | confirmed |"));
+        assert!(md.contains("| Triage note | verified by hand; reproduces |"));
+    }
+
+    #[test]
+    fn markdown_evidence_section_omits_empty_triage_note() {
+        let md = render_markdown_report(&sample_data());
+        assert!(md.contains("| Triage | unreviewed |"));
+        assert!(!md.contains("| Triage note |"));
+    }
+
+    #[test]
+    fn render_markdown_includes_headers_summary_and_findings() {
+        let md = render_markdown_report(&sample_data());
+        assert!(md.starts_with("# Report — 2026-04-26-acme-chatbot"));
+        assert!(md.contains("- Run: `run-001`"));
+        assert!(md.contains("## Summary"));
+        assert!(md.contains("| Attempts | 2 |"));
+        assert!(md.contains("| Judged | 2 |"));
+        assert!(md.contains("## Findings by OWASP reference"));
+        assert!(md.contains("### A01 —"));
+        assert!(md.contains("## Findings by category"));
+        assert!(md.contains("### injection-classics —"));
+        assert!(md.contains("## Evidence"));
+        assert!(md.contains("### #1 · inj-001 · SUCCESS"));
+        assert!(md.contains("```"));
+    }
+
+    #[test]
+    fn render_markdown_escapes_pipes_and_newlines_in_table_cells() {
+        let mut data = sample_data();
+        data.evidence_rows[0].rationale = "has | pipe\nand newline".into();
+        data.groups_by_owasp[0].findings[0].rationale = "has | pipe\nand newline".into();
+        let md = render_markdown_report(&data);
+        // No raw pipes or newlines mid-cell.
+        assert!(md.contains("has \\| pipe and newline"));
+        // Tables still parse: every findings row has the right column count.
+        // 7 columns -> 8 border pipes. Escaped `\|` characters don't count.
+        for line in md.lines().filter(|l| l.starts_with("| 1 |")) {
+            let total = line.matches('|').count();
+            let escaped = line.matches("\\|").count();
+            assert_eq!(
+                total - escaped,
+                8,
+                "findings row should have 8 border pipes (7 columns), got: {line}"
+            );
+        }
     }
 
     #[test]

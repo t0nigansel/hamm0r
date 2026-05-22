@@ -7,7 +7,7 @@
 //! topologically sorts it, fires prerequisites first, captures bound
 //! values, and substitutes them into dependents at fire time.
 //!
-//! This module is the resolver primitive. It does not fire HTTP requests —
+//! This module is the resolver primitive. It does not fire HTTP requests â€”
 //! that's the runner's job. Tests cover dependency extraction, topological
 //! ordering, cycle detection, and missing-bind detection.
 
@@ -31,10 +31,10 @@ pub struct BindRef {
 /// Scan one template string for `{{<id>.<bind>}}` references. Tolerates
 /// surrounding whitespace and minijinja filter/expression suffixes
 /// (`{{ login.token | upper }}`). The bare `{{prompt}}` is intentionally
-/// not matched here — it's not a dep.
+/// not matched here â€” it's not a dep.
 pub fn extract_refs_from_template(text: &str) -> Vec<BindRef> {
     // Match a `{{ ... }}` block, then look for `<id>.<bind>` pairs inside
-    // its body. Compiled once per process via OnceLock — no new dep.
+    // its body. Compiled once per process via OnceLock â€” no new dep.
     use std::sync::OnceLock;
     static BLOCK_RE: OnceLock<regex::Regex> = OnceLock::new();
     static PAIR_RE: OnceLock<regex::Regex> = OnceLock::new();
@@ -49,7 +49,7 @@ pub fn extract_refs_from_template(text: &str) -> Vec<BindRef> {
         for pair in pair_re.captures_iter(body) {
             let id = pair.get(1).unwrap().as_str().to_owned();
             let bind = pair.get(2).unwrap().as_str().to_owned();
-            // Skip the literal `prompt.X` shape — `prompt` is reserved for
+            // Skip the literal `prompt.X` shape â€” `prompt` is reserved for
             // payload interpolation, not a Request id.
             if id == "prompt" {
                 continue;
@@ -76,7 +76,7 @@ pub fn extract_request_dependencies(req: &Request) -> Vec<BindRef> {
     }
 
     // Auth env-var fields are env names, not templates, so we don't scan
-    // them. Keep that contract — secrets stay in env / keychain.
+    // them. Keep that contract â€” secrets stay in env / keychain.
     let _ = matches!(req.auth, AuthConfig::None);
 
     match &req.body.format {
@@ -90,7 +90,7 @@ pub fn extract_request_dependencies(req: &Request) -> Vec<BindRef> {
         }
     }
 
-    // Dedupe while preserving order — same dep referenced N times
+    // Dedupe while preserving order â€” same dep referenced N times
     // shouldn't fire N times.
     let mut seen = HashSet::new();
     refs.retain(|r| seen.insert(r.clone()));
@@ -120,7 +120,7 @@ fn scan_json_value(v: &serde_json::Value) -> Vec<BindRef> {
 /// Compute the firing order for a set of target Request ids against a
 /// registry of all known Requests.
 ///
-/// Returns the list of Request ids in topological order — every Request
+/// Returns the list of Request ids in topological order â€” every Request
 /// fires after its dependencies. The targets themselves are at the end.
 /// Errors:
 /// - cycle in the dependency graph
@@ -215,7 +215,7 @@ pub fn topological_order(
     Ok(order)
 }
 
-/// Outcome of firing one Request through the chain — the response plus
+/// Outcome of firing one Request through the chain â€” the response plus
 /// any prerequisite firings (each as a separate `AdapterResponse`) so the
 /// caller can persist them into the run JSONL with the appropriate
 /// `kind: "prerequisite"` marker.
@@ -270,7 +270,7 @@ pub async fn fire_chain(
             continue;
         }
 
-        // Prerequisites pass an empty payload — they typically don't use
+        // Prerequisites pass an empty payload â€” they typically don't use
         // `{{prompt}}`, and giving them the attack payload would conflate
         // attack-side input with auth-side state.
         let resp = adapter::execute_with_session_and_binds(
@@ -407,6 +407,7 @@ mod tests {
             timeout_seconds: 30,
             adapter: AdapterType::CustomRest,
             tag: None,
+            test_payload: None,
         }
     }
 

@@ -5,6 +5,25 @@
  * Provides a compatibility shim so app.js can keep using API.call().
  */
 
+/**
+ * Error thrown by API.call() and the low-level invoke() shim.
+ *
+ * Backend Tauri commands return `{ kind, message }` (see `CommandError` in
+ * crates/hamm0r/src/error.rs). We preserve that structure here so callers
+ * can route by `code` (mapped from `kind`) instead of string-matching the
+ * message. `details.raw` keeps the original payload for diagnostics.
+ *
+ * Existing code that reads `err.message` keeps working unchanged.
+ */
+class ApiError extends Error {
+  constructor({ code, message, details } = {}) {
+    super(message || 'Unknown error');
+    this.name = 'ApiError';
+    this.code = code || 'unknown';
+    this.details = details ?? null;
+  }
+}
+
 const API = (() => {
   // Active engagement slug set when the user opens an engagement.
   let _activeSlug = null;
@@ -24,12 +43,35 @@ const API = (() => {
 
   function invoke(cmd, params = {}) {
     if (!window.__TAURI__) {
-      return Promise.reject(new Error(
-        'Not running inside Tauri. Start the app with `cargo tauri dev`.'
-      ));
+      return Promise.reject(new ApiError({
+        code: 'no_tauri',
+        message: 'Not running inside Tauri. Start the app with `cargo tauri dev`.',
+      }));
     }
     return window.__TAURI__.core.invoke(cmd, params).catch(err => {
-      throw new Error(typeof err === 'string' ? err : (err.message || JSON.stringify(err)));
+      throw toApiError(err, cmd);
+    });
+  }
+
+  // Map whatever the Tauri backend throws into a structured ApiError.
+  // Backend `CommandError` serializes as `{ kind, message }`; strings are
+  // passed through as opaque messages; everything else is stringified.
+  function toApiError(raw, cmd) {
+    if (raw instanceof ApiError) return raw;
+    if (raw && typeof raw === 'object' && typeof raw.kind === 'string') {
+      return new ApiError({
+        code: raw.kind,
+        message: raw.message || `command '${cmd}' failed`,
+        details: { command: cmd, raw },
+      });
+    }
+    if (typeof raw === 'string') {
+      return new ApiError({ code: 'unknown', message: raw, details: { command: cmd } });
+    }
+    return new ApiError({
+      code: 'unknown',
+      message: (raw && raw.message) || JSON.stringify(raw),
+      details: { command: cmd, raw },
     });
   }
 
@@ -106,6 +148,12 @@ const API = (() => {
       const list = await invoke('list_engagements');
       list.forEach(e => { _engCache[e.slug] = e; });
       return list;
+    },
+
+    async get_engagement({ slug }) {
+      const meta = await invoke('get_engagement', { slug });
+      if (meta) _engCache[meta.slug] = meta;
+      return meta;
     },
 
     async create_engagement({ name }) {
@@ -275,6 +323,30 @@ const API = (() => {
       if (typeof data.shared_session === 'boolean') {
         updated.shared_session = data.shared_session;
       }
+      if (data.mutations === null) {
+        updated.mutations = null;
+      } else if (data.mutations && typeof data.mutations === 'object') {
+        const enabled = Array.isArray(data.mutations.enabled_mutators)
+          ? data.mutations.enabled_mutators
+          : [];
+        const cap = Number(data.mutations.max_variants_per_seed);
+        updated.mutations = enabled.length === 0
+          ? null
+          : {
+              enabled_mutators: enabled,
+              max_variants_per_seed: Number.isFinite(cap) && cap > 0 ? cap : null,
+            };
+      }
+      // Section 1: multi-session fields. null = single-session.
+      if (data.session_count === null) {
+        updated.session_count = null;
+        updated.session_identity = null;
+      } else if (Number.isFinite(data.session_count) && data.session_count > 1) {
+        updated.session_count = data.session_count;
+        if (data.session_identity && typeof data.session_identity === 'object') {
+          updated.session_identity = data.session_identity;
+        }
+      }
       const saved = await invoke('save_scenario', { scenario: updated });
       return toUiScenario(saved);
     },
@@ -388,6 +460,13 @@ const API = (() => {
       return invoke('open_export_path', { path });
     },
 
+    async read_run_leaks({ engagement_slug, run_id }) {
+      return invoke('read_run_leaks', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
+      });
+    },
+
     async read_run_attempts({ engagement_slug, run_id }) {
       return invoke('read_run_attempts', {
         engagementSlug: engagement_slug || _activeSlug,
@@ -397,6 +476,22 @@ const API = (() => {
 
     async read_run_verdicts({ engagement_slug, run_id }) {
       return invoke('read_run_verdicts', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
+      });
+    },
+
+    async replay_attempt({ engagement_slug, run_id, seq, prompt_override }) {
+      return invoke('replay_attempt', {
+        engagementSlug: engagement_slug || _activeSlug,
+        runId: run_id,
+        seq,
+        promptOverride: prompt_override ?? null,
+      });
+    },
+
+    async list_replays({ engagement_slug, run_id }) {
+      return invoke('list_replays', {
         engagementSlug: engagement_slug || _activeSlug,
         runId: run_id,
       });
@@ -420,9 +515,19 @@ const API = (() => {
     async get_results({ engagement_slug, run_id }) {
       const attempts = await handlers.read_run_attempts({ engagement_slug, run_id });
       const verdicts = await handlers.read_run_verdicts({ engagement_slug, run_id });
+      const leaks = await handlers.read_run_leaks({ engagement_slug, run_id }).catch(() => []);
       const diagnostics = await handlers.get_run_diagnostics({ engagement_slug, run_id }).catch(() => null);
       const requests = await handlers.list_requests().catch(() => []);
       const verdictBySeq = new Map((verdicts || []).map(v => [Number(v.seq), v]));
+      // Section 1.8: bundle leaks by the probe seq so the row renderer
+      // can show a leak badge when this attempt's seq was the one that
+      // surfaced another session's canary.
+      const leaksBySeq = new Map();
+      (leaks || []).forEach((l) => {
+        const arr = leaksBySeq.get(Number(l.probe_seq)) || [];
+        arr.push(l);
+        leaksBySeq.set(Number(l.probe_seq), arr);
+      });
       const primaryRequest = requests.find(req => req.id === diagnostics?.request_id) || null;
       const hasRepeat = attempts.some(a => (a.iteration || 1) > 1);
       const sorted = [...attempts].sort((a, b) => (a.seq || 0) - (b.seq || 0));
@@ -484,7 +589,14 @@ const API = (() => {
           iteration,
           step_order,
           seq: a.seq,
-          session_label: a.session || '-',
+          // Section 1 of docs/ToDo.md: multi-session runs write a
+          // distinct `session_id` (e.g. `s0`, `s1`). Prefer it when
+          // present so the column shows the multi-session label
+          // rather than the legacy `session` field.
+          session_label: a.session_id || a.session || '-',
+          session_id: a.session_id || null,
+          phase: a.phase || null,
+          leaks: leaksBySeq.get(Number(a.seq)) || [],
           prompt_id: a.prompt_id || 'custom',
           prompt_text: a.prompt_text || '',
           status_code: a.response?.status ?? 0,
@@ -593,6 +705,12 @@ const API = (() => {
       });
     },
 
+    async read_report_md({ engagementSlug, runId }) {
+      const slug = engagementSlug || _activeSlug;
+      if (!slug) throw new Error('No engagement open. Open or create one first.');
+      return invoke('read_report_md', { engagementSlug: slug, runId });
+    },
+
     // ── Analyzer setup ────────────────────────────────────────────────
 
     async get_analyzer_status() {
@@ -654,14 +772,50 @@ const API = (() => {
     throw new Error(`Command '${cmd}' is not implemented`);
   }
 
-  function onProgress(fn) { _onProgress = fn; }
-  function onUserRelevantError(fn) { _onUserRelevantError = fn; }
+  // Each registration returns an unsubscribe function. Calling it nulls
+  // the callback so stale closures stop receiving events; the underlying
+  // Tauri listener stays attached (one per app lifetime by design).
+  function onProgress(fn) {
+    _onProgress = fn;
+    return () => { if (_onProgress === fn) _onProgress = null; };
+  }
+  function onUserRelevantError(fn) {
+    _onUserRelevantError = fn;
+    return () => { if (_onUserRelevantError === fn) _onUserRelevantError = null; };
+  }
+
+  // Detach Tauri event listeners and clear callbacks. Idempotent. Call on
+  // window unload or before any wholesale UI re-init.
+  function teardown() {
+    if (_progressUnlisten) {
+      try { _progressUnlisten(); } catch (_) { /* ignore */ }
+      _progressUnlisten = null;
+    }
+    if (_userErrorUnlisten) {
+      try { _userErrorUnlisten(); } catch (_) { /* ignore */ }
+      _userErrorUnlisten = null;
+    }
+    _onProgress = null;
+    _onUserRelevantError = null;
+  }
 
   // Start listening for run-progress events immediately so they aren't lost.
   if (window.__TAURI__) {
     listenRunProgress().catch(console.error);
     listenUserRelevantErrors().catch(console.error);
+    window.addEventListener('beforeunload', teardown, { once: true });
   }
 
-  return { call, onProgress, onUserRelevantError, get activeSlug() { return _activeSlug; } };
+  return {
+    call,
+    onProgress,
+    onUserRelevantError,
+    teardown,
+    ApiError,
+    get activeSlug() { return _activeSlug; },
+  };
 })();
+
+// Also export at module scope so non-API callers (e.g. tests, console
+// debugging) can do `err instanceof ApiError` without going through API.
+window.ApiError = ApiError;

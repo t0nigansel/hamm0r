@@ -40,6 +40,31 @@ pub fn create(engagements_dir: &Path, meta: &EngagementMeta) -> anyhow::Result<(
     atomic_write(&path, yaml.as_bytes())
 }
 
+/// Overwrite `engagement.yaml` for an existing engagement. Used to persist
+/// late-bound fields like `target.scenario_id` after the engagement was
+/// originally created with empty defaults.
+pub fn save_meta(engagements_dir: &Path, meta: &EngagementMeta) -> anyhow::Result<()> {
+    ensure_safe_slug(&meta.slug)?;
+    let path = engagements_dir
+        .join(&meta.slug)
+        .join(ENGAGEMENT_YAML);
+    let yaml = serde_yaml::to_string(meta).context("cannot serialise engagement")?;
+    atomic_write(&path, yaml.as_bytes())
+}
+
+/// Load a single engagement's metadata by slug. Returns `None` when the
+/// folder doesn't exist or its `engagement.yaml` is missing/unreadable.
+pub fn load(engagements_dir: &Path, slug: &str) -> anyhow::Result<Option<EngagementMeta>> {
+    ensure_safe_slug(slug)?;
+    let path = engagements_dir.join(slug).join(ENGAGEMENT_YAML);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&path)
+        .with_context(|| format!("cannot read {}", path.display()))?;
+    Ok(serde_yaml::from_str::<EngagementMeta>(&raw).ok())
+}
+
 /// List all engagements found under `engagements_dir`.
 ///
 /// Each sub-directory that contains a readable `engagement.yaml` is returned.

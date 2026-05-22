@@ -278,7 +278,7 @@ fn limit_body_for_log(body: &str) -> String {
     )
 }
 
-// ── Top-level Request CRUD (independent of Target) ────────────────────────────
+// â”€â”€ Top-level Request CRUD (independent of Target) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // These commands back the new "Requests" menu item. The Target-scoped
 // `save_request` / `delete_request` above are retained for the Target editor
 // flow.
@@ -312,10 +312,10 @@ pub fn save_request_global(
 
 /// Delete a Request file. When `force` is false and references exist, the
 /// command returns a `DeleteRequestBlockedDto` describing the blocking
-/// references — the UI surfaces a confirmation dialog and re-invokes with
+/// references â€” the UI surfaces a confirmation dialog and re-invokes with
 /// `force = true`. With `force = true`, referencing Targets are cleaned up
 /// (the id is removed from `request_ids`, primary is reset if needed).
-/// Scenario steps are intentionally not modified — the UI surfaces a
+/// Scenario steps are intentionally not modified â€” the UI surfaces a
 /// "missing request" warning on affected scenarios at edit/run time.
 #[tauri::command]
 pub fn delete_request_global(
@@ -403,6 +403,7 @@ mod tests {
             timeout_seconds: 50,
             adapter: Default::default(),
             tag: None,
+            test_payload: None,
         };
 
         let headers = request_headers_for_log(&request);
@@ -436,6 +437,7 @@ mod tests {
             timeout_seconds: 50,
             adapter: Default::default(),
             tag: None,
+            test_payload: None,
         };
 
         let preview = render_request_preview(&request, &SessionStrategy::None, "test", "hello")

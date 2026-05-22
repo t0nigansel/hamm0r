@@ -197,6 +197,35 @@ pub fn read_report_html(
     Ok(html)
 }
 
+/// Read the canonical Markdown report (Section 7.1 of `docs/ToDo.md`).
+/// Returns `None` when the file does not exist yet — typically because
+/// the run has not been analyzed.
+#[tauri::command]
+pub fn read_report_md(
+    logger: State<'_, AnalyzerLoggerState>,
+    paths: State<'_, AppPaths>,
+    engagement_slug: String,
+    run_id: String,
+) -> Result<Option<String>, CommandError> {
+    let md_path = markdown_report_path_for(&paths.0, &engagement_slug, &run_id);
+    if !md_path.exists() {
+        return Ok(None);
+    }
+    let md = storage::runs::read_body_by_relative_path(
+        &paths.0.engagement_dir(&engagement_slug),
+        &format!("reports/report-{run_id}.md"),
+    )
+    .map_err(|err| {
+        logger.0.error(
+            "analysis",
+            Some(&run_id),
+            &format!("read_report_md failed: {err}"),
+        );
+        CommandError::from(err)
+    })?;
+    Ok(md)
+}
+
 #[tauri::command]
 pub async fn judge_result(
     logger: State<'_, AnalyzerLoggerState>,
@@ -1031,6 +1060,13 @@ fn report_path_for(paths: &HammorPaths, engagement_slug: &str, run_id: &str) -> 
         .engagement_dir(engagement_slug)
         .join("reports")
         .join(format!("report-{run_id}.html"))
+}
+
+fn markdown_report_path_for(paths: &HammorPaths, engagement_slug: &str, run_id: &str) -> PathBuf {
+    paths
+        .engagement_dir(engagement_slug)
+        .join("reports")
+        .join(format!("report-{run_id}.md"))
 }
 
 fn verdict_label(verdict: &storage::verdicts::JudgeVerdict) -> String {

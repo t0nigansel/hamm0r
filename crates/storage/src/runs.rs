@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
-// ── Run record types ───────────────────────────────────────────────────────────
-// Schema defined in docs/Datamodel.md §"Run log".
+// â”€â”€ Run record types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Schema defined in docs/Datamodel.md Â§"Run log".
 // These are the types the runner writes; the analyzer reads them back.
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,6 +21,23 @@ pub struct RunHeader {
     /// absent on flat ad-hoc runs (e.g. the per-result rerun path).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenario_id: Option<String>,
+    /// Set on replay run files. References the (run_id, seq) of the
+    /// original attempt this replay was derived from. Replay files use
+    /// the naming `<original_run>-replay-<n>.jsonl`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_of: Option<ReplaySource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReplaySource {
+    /// Original run id (e.g. `run-003`).
+    pub run_id: String,
+    /// Seq of the attempt being replayed.
+    pub seq: u32,
+    /// True when the user supplied a custom prompt for the replay.
+    /// `false` means the original prompt text was re-fired verbatim.
+    #[serde(default)]
+    pub prompt_overridden: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -82,6 +99,27 @@ pub struct RunAttempt {
     /// unknown values (forward compatibility).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+    /// Stable id of the Request template this attempt was fired against.
+    /// Recorded so replay can resolve the Request without URL/method
+    /// heuristics. `None` for legacy run logs written before this field
+    /// existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    /// Mutator id that produced this prompt variant, or `"seed"` for the
+    /// unmutated seed prompt. `None` for legacy run logs written before
+    /// this field existed (Section 2.9 of docs/ToDo.md).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutation_id: Option<String>,
+    /// Section 1.6 of `docs/ToDo.md`. Short session label (e.g. `s0`,
+    /// `s1`) when the attempt was fired as part of a multi-session run.
+    /// Absent on single-session and legacy logs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// Section 1.6 of `docs/ToDo.md`. Phase the prompt was fired in
+    /// when multi-session was active: `plant`, `probe`, or `any`.
+    /// Absent on single-session and legacy logs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
     pub request: RequestEnvelope,
     pub response: ResponseEnvelope,
     pub timing: Timing,
@@ -106,19 +144,49 @@ pub struct RunFooter {
     pub status: RunStatus,
 }
 
+/// Section 1.5 of `docs/ToDo.md`. Emitted by the post-run scanner when
+/// a canary planted in one session surfaces in another session's
+/// probe response. Append-only, like every other run record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LeakDetected {
+    /// `seq` of the probe attempt where the canary surfaced.
+    pub probe_seq: u32,
+    /// Session that fired the probe (e.g. `s1`).
+    pub probe_session: String,
+    /// Session that planted the canary (e.g. `s0`).
+    pub planted_session: String,
+    /// The canary string that matched.
+    pub canary: String,
+}
+
 /// A single line in a run JSONL file.
 ///
 /// The `type` field selects the variant. Readers must tolerate unknown types
 /// (forward compatibility).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum RunRecord {
     Header(RunHeader),
     Attempt(Box<RunAttempt>),
     Footer(RunFooter),
+    /// Multi-session cross-session leak (Section 1.5 of `docs/ToDo.md`).
+    LeakDetected(LeakDetected),
 }
 
-// ── Writer ────────────────────────────────────────────────────────────────────
+// â”€â”€ Paths â”€â”€â”€
+
+/// Return the response-body directory for `run_id` inside `engagement_dir`,
+/// creating it (and parents) if needed. This is the single enforcement point
+/// for response-dir layout — callers outside `storage/` must not assemble or
+/// create the path themselves (CLAUDE.md invariant #6).
+pub fn ensure_response_dir(engagement_dir: &Path, run_id: &str) -> anyhow::Result<PathBuf> {
+    let dir = engagement_dir.join("responses").join(run_id);
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("cannot create response dir: {}", dir.display()))?;
+    Ok(dir)
+}
+
+// â”€â”€ Writer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Append one record to a run JSONL file with one `fsync` per call.
 ///
@@ -146,11 +214,11 @@ pub fn append(run_path: &Path, record: &RunRecord) -> anyhow::Result<()> {
     Ok(())
 }
 
-// ── Reader ────────────────────────────────────────────────────────────────────
+// â”€â”€ Reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Read all well-formed records from a run JSONL file.
 ///
-/// A malformed line stops iteration — everything after it is treated as absent
+/// A malformed line stops iteration â€” everything after it is treated as absent
 /// (crash-recovery semantics per Datamodel.md). The caller can inspect how many
 /// records were read vs the file's line count to detect truncation.
 pub fn read_all(run_path: &Path) -> anyhow::Result<Vec<RunRecord>> {
@@ -236,6 +304,39 @@ pub fn delete_run(engagement_dir: &Path, run_id: &str) -> anyhow::Result<usize> 
         removed += 1;
     }
 
+    // Also delete any replay run files derived from this run (sibling
+    // pattern `<run_id>-replay-<n>.jsonl` plus their responses dirs and
+    // verdict logs). Replay files only make sense in the context of
+    // their original; orphaning them would leave dead artifacts.
+    let runs_dir = engagement_dir.join("runs");
+    if runs_dir.exists() {
+        let replay_prefix = format!("{run_id}-replay-");
+        for entry in std::fs::read_dir(&runs_dir)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let Some(s) = name.to_str() else { continue };
+            if !s.starts_with(&replay_prefix) {
+                continue;
+            }
+            // Resolve the replay run_id by stripping a `.jsonl` or
+            // `.verdicts.jsonl` suffix; skip anything else.
+            let replay_id = s
+                .strip_suffix(".verdicts.jsonl")
+                .or_else(|| s.strip_suffix(".jsonl"));
+            let Some(replay_id) = replay_id else { continue };
+            let path = entry.path();
+            std::fs::remove_file(&path)
+                .with_context(|| format!("cannot delete {}", path.display()))?;
+            removed += 1;
+            let replay_responses = engagement_dir.join("responses").join(replay_id);
+            if replay_responses.exists() {
+                std::fs::remove_dir_all(&replay_responses)
+                    .with_context(|| format!("cannot delete {}", replay_responses.display()))?;
+                removed += 1;
+            }
+        }
+    }
+
     Ok(removed)
 }
 
@@ -262,6 +363,7 @@ mod tests {
             runner_version: "0.1.0".into(),
             prompt_files: vec!["injection-classics".into()],
             scenario_id: None,
+            replay_of: None,
         })
     }
 
@@ -276,6 +378,10 @@ mod tests {
             session: None,
             prompt_text: None,
             kind: None,
+            request_id: None,
+            mutation_id: None,
+            session_id: None,
+            phase: None,
             request: RequestEnvelope {
                 method: "POST".into(),
                 url: "https://api.example.com".into(),
@@ -378,6 +484,81 @@ mod tests {
     }
 
     #[test]
+    fn replay_header_round_trips_with_replay_of() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("run-003-replay-1.jsonl");
+        let header = RunRecord::Header(RunHeader {
+            run_id: "run-003-replay-1".into(),
+            engagement: "2026-04-25-acme".into(),
+            request_id: "openai-chat".into(),
+            started_at: "2026-04-25T09:00:00Z".into(),
+            runner_version: "test".into(),
+            prompt_files: vec![],
+            scenario_id: None,
+            replay_of: Some(ReplaySource {
+                run_id: "run-003".into(),
+                seq: 42,
+                prompt_overridden: true,
+            }),
+        });
+        append(&path, &header).unwrap();
+
+        let records = read_all(&path).unwrap();
+        let RunRecord::Header(h) = &records[0] else {
+            panic!("expected header")
+        };
+        let replay_of = h.replay_of.clone().expect("replay_of populated");
+        assert_eq!(replay_of.run_id, "run-003");
+        assert_eq!(replay_of.seq, 42);
+        assert!(replay_of.prompt_overridden);
+    }
+
+    #[test]
+    fn run_attempt_round_trips_request_id() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("run-001.jsonl");
+        let mut record = attempt(1);
+        if let RunRecord::Attempt(a) = &mut record {
+            a.request_id = Some("openai-chat".into());
+        }
+        append(&path, &record).unwrap();
+
+        let records = read_all(&path).unwrap();
+        let RunRecord::Attempt(a) = &records[0] else {
+            panic!("expected attempt")
+        };
+        assert_eq!(a.request_id.as_deref(), Some("openai-chat"));
+    }
+
+    #[test]
+    fn delete_run_also_removes_replay_artifacts() {
+        let engagement = TempDir::new().unwrap();
+        let runs_dir = engagement.path().join("runs");
+        let responses_dir = engagement.path().join("responses");
+        std::fs::create_dir_all(&runs_dir).unwrap();
+        std::fs::create_dir_all(responses_dir.join("run-003")).unwrap();
+        std::fs::create_dir_all(responses_dir.join("run-003-replay-1")).unwrap();
+        std::fs::create_dir_all(responses_dir.join("run-003-replay-2")).unwrap();
+
+        std::fs::write(runs_dir.join("run-003.jsonl"), "{}\n").unwrap();
+        std::fs::write(runs_dir.join("run-003-replay-1.jsonl"), "{}\n").unwrap();
+        std::fs::write(runs_dir.join("run-003-replay-2.jsonl"), "{}\n").unwrap();
+        std::fs::write(runs_dir.join("run-004.jsonl"), "{}\n").unwrap();
+        std::fs::write(runs_dir.join("run-004-replay-1.jsonl"), "{}\n").unwrap();
+
+        let removed = delete_run(engagement.path(), "run-003").unwrap();
+        // 1 (original) + 1 (orig responses) + 2 (replay jsonl files) + 2 (replay responses dirs) = 6
+        assert_eq!(removed, 6);
+
+        assert!(!runs_dir.join("run-003.jsonl").exists());
+        assert!(!runs_dir.join("run-003-replay-1.jsonl").exists());
+        assert!(!runs_dir.join("run-003-replay-2.jsonl").exists());
+        // Sibling run + its replays untouched.
+        assert!(runs_dir.join("run-004.jsonl").exists());
+        assert!(runs_dir.join("run-004-replay-1.jsonl").exists());
+    }
+
+    #[test]
     fn delete_run_removes_all_artifacts() {
         let engagement = TempDir::new().unwrap();
         let runs_dir = engagement.path().join("runs");
@@ -420,5 +601,78 @@ mod tests {
         let engagement = TempDir::new().unwrap();
         assert!(delete_run(engagement.path(), "").is_err());
         assert!(delete_run(engagement.path(), "   ").is_err());
+    }
+
+    // ── Section 1.5 (LeakDetected) round-trip ────────────────────────────
+
+    #[test]
+    fn leak_detected_record_serializes_as_snake_case_tag() {
+        let record = RunRecord::LeakDetected(LeakDetected {
+            probe_seq: 17,
+            probe_session: "s1".into(),
+            planted_session: "s0".into(),
+            canary: "HAMM0R-abcdef01234".into(),
+        });
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("\"type\":\"leak_detected\""));
+        assert!(json.contains("\"probe_seq\":17"));
+        let back: RunRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, record);
+    }
+
+    #[test]
+    fn run_attempt_with_session_id_and_phase_round_trips() {
+        let attempt = RunRecord::Attempt(Box::new(RunAttempt {
+            seq: 1,
+            ts: "2026-04-25T09:00:01Z".into(),
+            prompt_id: "p".into(),
+            payload_id: "pl".into(),
+            step_id: None,
+            iteration: None,
+            session: None,
+            prompt_text: None,
+            kind: None,
+            request_id: None,
+            mutation_id: None,
+            session_id: Some("s2".into()),
+            phase: Some("probe".into()),
+            request: RequestEnvelope {
+                method: "POST".into(),
+                url: "https://example.test".into(),
+                headers: HashMap::new(),
+                headers_hash: None,
+                body_size: 0,
+            },
+            response: ResponseEnvelope {
+                status: 200,
+                headers: HashMap::new(),
+                body_size: 0,
+                body_file: None,
+                error: None,
+            },
+            timing: Timing {
+                sent_at: "...".into(),
+                first_byte_at: None,
+                received_at: "...".into(),
+                duration_ms: 0,
+            },
+            indicators_matched: Vec::new(),
+        }));
+        let json = serde_json::to_string(&attempt).unwrap();
+        assert!(json.contains("\"session_id\":\"s2\""));
+        assert!(json.contains("\"phase\":\"probe\""));
+        let back: RunRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, attempt);
+    }
+
+    #[test]
+    fn legacy_run_attempt_without_session_id_loads() {
+        let line = r#"{"type":"attempt","seq":1,"ts":"t","prompt_id":"p","payload_id":"pl","request":{"method":"POST","url":"u","body_size":0},"response":{"status":200,"headers":{},"body_size":0,"body_file":null},"timing":{"sent_at":"t","received_at":"t","duration_ms":0}}"#;
+        let record: RunRecord = serde_json::from_str(line).unwrap();
+        let RunRecord::Attempt(a) = record else {
+            panic!("expected attempt");
+        };
+        assert!(a.session_id.is_none());
+        assert!(a.phase.is_none());
     }
 }

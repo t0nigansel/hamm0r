@@ -2,11 +2,11 @@
 //!
 //! Two migrations live here:
 //!
-//! 1. `tag_requests_from_targets` — copy each Target's `name` into the
+//! 1. `tag_requests_from_targets` â€” copy each Target's `name` into the
 //!    `tag` field of every Request the Target references. The `tag` is
 //!    the new grouping primitive that replaces Target as a UI organization
 //!    concept.
-//! 2. `synthesize_auth_chain_requests` — translate each Target's
+//! 2. `synthesize_auth_chain_requests` â€” translate each Target's
 //!    `auth_acquisition.http_login` configuration into a real Request
 //!    that other Requests reference via `{{<id>.bearer_token}}`. Q-H
 //!    resolved that the new flow fires login per run (no keychain
@@ -256,6 +256,7 @@ fn build_login_request(login_id: &str, target_name: &str, http_login: &HttpLogin
         timeout_seconds: http_login.timeout_seconds.unwrap_or(30),
         adapter: Default::default(),
         tag: Some(target_name.to_owned()),
+        test_payload: None,
     }
 }
 
@@ -307,6 +308,7 @@ mod tests {
             timeout_seconds: 30,
             adapter: Default::default(),
             tag: None,
+            test_payload: None,
         }
     }
 
@@ -406,7 +408,7 @@ mod tests {
         // Two Targets, both pointing at the same Request. The first one
         // tags it; the second hits the already_tagged path. We don't
         // guarantee which Target wins (HashMap iteration order is
-        // unspecified) — just that the field is set and consistent.
+        // unspecified) â€” just that the field is set and consistent.
         let root = TempDir::new().unwrap();
         let targets_dir = root.path().join("targets");
         let requests_dir = root.path().join("requests");
@@ -473,7 +475,7 @@ mod tests {
         assert_eq!(report, TagMigrationReport::default());
     }
 
-    // ── Auth-chain synthesis tests ───────────────────────────────────
+    // â”€â”€ Auth-chain synthesis tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     use crate::types::{AuthAcquisitionConfig, AuthAcquisitionMode, HttpLoginConfig};
 

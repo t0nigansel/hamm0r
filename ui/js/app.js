@@ -238,7 +238,9 @@ document.addEventListener('DOMContentLoaded', () => {
     analyze:   glyph('🔍'),                   // U+1F50D magnifying glass
     exportMd:  glyph('MD', 'btn-icon-text'),  // textual badge
     exportPdf: glyph('PDF', 'btn-icon-text'), // textual badge
-    copy:      glyph('CP', 'btn-icon-text'),  // copy badge
+    copy:      glyph('<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="9" height="10" rx="1"/><path d="M3 11V3a1 1 0 0 1 1-1h7"/></svg>'),
+    cancel:    glyph('<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="#e5484d" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>'),
+    analyzed:  glyph('<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="#3dd68c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3.5 3.5L13 5"/></svg>'),
     archive:   glyph('🗑'),                   // U+1F5D1 wastebasket
   };
 
@@ -459,9 +461,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Breadcrumb state — populated by showView (view label), onDbOpen
+  // (engagement name) and loadRunResults (run id). updateBreadcrumb()
+  // renders the three optional segments.
+  const breadcrumbState = { viewLabel: 'home', engagementName: null, runId: null };
+
+  function updateBreadcrumb() {
+    const v = $('#breadcrumb-view');
+    const eSep = $('#breadcrumb-sep-engagement');
+    const e = $('#breadcrumb-engagement');
+    const rSep = $('#breadcrumb-sep-run');
+    const r = $('#breadcrumb-run');
+    if (v) v.textContent = breadcrumbState.viewLabel;
+    const hasEng = !!breadcrumbState.engagementName;
+    const hasRun = hasEng && !!breadcrumbState.runId;
+    if (eSep) eSep.hidden = !hasEng;
+    if (e) {
+      e.hidden = !hasEng;
+      e.textContent = breadcrumbState.engagementName || '';
+      e.classList.toggle('current', hasEng && !hasRun);
+    }
+    if (rSep) rSep.hidden = !hasRun;
+    if (r) {
+      r.hidden = !hasRun;
+      r.textContent = breadcrumbState.runId || '';
+    }
+  }
+
   function onDbOpen(name, slug) {
     if (slug) activeEngagementSlug = slug;
-    $('#breadcrumb-engagement').textContent = name;
+    breadcrumbState.engagementName = name || null;
+    breadcrumbState.runId = null;
+    updateBreadcrumb();
     if ($('#view-home').classList.contains('active')) {
       loadHomeRecentEngagements();
       updateHomeCtas();
@@ -475,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const VIEW_LABELS = {
     'view-home': 'home',
     'view-requests': 'requests',
-    'view-prompts': 'prompts',
+    'view-prompts': 'library',
     'view-scenarios': 'scenarios',
     'view-engagements': 'engagements',
   };
@@ -490,7 +521,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewEl = $(`#${viewId}`);
     if (viewEl) viewEl.classList.add('active');
 
-    $('#breadcrumb-view').textContent = VIEW_LABELS[viewId] || viewId;
+    breadcrumbState.viewLabel = VIEW_LABELS[viewId] || viewId;
+    // Leaving the engagement detail view drops the run segment.
+    if (viewId !== 'view-engagements') breadcrumbState.runId = null;
+    updateBreadcrumb();
 
 
     if (viewId === 'view-home') {
@@ -699,9 +733,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  $('#btn-new-engagement').addEventListener('click', openEngagementDialog);
-  // Phase 2 of docs/RefactorPlan.md: wizard removed. Home CTAs route to
-  // Scenarios; "+" buttons open the lightweight engagement-dialog directly.
   function closeRunScenarioPicker() {
     setHidden($('#run-scenario-picker'), true);
   }
@@ -775,12 +806,239 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // ── Quick Start (ToDo §10.1) ─────────────────────────────────────────
+  // One-screen first-run flow: paste an OpenAI-compatible URL, optional
+  // bearer token, pick OWASP categories, fire. The orchestration creates
+  // a Request, a Scenario and an Engagement, then starts the run.
+  // Auto-generated artifacts are tagged "quickstart" so the user can find
+  // (and clean up) them later from the regular views.
+  const QUICKSTART_OWASP_ALL = ['A01','A02','A03','A04','A05','A06','A07','A08','A09','A10'];
+
+  function openQuickStart() {
+    const modal = $('#quickstart-modal');
+    if (!modal) return;
+    // Reset transient state every open: clear token, clear status,
+    // reset chip selection to "All", reset mode to builtin.
+    $('#qs-token').value = '';
+    setQuickstartStatus('');
+    $('#qs-owasp-grid')?.querySelectorAll('.chip').forEach((c) => {
+      c.classList.toggle('active', c.dataset.qsOwasp === 'ALL');
+    });
+    const modeSel = $('#qs-mode');
+    if (modeSel) modeSel.value = 'builtin';
+    syncQuickstartTokenRow();
+    syncQuickstartMode();
+    loadQuickstartRequests();
+    setHidden(modal, false);
+    $('#qs-url').focus();
+  }
+
+  async function loadQuickstartRequests() {
+    const sel = $('#qs-existing');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">loading…</option>';
+    let list = [];
+    try {
+      list = await API.call('list_requests', {});
+    } catch (err) {
+      sel.innerHTML = '<option value="">(failed to load)</option>';
+      return;
+    }
+    sel.innerHTML = '';
+    if (list.length === 0) {
+      sel.innerHTML = '<option value="">(none)</option>';
+    } else {
+      list.forEach((r) => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        const urlShort = (r.url || '').replace(/^https?:\/\//, '');
+        opt.textContent = `${r.name || r.id} — ${r.method || 'POST'} ${urlShort}`;
+        sel.appendChild(opt);
+      });
+    }
+    syncQuickstartMode();
+  }
+
+  function syncQuickstartMode() {
+    const mode = $('#qs-mode')?.value || 'builtin';
+    const isExisting = mode === 'existing';
+    $$('#quickstart-form .qs-builtin-row').forEach((row) => {
+      row.style.display = isExisting ? 'none' : '';
+    });
+    if (isExisting) syncQuickstartTokenRow();
+    const sel = $('#qs-existing');
+    const hasRequests = !!sel && sel.options.length > 0 && sel.options[0].value !== '';
+    const existingRow = $('#qs-existing-row');
+    const emptyRow = $('#qs-existing-empty-row');
+    if (existingRow) existingRow.style.display = isExisting && hasRequests ? '' : 'none';
+    if (emptyRow) emptyRow.style.display = isExisting && !hasRequests ? '' : 'none';
+  }
+
+  function closeQuickStart() {
+    setHidden($('#quickstart-modal'), true);
+  }
+
+  function setQuickstartStatus(text) {
+    const el = $('#qs-status');
+    if (el) el.textContent = text || '';
+  }
+
+  function syncQuickstartTokenRow() {
+    const mode = $('#qs-mode')?.value || 'builtin';
+    const auth = $('#qs-auth')?.value || 'bearer';
+    const row = $('#qs-token-row');
+    if (row) row.style.display = mode === 'builtin' && auth === 'bearer' ? '' : 'none';
+  }
+
+  function readQuickstartOwaspRefs() {
+    const chips = $('#qs-owasp-grid')?.querySelectorAll('.chip.active') || [];
+    const picks = [...chips].map((c) => c.dataset.qsOwasp);
+    if (picks.includes('ALL')) return QUICKSTART_OWASP_ALL.slice();
+    return picks;
+  }
+
+  async function runQuickStart() {
+    const mode = $('#qs-mode')?.value || 'builtin';
+    const owaspRefs = readQuickstartOwaspRefs();
+    if (owaspRefs.length === 0) {
+      toast('Pick at least one OWASP category', 'error'); return;
+    }
+
+    let requestId;
+    let url, model, auth, token;
+    if (mode === 'existing') {
+      requestId = ($('#qs-existing')?.value || '').trim();
+      if (!requestId) {
+        toast('Pick a Request, or create one first', 'error'); return;
+      }
+    } else {
+      url = ($('#qs-url')?.value || '').trim();
+      model = ($('#qs-model')?.value || '').trim();
+      auth = $('#qs-auth')?.value || 'bearer';
+      token = ($('#qs-token')?.value || '').trim();
+      if (!url) { toast('Endpoint URL is required', 'error'); return; }
+      if (!model) { toast('Model is required', 'error'); return; }
+      if (auth === 'bearer' && !token) {
+        toast('Paste a bearer token, or switch auth to None', 'error'); return;
+      }
+    }
+
+    const fireBtn = $('#btn-quickstart-fire');
+    if (fireBtn) fireBtn.disabled = true;
+    try {
+      const ts = Date.now();
+      if (mode === 'builtin') {
+        const tokenEnv = `HAMM0R_QUICKSTART_${ts}`;
+        if (auth === 'bearer') {
+          setQuickstartStatus('Storing token in OS keychain…');
+          await API.call('set_bearer_token', { var: tokenEnv, token });
+        }
+
+        setQuickstartStatus('Creating Request…');
+        requestId = `quickstart-${ts}`;
+        const request = {
+          version: 1,
+          id: requestId,
+          name: `Quick Start · ${new Date().toISOString().slice(0, 10)}`,
+          method: 'POST',
+          url,
+          auth: auth === 'bearer'
+            ? { type: 'bearer', token_env: tokenEnv }
+            : { type: 'none' },
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            format: 'json',
+            content: {
+              model,
+              messages: [{ role: 'user', content: '{{prompt}}' }],
+            },
+          },
+          response: {
+            extract: { type: 'jsonpath', path: '$.choices[0].message.content' },
+          },
+          timeout_seconds: 60,
+          adapter: 'open-ai-compat',
+          tag: 'quickstart',
+        };
+        await API.call('save_request_global', { request });
+      }
+
+      setQuickstartStatus('Creating Scenario…');
+      const scenarioName = `Quick Start · ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`;
+      const scenario = await API.call('create_scenario', { name: scenarioName });
+      await API.call('update_scenario', {
+        id: scenario.id,
+        name: scenarioName,
+        request_ids: [requestId],
+        library: { owasp_refs: owaspRefs, categories: [] },
+      });
+
+      setQuickstartStatus('Creating Engagement…');
+      const eng = await API.call('create_engagement', { name: scenarioName });
+      await API.call('open_db', { path: eng.slug });
+      dbOpen = true;
+      onDbOpen(eng.name || scenarioName, eng.slug);
+
+      setQuickstartStatus('Firing…');
+      await API.call('start_scenario_run', {
+        engagement_slug: eng.slug,
+        scenario_id: scenario.id,
+      });
+
+      closeQuickStart();
+      showView('view-engagements');
+      toast('Quick Start run fired', 'success');
+    } catch (err) {
+      setQuickstartStatus(`Error: ${err.message}`);
+      toast(`Quick Start failed: ${err.message}`, 'error');
+    } finally {
+      if (fireBtn) fireBtn.disabled = false;
+    }
+  }
+
+  $('#quickstart-close')?.addEventListener('click', closeQuickStart);
+  $('#btn-quickstart-cancel')?.addEventListener('click', closeQuickStart);
+  $('#qs-auth')?.addEventListener('change', syncQuickstartTokenRow);
+  $('#qs-mode')?.addEventListener('change', syncQuickstartMode);
+  $('#btn-qs-create-request')?.addEventListener('click', () => {
+    closeQuickStart();
+    showView('view-requests');
+    if (typeof window.__hamm0r?.startNewRequest === 'function') {
+      window.__hamm0r.startNewRequest();
+    }
+  });
+  $('#qs-owasp-grid')?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip[data-qs-owasp]');
+    if (!chip) return;
+    const value = chip.dataset.qsOwasp;
+    const grid = $('#qs-owasp-grid');
+    if (value === 'ALL') {
+      // Toggle "All" exclusively — selecting it clears the others.
+      grid.querySelectorAll('.chip').forEach((c) => {
+        c.classList.toggle('active', c.dataset.qsOwasp === 'ALL');
+      });
+    } else {
+      grid.querySelector('.chip[data-qs-owasp="ALL"]')?.classList.remove('active');
+      chip.classList.toggle('active');
+      // Falling back to "All" if nothing else is selected.
+      const anyActive = grid.querySelectorAll('.chip.active').length > 0;
+      if (!anyActive) {
+        grid.querySelector('.chip[data-qs-owasp="ALL"]')?.classList.add('active');
+      }
+    }
+  });
+  $('#quickstart-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    runQuickStart();
+  });
+
   const HOME_CTA_ACTIONS = {
     open_engagement: openEngagementDialog,
     run_scenario: openScenarioPicker,
     open_scenarios: () => showView('view-scenarios'),
     open_requests: () => showView('view-requests'),
     open_prompts: () => showView('view-prompts'),
+    quick_start: openQuickStart,
   };
 
   // Render the two Home tiles based on what the user has in their workspace.
@@ -807,12 +1065,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let tiles;
     if (!dbOpen) {
       tiles = [
-        { action: 'open_engagement', primary: true, eyebrow: 'Start here',
+        { action: 'quick_start', primary: true, eyebrow: 'First run',
+          title: 'Quick Start',
+          desc: 'Paste an endpoint URL, pick OWASP categories, fire. One screen.' },
+        { action: 'open_engagement', primary: false, eyebrow: 'Or',
           title: 'Open or create an Engagement',
-          desc: 'An Engagement is your workspace. Everything runs inside one.' },
-        { action: 'open_prompts', primary: false, eyebrow: 'Browse',
-          title: 'Explore the Prompt library',
-          desc: 'Look at the bundled OWASP attacks while you set up.' },
+          desc: 'Full control: build Requests and Scenarios manually.' },
       ];
     } else if (requestCount === 0) {
       tiles = [
@@ -857,9 +1115,6 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#run-scenario-picker-cancel')?.addEventListener('click', closeRunScenarioPicker);
   $('#btn-home-refresh-recents')?.addEventListener('click', () => {
     loadHomeRecentEngagements();
-  });
-  $('#btn-help')?.addEventListener('click', () => {
-    toast('I believe in you. Swing again.', 'info');
   });
   $('#engagement-dialog-close').addEventListener('click', () => {
     setHidden($('#engagement-dialog'), true);
@@ -950,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const safeCompleted = Math.max(0, Number(completed) || 0);
     const safeTotal = Math.max(0, Number(total) || 0);
-    const width = 14;
+    const width = 42;
     const filled = safeTotal > 0
       ? Math.max(0, Math.min(width, Math.round((safeCompleted / safeTotal) * width)))
       : 0;
@@ -965,7 +1220,103 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!root) return;
     root.style.visibility = 'hidden';
     root.dataset.state = '';
+    // Also close the detail panel if it was open.
+    setTopbarDetailOpen(false);
+    resetTopbarDetail();
   }
+
+  // ── Expand panel: opens on click of the compact bar, shows live run info.
+  const topbarDetail = {
+    runId: null,
+    startedAtMs: null,
+    elapsedTimer: null,
+    seq: 0,
+    total: 0,
+    errors: 0,
+    requestId: null,
+    promptId: null,
+  };
+
+  function setTopbarDetailOpen(open) {
+    const panel = $('#topbar-progress-detail');
+    const toggle = $('#topbar-progress-toggle');
+    if (!panel || !toggle) return;
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.title = open ? 'Hide run details' : 'Show run details';
+  }
+
+  function renderTopbarDetail() {
+    const set = (id, v) => { const el = $('#' + id); if (el) el.textContent = v || '—'; };
+    set('tpd-run', topbarDetail.runId);
+    const elapsed = topbarDetail.startedAtMs
+      ? formatElapsed(Date.now() - topbarDetail.startedAtMs)
+      : '—';
+    set('tpd-elapsed', elapsed);
+    set('tpd-attempts', topbarDetail.total > 0
+      ? `${topbarDetail.seq}/${topbarDetail.total}`
+      : `${topbarDetail.seq}`);
+    set('tpd-errors', String(topbarDetail.errors || 0));
+    set('tpd-request', topbarDetail.requestId);
+    set('tpd-prompt', topbarDetail.promptId);
+  }
+
+  function formatElapsed(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+    if (m > 0) return `${m}m ${String(sec).padStart(2, '0')}s`;
+    return `${sec}s`;
+  }
+
+  function resetTopbarDetail() {
+    topbarDetail.runId = null;
+    topbarDetail.startedAtMs = null;
+    topbarDetail.seq = 0;
+    topbarDetail.total = 0;
+    topbarDetail.errors = 0;
+    topbarDetail.requestId = null;
+    topbarDetail.promptId = null;
+    if (topbarDetail.elapsedTimer) {
+      clearInterval(topbarDetail.elapsedTimer);
+      topbarDetail.elapsedTimer = null;
+    }
+    renderTopbarDetail();
+  }
+
+  function updateTopbarDetailFromProgress(ev) {
+    if (!ev || !ev.run_id) return;
+    // First sighting of this run? Capture start timestamp and start ticking.
+    if (topbarDetail.runId !== ev.run_id) {
+      topbarDetail.runId = ev.run_id;
+      topbarDetail.startedAtMs = Date.now();
+      topbarDetail.errors = 0;
+      if (topbarDetail.elapsedTimer) clearInterval(topbarDetail.elapsedTimer);
+      topbarDetail.elapsedTimer = setInterval(renderTopbarDetail, 1000);
+    }
+    if (Number.isFinite(Number(ev.seq))) topbarDetail.seq = Number(ev.seq);
+    if (Number.isFinite(Number(ev.total))) topbarDetail.total = Number(ev.total);
+    if (ev.error) topbarDetail.errors += 1;
+    if (ev.request_id) topbarDetail.requestId = ev.request_id;
+    if (ev.prompt_id) topbarDetail.promptId = ev.prompt_id;
+    if (ev.finished) {
+      if (topbarDetail.elapsedTimer) {
+        clearInterval(topbarDetail.elapsedTimer);
+        topbarDetail.elapsedTimer = null;
+      }
+    }
+    renderTopbarDetail();
+  }
+
+  $('#topbar-progress-toggle')?.addEventListener('click', () => {
+    // Only respond when there's actually a run in flight (or finished without dismissal).
+    const root = $('#topbar-progress');
+    if (!root || root.style.visibility === 'hidden') return;
+    const panel = $('#topbar-progress-detail');
+    setTopbarDetailOpen(panel?.hidden !== false ? true : false);
+  });
 
   async function fireSelectedRequest() {
     if (!requestEditor.currentId) {
@@ -1118,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('#req-timeout').value = Number(req.timeout_seconds || 30);
-    $('#req-test-prompt').value = '';
+    $('#req-test-prompt').value = req.test_payload || '';
     $('#btn-req-delete').style.display = req.id ? '' : 'none';
     clearRequestTestResult();
   }
@@ -1216,6 +1567,8 @@ document.addEventListener('DOMContentLoaded', () => {
       adapter: body.format === 'raw' ? 'raw-http' : 'custom-rest',
     };
     if (tag) out.tag = tag;
+    const testPayload = $('#req-test-prompt')?.value || '';
+    if (testPayload !== '') out.test_payload = testPayload;
     return out;
   }
 
@@ -1480,6 +1833,12 @@ document.addEventListener('DOMContentLoaded', () => {
       updateGlobalFireButton();
     });
   }
+  $('#btn-req-fire')?.addEventListener('click', () => {
+    fireSelectedRequest().catch((err) => toast(err.message, 'error'));
+  });
+  $('#btn-eng-run')?.addEventListener('click', () => {
+    fireSelectedEngagementScenario().catch((err) => toast(err.message, 'error'));
+  });
   // ── Bearer-token keychain UI ───────────────────────────────────────
   // Stores a token in the OS credential vault under the env-var name
   // shown in #req-auth-token-env. The runner resolves the env var
@@ -2045,6 +2404,21 @@ document.addEventListener('DOMContentLoaded', () => {
         owasp_refs: Array.isArray(s.library?.owasp_refs) ? [...s.library.owasp_refs] : [],
         categories: Array.isArray(s.library?.categories) ? [...s.library.categories] : [],
         shared_session: !!s.shared_session,
+        enabled_mutators: Array.isArray(s.mutations?.enabled_mutators)
+          ? [...s.mutations.enabled_mutators]
+          : [],
+        max_variants_per_seed: Number.isFinite(s.mutations?.max_variants_per_seed)
+          ? s.mutations.max_variants_per_seed
+          : null,
+        // Section 1 of docs/ToDo.md: multi-session config.
+        session_count: Number.isFinite(s.session_count) && s.session_count > 1
+          ? s.session_count
+          : 1,
+        session_identity_kind: s.session_identity?.kind?.type
+          || (typeof s.session_identity?.kind === 'string' ? s.session_identity.kind : null)
+          || 'cookie_jar',
+        session_header_name:
+          s.session_identity?.kind?.header_name || '',
       };
       await renderScenarioMatrixUi();
 
@@ -2077,7 +2451,163 @@ document.addEventListener('DOMContentLoaded', () => {
     renderScenarioMatrixRequests();
     renderScenarioMatrixOwasp();
     renderScenarioMatrixCategories();
+    await renderScenarioMatrixMutations();
     $('#sc-matrix-shared-session').checked = !!currentScenarioMatrix.shared_session;
+    renderScenarioMatrixMultiSession();
+    updateMatrixPromptCounter();
+  }
+
+  function buildSessionIdentityPayload(kind, headerName) {
+    if (kind === 'cookie_jar') {
+      return { kind: { type: 'cookie_jar' } };
+    }
+    const name = (headerName || '').trim();
+    if (kind === 'conversation_header') {
+      return {
+        kind: {
+          type: 'conversation_header',
+          header_name: name || 'X-Conversation-Id',
+        },
+      };
+    }
+    if (kind === 'custom_header') {
+      return {
+        kind: {
+          type: 'custom_header',
+          header_name: name || 'X-Session',
+        },
+      };
+    }
+    return { kind: { type: 'cookie_jar' } };
+  }
+
+  // ── Section 1 (multi-session) Scenario editor controls ──────────────
+  function renderScenarioMatrixMultiSession() {
+    const countInput = $('#sc-matrix-session-count');
+    const kindSelect = $('#sc-matrix-session-identity-kind');
+    const headerInput = $('#sc-matrix-session-header-name');
+    const hint = $('#sc-matrix-session-hint');
+    if (!countInput) return;
+    countInput.value = currentScenarioMatrix.session_count || 1;
+    kindSelect.value = currentScenarioMatrix.session_identity_kind || 'cookie_jar';
+    headerInput.value = currentScenarioMatrix.session_header_name || '';
+    updateMultiSessionVisibility();
+    updateMultiSessionHint();
+  }
+
+  function updateMultiSessionVisibility() {
+    const count = Math.max(1, parseInt($('#sc-matrix-session-count')?.value, 10) || 1);
+    const kindSelect = $('#sc-matrix-session-identity-kind');
+    const headerInput = $('#sc-matrix-session-header-name');
+    if (!kindSelect || !headerInput) return;
+    if (count > 1) {
+      kindSelect.style.display = '';
+      const kind = kindSelect.value;
+      headerInput.style.display =
+        kind === 'conversation_header' || kind === 'custom_header' ? '' : 'none';
+    } else {
+      kindSelect.style.display = 'none';
+      headerInput.style.display = 'none';
+    }
+  }
+
+  function updateMultiSessionHint() {
+    const out = $('#sc-matrix-session-hint');
+    if (!out) return;
+    const count = Math.max(1, parseInt($('#sc-matrix-session-count')?.value, 10) || 1);
+    if (count <= 1) {
+      out.textContent =
+        'Single-session run. Set >1 to fire plant/probe phases across parallel ' +
+        'sessions and scan for cross-session canary leaks (OWASP LLM02).';
+      return;
+    }
+    out.textContent =
+      `${count} sessions will fire in parallel. Plants run first (every session in ` +
+      'parallel), then probes. The post-run scanner flags any canary that surfaces ' +
+      'in a different session than the one that planted it.';
+  }
+
+  // ── 2.10 Mutation panel ─────────────────────────────────────────────
+  let mutatorRegistryCache = null;
+
+  async function loadMutatorRegistry() {
+    if (mutatorRegistryCache) return mutatorRegistryCache;
+    try {
+      mutatorRegistryCache = await API.call('list_mutators');
+    } catch (err) {
+      console.error('[matrix:list_mutators]', err);
+      mutatorRegistryCache = [];
+    }
+    return mutatorRegistryCache;
+  }
+
+  async function renderScenarioMatrixMutations() {
+    const root = $('#sc-matrix-mutations');
+    if (!root) return;
+    const registry = await loadMutatorRegistry();
+    const enabled = new Set(currentScenarioMatrix.enabled_mutators || []);
+
+    const families = new Map();
+    registry.forEach((m) => {
+      if (!families.has(m.family)) families.set(m.family, []);
+      families.get(m.family).push(m);
+    });
+
+    root.innerHTML = '';
+    families.forEach((mutators, family) => {
+      const section = document.createElement('div');
+      section.className = 'mutation-family';
+      const heading = document.createElement('div');
+      heading.className = 'mutation-family-heading';
+      heading.textContent = family;
+      section.appendChild(heading);
+      mutators.forEach((m) => {
+        const label = document.createElement('label');
+        label.className = 'mutation-toggle';
+        label.innerHTML = `
+          <input type="checkbox" data-mutator-id="${esc(m.id)}" ${enabled.has(m.id) ? 'checked' : ''}>
+          <span>${esc(m.id)}</span>
+        `;
+        const cb = label.querySelector('input');
+        cb.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            if (!currentScenarioMatrix.enabled_mutators.includes(m.id)) {
+              currentScenarioMatrix.enabled_mutators.push(m.id);
+            }
+          } else {
+            currentScenarioMatrix.enabled_mutators =
+              currentScenarioMatrix.enabled_mutators.filter((x) => x !== m.id);
+          }
+          updateMutationCounter();
+        });
+        section.appendChild(label);
+      });
+      root.appendChild(section);
+    });
+
+    const cap = $('#sc-matrix-mutations-cap');
+    if (cap) {
+      cap.value = currentScenarioMatrix.max_variants_per_seed != null
+        ? currentScenarioMatrix.max_variants_per_seed
+        : '';
+    }
+    updateMutationCounter();
+  }
+
+  function updateMutationCounter() {
+    const out = $('#sc-matrix-mutations-counter');
+    if (!out) return;
+    const count = (currentScenarioMatrix.enabled_mutators || []).length;
+    if (count === 0) {
+      out.textContent = 'Mutations disabled. Each seed prompt fires once.';
+      return;
+    }
+    const cap = currentScenarioMatrix.max_variants_per_seed;
+    const variantsPerSeed = cap != null ? Math.min(count, cap) : count;
+    out.textContent =
+      `${count} mutator(s) enabled · ` +
+      `up to ${variantsPerSeed} extra variant(s) per seed ` +
+      `(seed itself always fires).`;
     updateMatrixPromptCounter();
   }
 
@@ -2220,8 +2750,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const requestRepeatSum = currentScenarioMatrix.request_ids
       .reduce((sum, id) => sum + (currentScenarioMatrix.request_repeats[id] || 1), 0);
     const repeat = Math.max(1, parseInt($('#sc-repeat')?.value, 10) || 1);
-    const total = matched * Math.max(1, requestRepeatSum) * repeat;
-    out.textContent = `${matched} prompts × ${requestRepeatSum} request firing(s) × ${repeat} repeat = ${total} attempts (plus auth-chain prereqs).`;
+    const mutatorCount = (currentScenarioMatrix.enabled_mutators || []).length;
+    const cap = currentScenarioMatrix.max_variants_per_seed;
+    const extraVariants = mutatorCount === 0
+      ? 0
+      : (cap != null ? Math.min(mutatorCount, cap) : mutatorCount);
+    const variantsPerSeed = 1 + extraVariants;
+    const total = matched * variantsPerSeed * Math.max(1, requestRepeatSum) * repeat;
+    const mutationNote = extraVariants > 0
+      ? ` × (1 seed + ${extraVariants} mutation(s))`
+      : '';
+    out.textContent = `${matched} prompts${mutationNote} × ${requestRepeatSum} request firing(s) × ${repeat} repeat = ${total} attempts (plus auth-chain prereqs).`;
   }
 
   function estimateCurrentScenarioTotal() {
@@ -2247,6 +2786,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Mutation cap input.
+  document.addEventListener('input', (e) => {
+    if (e.target && e.target.id === 'sc-matrix-mutations-cap') {
+      const v = Number(e.target.value);
+      currentScenarioMatrix.max_variants_per_seed =
+        Number.isFinite(v) && v > 0 ? Math.floor(v) : null;
+      updateMutationCounter();
+    }
+    if (e.target && e.target.id === 'sc-matrix-session-count') {
+      const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+      currentScenarioMatrix.session_count = v;
+      updateMultiSessionVisibility();
+      updateMultiSessionHint();
+    }
+    if (e.target && e.target.id === 'sc-matrix-session-header-name') {
+      currentScenarioMatrix.session_header_name = e.target.value.trim();
+    }
+  });
+
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'sc-matrix-session-identity-kind') {
+      currentScenarioMatrix.session_identity_kind = e.target.value;
+      updateMultiSessionVisibility();
+    }
+  });
+
   $('#sc-repeat')?.addEventListener('input', updateMatrixPromptCounter);
 
   // ── Save scenario header ───────────────────────────────────────────
@@ -2265,6 +2830,21 @@ document.addEventListener('DOMContentLoaded', () => {
         categories: [...currentScenarioMatrix.categories],
       },
       shared_session: !!currentScenarioMatrix.shared_session,
+      mutations: (currentScenarioMatrix.enabled_mutators || []).length === 0
+        ? null
+        : {
+            enabled_mutators: [...currentScenarioMatrix.enabled_mutators],
+            max_variants_per_seed: currentScenarioMatrix.max_variants_per_seed,
+          },
+      session_count: (currentScenarioMatrix.session_count || 1) > 1
+        ? currentScenarioMatrix.session_count
+        : null,
+      session_identity: (currentScenarioMatrix.session_count || 1) > 1
+        ? buildSessionIdentityPayload(
+            currentScenarioMatrix.session_identity_kind || 'cookie_jar',
+            currentScenarioMatrix.session_header_name || ''
+          )
+        : null,
     };
     try {
       await API.call('update_scenario', data);
@@ -2316,12 +2896,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#btn-save-scenario').click();
     await new Promise(r => setTimeout(r, 300)); // brief wait for save
 
-    $('#btn-stop-scenario').disabled = false;
-    $('#scenario-progress').style.display = '';
-    $('#sc-progress-bar').style.width = '0%';
-    $('#sc-progress-completed').textContent = '0';
-    $('#sc-progress-total').textContent = '0';
-    $('#sc-progress-errors').textContent = '0';
     setTopbarProgress(0, estimateCurrentScenarioTotal(), 'running');
 
     try {
@@ -2337,15 +2911,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       toast(err.message, 'error');
     } finally {
-      $('#btn-stop-scenario').disabled = true;
       stopProgressPoll();
     }
   }
 
-  $('#btn-stop-scenario').addEventListener('click', async () => {
+  $('#btn-topbar-stop')?.addEventListener('click', async () => {
     try {
       if (!currentRunId) {
-        toast('No scenario run is active right now', 'info');
+        toast('No run is active right now', 'info');
         return;
       }
       const result = await API.call('stop_run', { run_id: currentRunId });
@@ -2443,6 +3016,44 @@ document.addEventListener('DOMContentLoaded', () => {
       try { engagementDetail.scenarios = await API.call('list_scenarios', {}); } catch (_err) { engagementDetail.scenarios = []; }
     }
   }
+
+  // Populate the scenario combobox in the engagement detail header.
+  // The chosen scenario is held in engagementDetail.activeScenarioId; the
+  // binding is persisted to engagement.yaml by start_scenario_run when the
+  // user fires the engagement (no separate save command needed).
+  function populateEngagementScenarioSelect() {
+    const sel = $('#eng-detail-scenario-select');
+    if (!sel) return;
+    const scenarios = engagementDetail.scenarios || [];
+    const currentId = engagementDetail.activeScenarioId || '';
+    const opts = ['<option value="">—</option>'];
+    let foundCurrent = false;
+    scenarios.forEach((s) => {
+      if (s.id === currentId) foundCurrent = true;
+      opts.push(`<option value="${esc(s.id)}">${esc(s.name || s.id)}</option>`);
+    });
+    if (currentId && !foundCurrent) {
+      opts.push(`<option value="${esc(currentId)}">(deleted scenario: ${esc(currentId)})</option>`);
+    }
+    sel.innerHTML = opts.join('');
+    sel.value = currentId;
+  }
+
+  $('#eng-detail-scenario-select')?.addEventListener('change', (ev) => {
+    engagementDetail.activeScenarioId = ev.target.value || null;
+    updateEngagementActionButtons();
+  });
+
+  $('#btn-eng-detail-copy-endpoint')?.addEventListener('click', async () => {
+    const url = $('#eng-detail-target')?.dataset.fullUrl || '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Endpoint URL copied', 'success');
+    } catch (_err) {
+      toast('Could not copy to clipboard', 'error');
+    }
+  });
 
   function resolveTargetFromResults(results) {
     const requestUrl = String(results.find(r => r.request_url)?.request_url || '').trim();
@@ -2693,7 +3304,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateEngagementHeader(run, results) {
     const target = resolveTargetFromResults(results);
     engagementDetail.targetMatch = target;
-    engagementDetail.activeScenarioId = run?.scenario_id || null;
+    // Prefer the run's recorded scenario_id; fall back to the engagement's
+    // persisted target binding so fresh engagements (no runs yet) still
+    // expose a default scenario for the ▶ Run button.
+    if (run?.scenario_id) {
+      engagementDetail.activeScenarioId = run.scenario_id;
+    }
     engagementDetail.scenarioName = lookupScenarioNameForRun(run);
 
     const endCandidates = [...results]
@@ -2702,8 +3318,15 @@ document.addEventListener('DOMContentLoaded', () => {
       .sort();
     const endAt = endCandidates[endCandidates.length - 1] || '';
 
-    $('#eng-detail-target').textContent = target.name || '—';
-    $('#eng-detail-scenario').textContent = engagementDetail.scenarioName || '—';
+    const endpointEl = $('#eng-detail-target');
+    const fullEndpoint = target.url || target.name || '';
+    const displayEndpoint = target.name || '—';
+    endpointEl.textContent = displayEndpoint;
+    endpointEl.title = fullEndpoint || '—';
+    endpointEl.dataset.fullUrl = fullEndpoint;
+    const copyBtn = $('#btn-eng-detail-copy-endpoint');
+    if (copyBtn) copyBtn.style.display = fullEndpoint ? '' : 'none';
+    populateEngagementScenarioSelect();
     $('#eng-detail-status').textContent = run?.status || '—';
     $('#eng-detail-start').textContent = formatEngagementDateTime(run?.started_at || '');
     $('#eng-detail-end').textContent = formatEngagementDateTime(endAt);
@@ -2796,8 +3419,19 @@ document.addEventListener('DOMContentLoaded', () => {
     engagementDetail.slug = eng.slug;
     engagementDetail.name = result.name || eng.name;
     engagementDetail.activeRunId = null;
+    breadcrumbState.runId = null;
+    updateBreadcrumb();
     engagementDetail.resultsByRunId.clear();
-    engagementDetail.activeScenarioId = null;
+    // Seed activeScenarioId from the engagement's persisted target binding
+    // (engagement.yaml). loadRunResults later overwrites this from the run
+    // header, but for a fresh engagement with no runs yet this is the only
+    // way the ▶ Run button knows what to fire.
+    try {
+      const meta = await API.call('get_engagement', { slug: eng.slug });
+      engagementDetail.activeScenarioId = meta?.target?.scenario_id || null;
+    } catch (_) {
+      engagementDetail.activeScenarioId = null;
+    }
 
     $('#eng-detail-title').textContent = engagementDetail.name;
     $('#eng-detail-slug').textContent = `/engagements/${eng.slug}`;
@@ -2920,7 +3554,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (activeEngagementSlug === eng.slug) {
         activeEngagementSlug = null;
         dbOpen = false;
-        $('#breadcrumb-engagement').textContent = 'no engagement open';
+        breadcrumbState.engagementName = null;
+        breadcrumbState.runId = null;
+        updateBreadcrumb();
       }
       // Also drop any archive shadow we kept for the row.
       unarchiveEngagementSlug(eng.slug);
@@ -2946,6 +3582,7 @@ document.addEventListener('DOMContentLoaded', () => {
       displayTotal || 0,
       ev.error ? 'error' : (ev.finished ? 'done' : 'running'),
     );
+    updateTopbarDetailFromProgress({ ...ev, total: displayTotal || ev.total });
 
     setLiveActivityState(runId, {
       seq: Number.isFinite(Number(ev.seq)) ? Number(ev.seq) : null,
@@ -3087,6 +3724,7 @@ document.addEventListener('DOMContentLoaded', () => {
           engagementSlug,
           switchToResultsTab: false,
           suppressErrors: true,
+          silentRefresh: true,
         });
 
         const updated = (engagementDetail.runs || []).find((r) => r.id === runId);
@@ -3270,7 +3908,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // applyAnalyzerAvailabilityToRows() leaves it alone.
       btn.dataset.analyzing = 'true';
       btn.disabled = false;
-      btn.textContent = 'Cancel';
+      btn.innerHTML = ICONS.cancel;
       btn.setAttribute('aria-label', 'Cancel analysis');
       btn.title = 'Cancel this analysis';
     }
@@ -3282,7 +3920,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (p.run_id !== runId) return;
         // Inline progress on the row's button: "Cancel · 3/12".
         if (btn && !p.finished && Number.isFinite(p.total) && p.total > 0) {
-          btn.textContent = `Cancel · ${p.processed || 0}/${p.total}`;
+          btn.innerHTML = ICONS.cancel;
+          btn.title = `Cancel this analysis (${p.processed || 0}/${p.total})`;
           btn.setAttribute('aria-label', `Cancel analysis, ${p.processed || 0} of ${p.total}`);
         }
         if (p.error) {
@@ -3300,6 +3939,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // Refresh results + report tab so verdicts/HTML show up.
             await loadRunResults(runId, { engagementSlug, switchToResultsTab: false }).catch(() => {});
+            // Refresh the runs list so the green "analyzed" check appears
+            // on the row without requiring a manual reload.
+            await loadRuns({ engagementSlug }).catch(() => {});
           }
         }
       });
@@ -3358,7 +4000,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="run-actions-cell">
             ${stopBtnHtml}
             <button class="btn-icon btn-rerun-run" title="Re-run with the same payloads"  aria-label="Re-run">${ICONS.rerun}</button>
-            <button class="btn-icon btn-analyze-run" title="Analyze this run" aria-label="Analyze">${ICONS.analyze}</button>
+            ${r.analyzed ? `<span class="run-analyzed-mark" title="This run has been analyzed" aria-label="Analyzed">${ICONS.analyzed}</span>` : ''}
+            <button class="btn-icon btn-analyze-run" title="${r.analyzed ? 'Re-analyze this run' : 'Analyze this run'}" aria-label="${r.analyzed ? 'Re-analyze' : 'Analyze'}">${ICONS.analyze}</button>
             <button class="btn-icon btn-export-md-run"  title="Export Markdown report"  aria-label="Export MD">${ICONS.exportMd}</button>
             <button class="btn-icon btn-export-pdf-run" title="Export PDF (via print)"  aria-label="Export PDF">${ICONS.exportPdf}</button>
             <button class="btn-icon btn-delete-run" title="Delete run permanently (removes all files)"  aria-label="Delete">${ICONS.archive}</button>
@@ -3381,6 +4024,9 @@ document.addEventListener('DOMContentLoaded', () => {
             API.call('cancel_analysis', { run_id: r.id }).catch((err) => {
               toast(`Cancel failed: ${err.message}`, 'error');
             });
+            return;
+          }
+          if (r.analyzed && !window.confirm('Re-analyze this run? Existing verdicts will be overwritten.')) {
             return;
           }
           analyzeRun({ engagementSlug, runId: r.id });
@@ -3424,14 +4070,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function loadRunResults(runId, { engagementSlug = activeEngagementSlug, switchToResultsTab = false, suppressErrors = false } = {}) {
+  async function loadRunResults(runId, { engagementSlug = activeEngagementSlug, switchToResultsTab = false, suppressErrors = false, silentRefresh = false } = {}) {
     try {
       engagementDetail.activeRunId = runId;
+      breadcrumbState.runId = runId;
+      updateBreadcrumb();
       markActiveRunRow(runId);
       $('#run-results-section').style.display = '';
       $('#run-results-title').textContent = `Results · ${runId}`;
       const tbody = $('#results-tbody');
-      tbody.innerHTML = '<tr><td colspan="9" style="font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;padding:20px;">loading results…</td></tr>';
+      if (!silentRefresh) {
+        tbody.innerHTML = '<tr><td colspan="9" style="font-family:var(--mono);font-size:11px;color:var(--text-3);text-align:center;padding:20px;">loading results…</td></tr>';
+      }
       if (switchToResultsTab) {
         setEngagementDetailTab('results');
         $('#run-results-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -3467,9 +4117,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const tr = document.createElement('tr');
         tr.className = 'clickable';
         tr.dataset.triageStatus = triageStatus;
+        const leakBadge = Array.isArray(r.leaks) && r.leaks.length > 0
+          ? `<span class="leak-badge" title="Cross-session canary from ${esc(
+              r.leaks.map(l => l.planted_session).join(', ')
+            )} surfaced here">leak</span>`
+          : '';
+        const phaseBadge = r.phase && r.phase !== 'any'
+          ? `<span class="phase-badge phase-${esc(r.phase)}" title="phase: ${esc(r.phase)}">${esc(r.phase)}</span>`
+          : '';
         tr.innerHTML = `
           <td>${r.step_order || '-'}</td>
-          <td>${esc(r.session_label || '-')}</td>
+          <td>${esc(r.session_label || '-')} ${phaseBadge} ${leakBadge}</td>
           <td><code>${esc(r.prompt_id)}</code></td>
           <td><span class="${statusClass}">${statusText}</span></td>
           <td>${engagementVerdictBadgeHtml(r)}</td>
@@ -3937,6 +4595,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function exportRunMd(runId) {
     if (!engagementDetail.slug || !runId) return;
+    // Section 7.2: prefer the canonical analyzer-rendered Markdown when
+    // the run has been analyzed. Falls back to the client-side raw-results
+    // export so unanalyzed runs can still be shared.
+    try {
+      const analyzerMd = await API.call('read_report_md', {
+        engagementSlug: engagementDetail.slug,
+        runId,
+      });
+      if (analyzerMd) {
+        const exported = await API.call('save_markdown_export', {
+          engagement_slug: engagementDetail.slug,
+          run_id: runId,
+          markdown: analyzerMd,
+        });
+        toastAction('Markdown report exported', 'Export öffnen', () => API.call('open_export_path', {
+          path: exported.path,
+        }), 'success');
+        return;
+      }
+    } catch (err) {
+      console.warn('[export-md] canonical analyzer markdown unavailable, falling back:', err);
+    }
+
     await ensureRunResultsLoaded(runId);
     const results = engagementDetail.resultsByRunId.get(runId) || [];
     const run = engagementDetail.runs.find(r => r.id === runId) || null;
@@ -3986,6 +4667,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (engagementDetail.activeRunId === runId) {
         engagementDetail.activeRunId = null;
         engagementDetail.resultsByRunId.delete(runId);
+        breadcrumbState.runId = null;
+        updateBreadcrumb();
         $('#run-results-section').style.display = 'none';
       }
       await loadRuns({
@@ -4129,7 +4812,98 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="detail-meta-value">${esc(value)}</div>
       </div>
     `).join('');
+    // Replay panel: pre-fill textarea with the original prompt and remember
+    // the source attempt so the Fire button can call replay_attempt.
+    replayContext.runId = r.run_id || null;
+    replayContext.seq = Number.isFinite(Number(r.seq)) ? Number(r.seq) : null;
+    replayContext.originalPrompt = r.prompt_text || '';
+    const ta = $('#replay-prompt');
+    if (ta) ta.value = replayContext.originalPrompt;
+    const status = $('#replay-status');
+    if (status) status.textContent = '—';
+    const out = $('#replay-result');
+    if (out) { out.hidden = true; out.innerHTML = ''; }
     setHidden($('#result-detail'), false);
+  }
+
+  // Replay panel state for the active result-detail modal.
+  const replayContext = {
+    runId: null,
+    seq: null,
+    originalPrompt: '',
+    activeReplayRunId: null,
+  };
+
+  $('#btn-replay-reset')?.addEventListener('click', () => {
+    const ta = $('#replay-prompt');
+    if (ta) ta.value = replayContext.originalPrompt;
+  });
+
+  $('#btn-replay-fire')?.addEventListener('click', async () => {
+    if (!replayContext.runId || replayContext.seq == null) {
+      toast('No attempt selected to replay', 'error');
+      return;
+    }
+    const ta = $('#replay-prompt');
+    const edited = ta ? ta.value : '';
+    const override = edited !== replayContext.originalPrompt ? edited : null;
+    const btn = $('#btn-replay-fire');
+    const status = $('#replay-status');
+    const out = $('#replay-result');
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'firing…';
+    if (out) { out.hidden = true; out.innerHTML = ''; }
+    try {
+      const replayRunId = await API.call('replay_attempt', {
+        engagement_slug: activeEngagementSlug,
+        run_id: replayContext.runId,
+        seq: replayContext.seq,
+        prompt_override: override,
+      });
+      replayContext.activeReplayRunId = replayRunId;
+      if (status) status.textContent = `running · ${replayRunId}`;
+      // Wait for the replay run to finish, then load its attempt + response.
+      await pollReplayCompletion(replayRunId);
+    } catch (err) {
+      if (status) status.textContent = `error: ${err.message}`;
+      toast(`Replay failed: ${err.message}`, 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
+  async function pollReplayCompletion(replayRunId, attempts = 60) {
+    const status = $('#replay-status');
+    const out = $('#replay-result');
+    for (let i = 0; i < attempts; i += 1) {
+      await new Promise((res) => setTimeout(res, 500));
+      try {
+        const records = await API.call('read_run_attempts', {
+          engagement_slug: activeEngagementSlug,
+          run_id: replayRunId,
+        });
+        const attempt = (records || []).find((a) => a && a.seq);
+        if (!attempt) continue;
+        // We have an attempt; fetch its response body and render.
+        const body = await API.call('read_response_body', {
+          engagement_slug: activeEngagementSlug,
+          run_id: replayRunId,
+          seq: attempt.seq,
+        }).catch(() => '');
+        if (status) status.textContent = `done · ${replayRunId} · status ${attempt.response?.status ?? '—'}`;
+        if (out) {
+          out.hidden = false;
+          out.innerHTML = `
+            <div><strong>Status:</strong> ${esc(String(attempt.response?.status ?? '—'))}</div>
+            <div><strong>Latency:</strong> ${esc(String(attempt.timing?.duration_ms ?? '—'))} ms</div>
+            <pre>${esc(body || '(no response body)')}</pre>`;
+        }
+        return;
+      } catch (_err) {
+        // transient — keep polling
+      }
+    }
+    if (status) status.textContent = `timed out waiting for ${replayRunId}`;
   }
 
   $('#detail-source-tabs').addEventListener('click', (e) => {
@@ -4171,11 +4945,6 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const run = await API.call('get_run_progress', { run_id: runId });
         if (run) {
-          const pct = run.total_prompts > 0 ? (run.completed / run.total_prompts * 100) : 0;
-          $('#sc-progress-bar').style.width = `${pct}%`;
-          $('#sc-progress-completed').textContent = run.completed;
-          $('#sc-progress-total').textContent = run.total_prompts;
-          $('#sc-progress-errors').textContent = run.errors;
           setTopbarProgress(
             run.completed,
             run.total_prompts,

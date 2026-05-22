@@ -477,6 +477,84 @@ input, select, textarea {
   color: var(--critical);
 }
 
+.topbar-stop-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(231, 234, 244, 0.28);
+  border-radius: 4px;
+  color: inherit;
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1;
+}
+.topbar-progress[data-state="running"] .topbar-stop-btn {
+  display: inline-flex;
+}
+.topbar-stop-btn:hover { background: rgba(231, 234, 244, 0.08); }
+.topbar-stop-btn:active { background: rgba(231, 234, 244, 0.16); }
+
+/* The bar + count are inside a button that toggles the detail panel.
+   Keep it visually identical to the surrounding text when idle, and add a
+   subtle hover hint while a run is active. */
+.topbar-progress-toggle {
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  white-space: pre;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+}
+.topbar-progress[data-state="running"] .topbar-progress-toggle,
+.topbar-progress[data-state="done"] .topbar-progress-toggle,
+.topbar-progress[data-state="error"] .topbar-progress-toggle {
+  cursor: pointer;
+}
+.topbar-progress[data-state="running"] .topbar-progress-toggle:hover {
+  background: rgba(231, 234, 244, 0.08);
+}
+
+/* Expand panel: floats just below the topbar, anchored to the right edge
+   of the topbar-progress region. Closed by default. */
+.topbar-progress-detail {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 360px;
+  background: var(--bg-1, #1c1f26);
+  border: 1px solid rgba(231, 234, 244, 0.18);
+  border-radius: 6px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+  color: rgba(231, 234, 244, 0.92);
+  font-size: 12px;
+}
+.topbar-progress-detail[hidden] { display: none; }
+.topbar-progress-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 0;
+}
+.topbar-progress-detail-grid dt {
+  color: rgba(231, 234, 244, 0.55);
+  font-weight: 500;
+}
+.topbar-progress-detail-grid dd {
+  margin: 0;
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
 .topbar-right {
   display: flex;
   gap: 10px;
@@ -1046,7 +1124,7 @@ input, select, textarea {
 }
 .search-box input {
   width: 100%;
-  padding: 6px 32px 6px 28px;
+  padding: 6px 32px 6px 32px;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1346,6 +1424,58 @@ input, select, textarea {
   accent-color: var(--accent);
 }
 .mutation-count { color: var(--text-1); }
+
+/* Section 1.8: multi-session phase + leak badges in results table. */
+.leak-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: var(--critical, #b40000);
+  border-radius: 3px;
+}
+.phase-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--mono);
+  text-transform: lowercase;
+  color: var(--text-2);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.phase-badge.phase-plant { color: #b46d00; border-color: #b46d00; }
+.phase-badge.phase-probe { color: #00667a; border-color: #00667a; }
+
+.mutation-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 6px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.mutation-family {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+.mutation-family-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  margin-bottom: 2px;
+}
 .char-count { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--text-2); }
 
 /* ── Response stream ───────────────────────────────────────────────── */
@@ -1536,7 +1666,7 @@ input, select, textarea {
 /* ── Triage cell controls ───────────────────────────────────────────── */
 .triage-cell {
   white-space: nowrap;
-  min-width: 120px;
+  min-width: 170px;
 }
 
 .triage-select {
@@ -1568,8 +1698,11 @@ input, select, textarea {
 }
 .triage-note-btn:hover { color: var(--text-1); }
 
+input.triage-note-input,
 .triage-note-input {
   display: inline-block;
+  position: relative;
+  z-index: 2;
   margin-top: 4px;
   width: 140px;
   font-family: var(--mono);
@@ -1577,9 +1710,10 @@ input, select, textarea {
   padding: 2px 4px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  background: var(--bg-1);
+  background-color: var(--bg-0);
   color: var(--text-1);
 }
+input.triage-note-input:focus,
 .triage-note-input:focus { outline: 1px solid var(--accent); }
 
 /* ── Signal highlights + pills ─────────────────────────────────────── */
@@ -2729,6 +2863,47 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
 }
 .modal-close:hover { color: var(--text-0); }
 .detail-section { margin-bottom: 1rem; }
+
+.replay-controls textarea {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-0);
+  color: var(--text-1);
+  resize: vertical;
+  margin-top: 0.3rem;
+}
+.replay-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0.5rem;
+}
+.replay-status {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--text-2);
+}
+.replay-result {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-0);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+.replay-result[hidden] { display: none; }
+.replay-result pre {
+  margin: 0.3rem 0 0;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .detail-source-tabs {
   margin-bottom: 0;
 }
@@ -3387,6 +3562,12 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
   flex-wrap: wrap;
 }
 
+.eng-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 #eng-detail-title {
   margin: 0;
   font-family: var(--mono);
@@ -3405,16 +3586,69 @@ tr:hover td { background: var(--bg-2); }   /* neutral, not red-tinted */
 
 .eng-detail-meta {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 14px;
+  flex-wrap: nowrap;
+  align-items: center;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-2);
+  min-width: 0;
+}
+
+.eng-detail-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .eng-detail-meta strong {
   color: var(--text-0);
   font-weight: 600;
+}
+
+.eng-detail-endpoint-cell {
+  flex: 1 1 auto !important;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.eng-detail-endpoint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.eng-detail-copy-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 5px;
+  margin-left: 2px;
+  flex: 0 0 auto;
+}
+
+.eng-detail-copy-btn:hover {
+  color: var(--text-0);
+  background: var(--bg-1);
+}
+
+.eng-detail-scenario-select {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-0);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin-left: 2px;
 }
 
 .eng-detail-tabs {
@@ -4308,6 +4542,17 @@ iframe.eng-report-preview {
 #runs-tbody tr:hover .btn-icon,
 #runs-tbody tr:focus-within .btn-icon {
   opacity: 1;
+}
+
+/* "Analyzed" check that sits next to the analyze button in the runs list.
+   Always visible (not faded on row hover like the action buttons). */
+.run-analyzed-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
 }
 
 /* ── Icon-only action buttons (used in runs table rows) ─────────────── */

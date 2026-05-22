@@ -15,6 +15,7 @@ pub mod triage;
 pub mod types;
 pub mod verdicts;
 pub mod write;
+pub mod yaml_dir;
 
 pub use paths::HammorPaths;
 pub use write::atomic_write;

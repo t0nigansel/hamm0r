@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{anyhow, Context as _};
@@ -12,47 +12,7 @@ use crate::write::atomic_write;
 /// in that file. Missing or empty directories return an empty map; they are
 /// not treated as errors so first-launch works before any prompts exist.
 pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Vec<PromptEntry>>> {
-    if !dir.exists() {
-        return Ok(HashMap::new());
-    }
-
-    let mut map = HashMap::new();
-
-    for entry in std::fs::read_dir(dir)
-        .with_context(|| format!("cannot read prompts directory: {}", dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
-            continue;
-        }
-
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_owned();
-
-        let raw = match std::fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[storage] skipping {}: cannot read: {}", path.display(), e);
-                continue;
-            }
-        };
-
-        match serde_yaml::from_str::<Vec<PromptEntry>>(&raw) {
-            Ok(prompts) => {
-                map.insert(stem, prompts);
-            }
-            Err(e) => {
-                eprintln!("[storage] skipping {}: cannot parse: {}", path.display(), e);
-            }
-        }
-    }
-
-    Ok(map)
+    crate::yaml_dir::load_all(dir, "prompts")
 }
 
 /// Read the prompts in a single category file. Returns an empty list when
@@ -141,7 +101,7 @@ pub fn delete_one(dir: &Path, category: &str, id: &str) -> anyhow::Result<bool> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{PromptMode, Severity};
+    use crate::types::{Phase, PromptMode, Severity};
     use crate::write::atomic_write;
     use tempfile::TempDir;
 
@@ -156,6 +116,7 @@ mod tests {
                 turns: vec![],
                 tags: vec!["direct".into()],
                 owasp_ref: Some("A01".into()),
+                phase: Phase::Any,
             },
             PromptEntry {
                 id: "inj-002".into(),
@@ -166,6 +127,7 @@ mod tests {
                 turns: vec![],
                 tags: vec!["direct".into()],
                 owasp_ref: Some("A01".into()),
+                phase: Phase::Any,
             },
         ]
     }

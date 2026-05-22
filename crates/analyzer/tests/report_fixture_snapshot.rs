@@ -41,6 +41,7 @@ fn fixture_run_renders_stable_report_html() {
             RunRecord::Footer(footer) => {
                 finished_at = Some(footer.finished_at);
             }
+            RunRecord::LeakDetected(_) => {}
         }
     }
 
@@ -75,6 +76,7 @@ fn fixture_run_renders_stable_report_html() {
         }),
         attempts: report_attempts,
         verdicts: latest_verdicts,
+        triage: Vec::new(),
     });
 
     let html = render_html_report(&report_data).expect("fixture report should render");

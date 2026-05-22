@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Context as _;
@@ -20,7 +20,7 @@ pub enum RequestReference {
 /// Scan Targets and Scenarios for references to `request_id`.
 ///
 /// `targets_dir` and `scenarios_dir` are the canonical user-folder paths.
-/// Either may be absent — missing directories produce no references.
+/// Either may be absent Ã¢â‚¬â€ missing directories produce no references.
 pub fn references(
     targets_dir: &Path,
     scenarios_dir: &Path,
@@ -53,47 +53,7 @@ pub fn references(
 
 /// Load all request templates from `dir`, keyed by filename stem.
 pub fn load_all(dir: &Path) -> anyhow::Result<HashMap<String, Request>> {
-    if !dir.exists() {
-        return Ok(HashMap::new());
-    }
-
-    let mut map = HashMap::new();
-
-    for entry in std::fs::read_dir(dir)
-        .with_context(|| format!("cannot read requests directory: {}", dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.extension().and_then(|e| e.to_str()) != Some("yaml") {
-            continue;
-        }
-
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_owned();
-
-        let raw = match std::fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[storage] skipping {}: cannot read: {}", path.display(), e);
-                continue;
-            }
-        };
-
-        match serde_yaml::from_str::<Request>(&raw) {
-            Ok(request) => {
-                map.insert(stem, request);
-            }
-            Err(e) => {
-                eprintln!("[storage] skipping {}: cannot parse: {}", path.display(), e);
-            }
-        }
-    }
-
-    Ok(map)
+    crate::yaml_dir::load_all(dir, "requests")
 }
 
 /// Remove a request YAML file by id. Returns Ok even if the file did not exist.
@@ -148,6 +108,7 @@ mod tests {
             timeout_seconds: 50,
             adapter: Default::default(),
             tag: None,
+            test_payload: None,
         }
     }
 
@@ -233,6 +194,9 @@ mod tests {
             request_ids: vec!["openai-chat".into()],
             library: None,
             shared_session: false,
+            mutations: None,
+            session_count: None,
+            session_identity: None,
         };
         crate::scenarios::save(&scenarios_dir, &scenario).unwrap();
 

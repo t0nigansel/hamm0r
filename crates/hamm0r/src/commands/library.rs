@@ -1,4 +1,4 @@
-use std::path::Path;
+﻿use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use storage::prompts;
@@ -64,13 +64,13 @@ fn write_bundled(dir: &Path) -> anyhow::Result<SeedResult> {
     Ok(SeedResult { loaded, skipped })
 }
 
-/// Called from `first_launch_hook` — seeds missing files only.
+/// Called from `first_launch_hook` â€” seeds missing files only.
 pub fn seed_on_first_launch(dir: &Path) -> anyhow::Result<SeedResult> {
     std::fs::create_dir_all(dir)?;
     write_bundled(dir)
 }
 
-/// Tauri command called by the Library → Seed button.
+/// Tauri command called by the Library â†’ Seed button.
 #[tauri::command]
 pub fn seed_library(paths: State<'_, AppPaths>, _update: bool) -> Result<SeedResult, CommandError> {
     let dir = paths.0.prompts_dir();
@@ -78,12 +78,12 @@ pub fn seed_library(paths: State<'_, AppPaths>, _update: bool) -> Result<SeedRes
     write_bundled(&dir).map_err(Into::into)
 }
 
-// ── Prompt CRUD ───────────────────────────────────────────────────────────────
+// â”€â”€ Prompt CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // The UI sees Prompts in human terms: a Name, a Text, a Severity, an
 // optional OWASP reference, and an optional bag of free-form tags. The
 // id field is auto-derived from the name on first save and never changes
-// thereafter — it remains the stable key used by run JSONL, verdict
+// thereafter â€” it remains the stable key used by run JSONL, verdict
 // logs, and Scenario provenance. The category is the YAML filename the
 // prompt lives in (one file per theme).
 
@@ -167,6 +167,7 @@ pub fn create_prompt(
         turns: Vec::new(),
         tags: dedupe_tags(dto.tags),
         owasp_ref: normalize_owasp_ref(dto.owasp_ref),
+        phase: storage::types::Phase::Any,
     };
     prompts::save_one(&paths.0.prompts_dir(), &category, &entry)?;
     Ok(entry)
@@ -190,7 +191,7 @@ pub fn update_prompt(
     }
 
     // If the user moved the prompt to a different category, remove the
-    // old row first. We never re-slug the id — see PromptEntry::id docs.
+    // old row first. We never re-slug the id â€” see PromptEntry::id docs.
     let dir = paths.0.prompts_dir();
     let map = prompts::load_all(&dir)?;
     let mut old_category: Option<String> = None;
@@ -213,6 +214,7 @@ pub fn update_prompt(
         turns: Vec::new(),
         tags: dedupe_tags(dto.tags),
         owasp_ref: normalize_owasp_ref(dto.owasp_ref),
+        phase: storage::types::Phase::Any,
     };
 
     if old_category != new_category {
@@ -306,7 +308,7 @@ mod tests {
         assert_eq!(slugify("Hello World!"), "hello-world");
         assert_eq!(slugify("  spaced  "), "spaced");
         assert_eq!(slugify("user/path-thing"), "user-path-thing");
-        assert_eq!(slugify("ÜberCool 🙃 attack"), "bercool-attack");
+        assert_eq!(slugify("ÃœberCool ðŸ™ƒ attack"), "bercool-attack");
         assert_eq!(slugify("---"), "");
     }
 
@@ -323,10 +325,10 @@ mod tests {
     #[test]
     fn unique_id_empty_falls_back_to_prompt_n() {
         let mut existing = HashSet::new();
-        let id = unique_id_from_name("🙃🙃🙃", &existing);
+        let id = unique_id_from_name("ðŸ™ƒðŸ™ƒðŸ™ƒ", &existing);
         assert_eq!(id, "prompt-2");
         existing.insert(id);
-        assert_eq!(unique_id_from_name("🙃🙃🙃", &existing), "prompt-3");
+        assert_eq!(unique_id_from_name("ðŸ™ƒðŸ™ƒðŸ™ƒ", &existing), "prompt-3");
     }
 
     #[test]

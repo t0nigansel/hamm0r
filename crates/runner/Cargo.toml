@@ -22,6 +22,9 @@ serde_json_path = "0.7"
 bytes = "1"
 # Regex extraction for response.extract
 regex = "1"
+# Section 1.3 of docs/ToDo.md — canary tokens hash (run_id, session_idx,
+# scenario_id) deterministically into a short string.
+sha2 = "0.10"
 
 [dev-dependencies]
 wiremock = "0.6"
