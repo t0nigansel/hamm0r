@@ -45,9 +45,7 @@ pub fn create(engagements_dir: &Path, meta: &EngagementMeta) -> anyhow::Result<(
 /// originally created with empty defaults.
 pub fn save_meta(engagements_dir: &Path, meta: &EngagementMeta) -> anyhow::Result<()> {
     ensure_safe_slug(&meta.slug)?;
-    let path = engagements_dir
-        .join(&meta.slug)
-        .join(ENGAGEMENT_YAML);
+    let path = engagements_dir.join(&meta.slug).join(ENGAGEMENT_YAML);
     let yaml = serde_yaml::to_string(meta).context("cannot serialise engagement")?;
     atomic_write(&path, yaml.as_bytes())
 }

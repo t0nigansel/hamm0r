@@ -17,10 +17,7 @@ use serde::de::DeserializeOwned;
 ///
 /// `kind` is the human-readable label used in error and log messages
 /// (e.g. `"requests"`, `"scenarios"`).
-pub fn load_all<T: DeserializeOwned>(
-    dir: &Path,
-    kind: &str,
-) -> anyhow::Result<HashMap<String, T>> {
+pub fn load_all<T: DeserializeOwned>(dir: &Path, kind: &str) -> anyhow::Result<HashMap<String, T>> {
     if !dir.exists() {
         return Ok(HashMap::new());
     }

@@ -227,9 +227,7 @@ pub async fn start_scenario_run(
     {
         if meta.target.scenario_id != scenario.id {
             meta.target.scenario_id = scenario.id.clone();
-            if let Err(e) =
-                storage::engagements::save_meta(&paths.0.engagements_dir(), &meta)
-            {
+            if let Err(e) = storage::engagements::save_meta(&paths.0.engagements_dir(), &meta) {
                 logger.0.error(
                     "runner",
                     None,
@@ -375,12 +373,13 @@ async fn dispatch_matrix_scenario(
     // existing matrix flow below — backward compatible.
     if scenario.session_count.unwrap_or(1) > 1 {
         let session_count = scenario.session_count.unwrap_or(1);
-        let identity = scenario
-            .session_identity
-            .clone()
-            .unwrap_or(storage::types::SessionIdentityConfig {
-                kind: storage::types::SessionIdentityKind::CookieJar,
-            });
+        let identity =
+            scenario
+                .session_identity
+                .clone()
+                .unwrap_or(storage::types::SessionIdentityConfig {
+                    kind: storage::types::SessionIdentityKind::CookieJar,
+                });
         let phased_prompts: Vec<runner::PhasedPayload> = payloads
             .iter()
             .map(|p| runner::PhasedPayload {
@@ -438,7 +437,8 @@ async fn dispatch_matrix_scenario(
 
         let engagement_dir_for_error = engagement_dir.clone();
         tokio::spawn(async move {
-            let result = runner::execute_multi_session_run(config, run_progress_emitter(app.clone())).await;
+            let result =
+                runner::execute_multi_session_run(config, run_progress_emitter(app.clone())).await;
             finalize_run_task(
                 result,
                 &app,
@@ -661,10 +661,9 @@ pub async fn replay_attempt(
     // explicit field; fall back to URL+method match (legacy logs).
     let registry = requests::load_all(&paths.0.requests_dir())?;
     let request: Request = match &original.request_id {
-        Some(id) => registry
-            .get(id)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Request '{id}' referenced by original attempt no longer exists"))?,
+        Some(id) => registry.get(id).cloned().ok_or_else(|| {
+            anyhow::anyhow!("Request '{id}' referenced by original attempt no longer exists")
+        })?,
         None => {
             let m = original.request.method.to_ascii_uppercase();
             let u = original.request.url.trim_end_matches('/').to_owned();
@@ -1042,7 +1041,9 @@ fn finalize_run_task(
     result: Result<(), runner::RunnerError>,
     app: &AppHandle,
     logger: &crate::logger::AppLogger,
-    active_runs_map: &std::sync::Arc<std::sync::Mutex<HashMap<String, runner::run::RunCancellation>>>,
+    active_runs_map: &std::sync::Arc<
+        std::sync::Mutex<HashMap<String, runner::run::RunCancellation>>,
+    >,
     engagement_dir_for_error: &std::path::Path,
     run_id: &str,
     error_label: &str,

@@ -1,4 +1,4 @@
-﻿use std::collections::HashMap;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -1114,7 +1114,10 @@ async fn per_request_repeat_multiplies_attempt_count() {
         .filter(|a| a.request.url.contains("/chat"))
         .count();
 
-    assert_eq!(login_count, 2, "login fires global_repeat ÃƒÆ’Ã¢â‚¬â€ 1 = 2 times");
+    assert_eq!(
+        login_count, 2,
+        "login fires global_repeat ÃƒÆ’Ã¢â‚¬â€ 1 = 2 times"
+    );
     assert_eq!(
         chat_count, 6,
         "chat fires global_repeat ÃƒÆ’Ã¢â‚¬â€ per_repeat = 6 times"
@@ -1172,10 +1175,7 @@ async fn matrix_run_with_mutations_records_mutation_id_per_attempt() {
     let mut registry: HashMap<String, Request> = HashMap::new();
     registry.insert(target.id.clone(), target.clone());
 
-    let enabled = vec![
-        "encoding.base64".to_owned(),
-        "encoding.rot13".to_owned(),
-    ];
+    let enabled = vec!["encoding.base64".to_owned(), "encoding.rot13".to_owned()];
     let variants = runner::mutation::expand_seed("hello", &enabled, None);
     assert_eq!(variants.len(), 3, "seed + 2 mutator variants");
 
@@ -1233,9 +1233,7 @@ async fn matrix_run_with_mutations_records_mutation_id_per_attempt() {
 
 // ── Section 1 (multi-session) integration tests ──────────────────────────
 
-use runner::multi_session::{
-    execute_multi_session_run, MultiSessionRunConfig, PhasedPayload,
-};
+use runner::multi_session::{execute_multi_session_run, MultiSessionRunConfig, PhasedPayload};
 use storage::types::{Phase, SessionIdentityConfig, SessionIdentityKind};
 
 fn echo_request(url: &str) -> Request {
@@ -1338,7 +1336,12 @@ async fn multi_session_plant_probe_leak_is_detected_and_recorded() {
             _ => None,
         })
         .collect();
-    assert_eq!(attempts.len(), 4, "expected 4 attempts, got {}", attempts.len());
+    assert_eq!(
+        attempts.len(),
+        4,
+        "expected 4 attempts, got {}",
+        attempts.len()
+    );
 
     // Every attempt should carry both session_id and phase.
     for a in &attempts {
@@ -1434,8 +1437,7 @@ async fn multi_session_no_leak_when_server_does_not_echo_canary() {
     };
     execute_multi_session_run(config, |_| {}).await.unwrap();
 
-    let records =
-        storage::runs::read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
+    let records = storage::runs::read_all(&tmp.path().join("runs").join("run-001.jsonl")).unwrap();
     let leaks: usize = records
         .iter()
         .filter(|r| matches!(r, RunRecord::LeakDetected(_)))

@@ -324,7 +324,10 @@ pub fn render_markdown_report(data: &ReportData) -> String {
                     md_escape_inline(&row.triage_note)
                 ));
             }
-            out.push_str(&format!("| Rationale | {} |\n\n", md_escape_inline(&row.rationale)));
+            out.push_str(&format!(
+                "| Rationale | {} |\n\n",
+                md_escape_inline(&row.rationale)
+            ));
             if !row.response_excerpt.is_empty() {
                 out.push_str("Response excerpt:\n\n");
                 out.push_str("```\n");
@@ -432,7 +435,9 @@ fn verdict_label(verdict: JudgeVerdict) -> String {
 }
 
 fn triage_status_label(entry: Option<&TriageEntry>) -> String {
-    let status = entry.map(|e| &e.status).unwrap_or(&TriageStatus::Unreviewed);
+    let status = entry
+        .map(|e| &e.status)
+        .unwrap_or(&TriageStatus::Unreviewed);
     match status {
         TriageStatus::Unreviewed => "unreviewed",
         TriageStatus::Confirmed => "confirmed",

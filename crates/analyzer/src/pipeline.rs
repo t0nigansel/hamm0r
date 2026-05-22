@@ -24,8 +24,7 @@ use crate::judge_with_llm;
 use crate::llm::LlmJudge;
 use crate::ollama::{judge_with_ollama, OllamaJudge};
 use crate::report::{
-    build_report_data, render_html_report, render_markdown_report, ReportAttempt,
-    ReportBuildInput,
+    build_report_data, render_html_report, render_markdown_report, ReportAttempt, ReportBuildInput,
 };
 use crate::{judge as judge_heuristic, to_verdict_entry, JudgeInput};
 use storage::atomic_write;
@@ -982,7 +981,10 @@ pub fn generate_report(engagement_dir: &Path, run_id: &str) -> anyhow::Result<Pa
     let markdown = render_markdown_report(&report_data);
     let md_path = markdown_report_path_for(engagement_dir, run_id);
     if let Err(err) = atomic_write(&md_path, markdown.as_bytes()) {
-        eprintln!("warning: could not write markdown report {}: {err}", md_path.display());
+        eprintln!(
+            "warning: could not write markdown report {}: {err}",
+            md_path.display()
+        );
     }
 
     Ok(report_path)

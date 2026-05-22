@@ -100,12 +100,7 @@ mod tests {
     };
     use tempfile::TempDir;
 
-    fn make_attempt(
-        seq: u32,
-        session: &str,
-        phase: &str,
-        body_file: Option<&str>,
-    ) -> RunRecord {
+    fn make_attempt(seq: u32, session: &str, phase: &str, body_file: Option<&str>) -> RunRecord {
         RunRecord::Attempt(Box::new(RunAttempt {
             seq,
             ts: "t".into(),
@@ -150,7 +145,10 @@ mod tests {
         }
     }
 
-    fn setup_engagement(records: &[RunRecord], responses: &[(&str, &str)]) -> (TempDir, std::path::PathBuf) {
+    fn setup_engagement(
+        records: &[RunRecord],
+        responses: &[(&str, &str)],
+    ) -> (TempDir, std::path::PathBuf) {
         let dir = TempDir::new().unwrap();
         let runs_dir = dir.path().join("runs");
         fs::create_dir_all(&runs_dir).unwrap();

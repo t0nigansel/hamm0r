@@ -19,8 +19,8 @@ use std::time::Instant;
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use storage::runs::{
-    LeakDetected, RequestEnvelope, ResponseEnvelope, RunAttempt, RunHeader, RunRecord,
-    RunStatus, Timing,
+    LeakDetected, RequestEnvelope, ResponseEnvelope, RunAttempt, RunHeader, RunRecord, RunStatus,
+    Timing,
 };
 use storage::types::{Phase, Request, SessionIdentityConfig, SessionIdentityKind};
 use storage::{atomic_write, runs};
@@ -125,10 +125,7 @@ fn build_sessions(
     Ok(out)
 }
 
-fn identity_header_for(
-    identity: &SessionIdentityConfig,
-    label: &str,
-) -> Option<(String, String)> {
+fn identity_header_for(identity: &SessionIdentityConfig, label: &str) -> Option<(String, String)> {
     match &identity.kind {
         SessionIdentityKind::CookieJar => None,
         SessionIdentityKind::ConversationHeader { header_name }
@@ -441,7 +438,8 @@ async fn fire_session_round(
                             false,
                         ),
                         Err(e) => {
-                            let timeout = matches!(&e, RunnerError::Http(inner) if inner.is_timeout());
+                            let timeout =
+                                matches!(&e, RunnerError::Http(inner) if inner.is_timeout());
                             (
                                 0u16,
                                 Some(e.to_string()),
@@ -520,9 +518,7 @@ async fn fire_session_round(
                         request_url: target_req.url.clone(),
                         request_headers: crate::redact::request_headers_for_log(target_req),
                         request_body_size: rendered_prompt.len() as u64,
-                        request_body: config
-                            .body_logging_enabled
-                            .then(|| rendered_prompt.clone()),
+                        request_body: config.body_logging_enabled.then(|| rendered_prompt.clone()),
                         response_status: status,
                         response_headers,
                         response_body_size: body_size,
@@ -603,10 +599,7 @@ fn write_synthetic_failed_attempt(
 
 /// Append a `LeakDetected` record (used by the scanner; also a public
 /// helper so tests can verify the round-trip).
-pub fn append_leak(
-    run_path: &std::path::Path,
-    leak: LeakDetected,
-) -> Result<(), RunnerError> {
+pub fn append_leak(run_path: &std::path::Path, leak: LeakDetected) -> Result<(), RunnerError> {
     runs::append(run_path, &RunRecord::LeakDetected(leak)).map_err(|e| anyhow::anyhow!(e))?;
     Ok(())
 }
@@ -640,7 +633,6 @@ fn write_header(
     });
     runs::append(run_path, &header).map_err(|e| anyhow::anyhow!(e).into())
 }
-
 
 fn iso_now() -> String {
     crate::run::iso_now()

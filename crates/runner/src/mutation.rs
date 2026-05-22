@@ -225,8 +225,8 @@ pub mod encoding {
             let mut out = String::with_capacity(seed.len());
             for b in seed.as_bytes() {
                 let c = *b;
-                let unreserved = c.is_ascii_alphanumeric()
-                    || matches!(c, b'-' | b'_' | b'.' | b'~');
+                let unreserved =
+                    c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'~');
                 if unreserved {
                     out.push(c as char);
                 } else {
@@ -281,7 +281,8 @@ pub mod encoding {
         let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
         let mut i = 0;
         while i + 3 <= input.len() {
-            let n = ((input[i] as u32) << 16) | ((input[i + 1] as u32) << 8) | (input[i + 2] as u32);
+            let n =
+                ((input[i] as u32) << 16) | ((input[i + 1] as u32) << 8) | (input[i + 2] as u32);
             out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
             out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
             out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
