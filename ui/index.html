@@ -410,6 +410,17 @@
                 <button class="chip active" data-category="">ALL</button>
               </div>
             </div>
+            <div class="lib-filter-group">
+              <div class="lib-filter-label">Strategy</div>
+              <div class="filter-chips" id="library-strategy-chips">
+                <button class="chip active" data-strategy="">ALL</button>
+                <button class="chip" data-strategy="naive">naive</button>
+                <button class="chip" data-strategy="escape_char">escape</button>
+                <button class="chip" data-strategy="ignore">ignore</button>
+                <button class="chip" data-strategy="fake_completion">fake_completion</button>
+                <button class="chip" data-strategy="combined">combined</button>
+              </div>
+            </div>
           </div>
           <div class="lib-header-right">
             <div class="search-box" style="width:180px">
@@ -476,6 +487,17 @@
                     <option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option>
                     <option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option>
                   </select>
+                </div>
+                <div class="form-row">
+                  <label for="pe-strategy">Strategy</label>
+                  <select id="pe-strategy">
+                    <option value="naive">naive</option>
+                    <option value="escape_char">escape_char</option>
+                    <option value="ignore">ignore</option>
+                    <option value="fake_completion">fake_completion</option>
+                    <option value="combined">combined</option>
+                  </select>
+                  <small class="hint">Attack-delivery strategy (Liu et&nbsp;al. 2024 / OPI taxonomy).</small>
                 </div>
                 <div class="form-row">
                   <label for="pe-tags">Tags (comma-separated)</label>
@@ -701,6 +723,23 @@
             </div>
 
             <div class="eng-detail-panel active" id="eng-panel-results">
+              <div id="asv-panel" class="asv-panel" style="display:none">
+                <div class="asv-summary">
+                  <span class="asv-summary-item"><span class="asv-label">ASV Overall</span> <strong id="asv-overall">—</strong></span>
+                  <span class="asv-summary-item"><span class="asv-label">Attempts</span> <strong id="asv-attempts">—</strong></span>
+                  <span class="asv-summary-item"><span class="asv-label">Verdicts</span> <strong id="asv-verdicts">—</strong></span>
+                </div>
+                <div class="asv-grid">
+                  <div class="asv-col">
+                    <h4>By Strategy</h4>
+                    <table class="asv-table" id="asv-by-strategy"></table>
+                  </div>
+                  <div class="asv-col">
+                    <h4>By Category</h4>
+                    <table class="asv-table" id="asv-by-category"></table>
+                  </div>
+                </div>
+              </div>
               <div id="runs-section">
                 <h3 id="runs-section-title" style="font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;color:var(--text-2);">Runs</h3>
                 <table id="runs-table">

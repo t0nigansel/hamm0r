@@ -2070,7 +2070,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // ── Shared prompt filter (used by library + picker) ──────────────
-  function applyPromptFilter(prompts, owaspFilter, searchText, categoryFilter = '') {
+  function applyPromptFilter(prompts, owaspFilter, searchText, categoryFilter = '', strategyFilter = '') {
     let result = prompts;
     if (owaspFilter === 'baseline') {
       result = result.filter(p => (p.tags || []).includes('baseline'));
@@ -2079,6 +2079,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (categoryFilter) {
       result = result.filter(p => String(p.category || '') === categoryFilter);
+    }
+    if (strategyFilter) {
+      // `strategy` is optional in YAML and defaults to `naive` server-side.
+      result = result.filter(p => (p.strategy || 'naive') === strategyFilter);
     }
     const q = (searchText || '').toLowerCase();
     if (q) {
@@ -2091,7 +2095,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Library: load and render ───────────────────────────────────────
-  let libraryFilter = { owasp: '', category: '', search: '' };
+  let libraryFilter = { owasp: '', category: '', search: '', strategy: '' };
   let libraryDebounce = null;
 
   // Last-known full prompt list. Populated by loadPrompts so report
@@ -2104,7 +2108,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const all = await API.call('list_prompts', {});
       cachedPrompts = all;
       renderLibraryCategoryChips(all);
-      const prompts = applyPromptFilter(all, libraryFilter.owasp, libraryFilter.search, libraryFilter.category);
+      const prompts = applyPromptFilter(all, libraryFilter.owasp, libraryFilter.search, libraryFilter.category, libraryFilter.strategy);
       renderPrompts(prompts);
       $('#prompt-count').textContent = `${prompts.length} prompts`;
     } catch (err) { toast(err.message, 'error'); }
@@ -2186,6 +2190,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  $$('#library-strategy-chips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $$('#library-strategy-chips .chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      libraryFilter.strategy = chip.dataset.strategy || '';
+      loadPrompts();
+    });
+  });
+
   // Library search
   $('#library-search').addEventListener('input', e => {
     clearTimeout(libraryDebounce);
@@ -2217,6 +2230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('#pe-category').value = found.category || '';
         $('#pe-owasp').value = p.owasp_ref || '';
         $('#pe-severity').value = (p.severity || 'LOW').toUpperCase();
+        $('#pe-strategy').value = p.strategy || 'naive';
         $('#pe-tags').value = (p.tags || []).join(', ');
         if (idHint) idHint.textContent = `id: ${p.id} (unchanged on save)`;
       } catch (err) { toast(err.message, 'error'); }
@@ -2248,6 +2262,7 @@ document.addEventListener('DOMContentLoaded', () => {
       mode: 'single',
       tags: $('#pe-tags').value.split(',').map(t => t.trim()).filter(Boolean),
       owasp_ref: $('#pe-owasp').value || null,
+      strategy: $('#pe-strategy').value || 'naive',
     };
     try {
       if (editingPromptId) {
@@ -2908,11 +2923,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('#btn-topbar-stop')?.addEventListener('click', async () => {
     try {
-      if (!currentRunId) {
+      const runId = topbarDetail.runId || engagementDetail.activeRunId || currentRunId;
+      if (!runId) {
         toast('No run is active right now', 'info');
         return;
       }
-      const result = await API.call('stop_run', { run_id: currentRunId });
+      const result = await API.call('stop_run', { run_id: runId });
       toast(result?.stopped ? 'Stop requested' : 'Run is no longer active', 'info');
     } catch (err) { toast(err.message, 'error'); }
   });
@@ -3968,11 +3984,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function renderAsvPanel(report) {
+    const panel = $('#asv-panel');
+    if (!panel) return;
+    const hasData = report && (report.total_with_verdict || 0) > 0;
+    if (!hasData) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = '';
+    const pct = (n) => `${(Number(n) * 100).toFixed(0)}%`;
+    $('#asv-overall').textContent = pct(report.overall.asv);
+    $('#asv-attempts').textContent = String(report.total_attempts ?? 0);
+    $('#asv-verdicts').textContent = String(report.total_with_verdict ?? 0);
+
+    const renderBuckets = (target, buckets) => {
+      const entries = Object.entries(buckets || {})
+        .filter(([, b]) => (b.denominator || 0) > 0)
+        .sort((a, b) => (b[1].asv ?? 0) - (a[1].asv ?? 0));
+      if (entries.length === 0) {
+        target.innerHTML = '<tr><td class="asv-empty">no verdicts in this bucket</td></tr>';
+        return;
+      }
+      target.innerHTML = entries.map(([name, b]) => `
+        <tr>
+          <td class="asv-name">${esc(name)}</td>
+          <td class="asv-bar-cell"><div class="asv-bar"><div class="asv-bar-fill" style="width:${(b.asv * 100).toFixed(0)}%"></div></div></td>
+          <td class="asv-value">${pct(b.asv)}</td>
+          <td class="asv-count">${b.success}/${b.denominator}</td>
+        </tr>
+      `).join('');
+    };
+    renderBuckets($('#asv-by-strategy'), report.by_strategy);
+    renderBuckets($('#asv-by-category'), report.by_category);
+  }
+
+  async function refreshAsvPanel(engagementSlug) {
+    try {
+      const report = await API.call('get_asv_report', { engagement_slug: engagementSlug });
+      renderAsvPanel(report);
+    } catch (err) {
+      // Non-fatal: ASV is informational. Log via toast in debug only.
+      console.warn('get_asv_report failed', err);
+      renderAsvPanel(null);
+    }
+  }
+
   async function loadRuns({ engagementSlug = activeEngagementSlug, autoSelectFirst = false, preferredRunId = null } = {}) {
     if (!engagementSlug) return;
     try {
       await refreshAnalyzerAvailability();
       const runs = await API.call('list_runs', { engagement_slug: engagementSlug });
+      refreshAsvPanel(engagementSlug);
       engagementDetail.runs = runs;
       const tbody = $('#runs-tbody');
       tbody.innerHTML = '';

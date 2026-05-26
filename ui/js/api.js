@@ -453,6 +453,12 @@ const API = (() => {
       });
     },
 
+    async get_asv_report({ engagement_slug } = {}) {
+      return invoke('get_asv_report', {
+        engagementSlug: engagement_slug || _activeSlug,
+      });
+    },
+
     async get_run_progress({ engagement_slug, run_id }) {
       return invoke('get_run_progress', {
         engagementSlug: engagement_slug || _activeSlug,
@@ -771,6 +777,7 @@ const API = (() => {
     async import_csv() { throw new Error('CSV import coming in a future milestone'); },
     async seed_library({ update } = {}) { return invoke('seed_library', { update: !!update }); },
     async get_mutations() { return []; },
+    async list_mutators() { return invoke('list_mutators'); },
     async get_db_status() { return { open: !!_activeSlug, slug: _activeSlug }; },
   };
 

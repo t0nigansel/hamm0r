@@ -79,6 +79,7 @@ fn main() {
             commands::engagements::get_run_progress,
             commands::engagements::save_markdown_export,
             commands::engagements::open_export_path,
+            commands::engagements::get_asv_report,
             commands::runs::start_run,
             commands::runs::start_scenario_run,
             commands::runs::stop_run,

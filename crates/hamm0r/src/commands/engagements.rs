@@ -1,7 +1,10 @@
 use serde::Serialize;
 use storage::engagements;
+use storage::metrics::{compute_asv, AsvReport, RunInputs};
+use storage::prompts;
 use storage::runs::{read_all, RunRecord, RunStatus};
 use storage::types::{EngagementMeta, EngagementScope, EngagementTarget};
+use storage::verdicts;
 use tauri::State;
 
 use super::{ActiveRunsState, AppPaths};
@@ -251,6 +254,67 @@ pub fn save_markdown_export(
     Ok(ExportFileDto {
         path: path.to_string_lossy().into_owned(),
     })
+}
+
+/// Attack Success Value report aggregated across every run JSONL +
+/// verdict JSONL in the engagement folder. See
+/// `docs/TODO-opi-integration.md` (Milestone B) for the metric
+/// definition. Returns an empty report (all zeroes) when the
+/// engagement has no runs or no verdicts yet.
+#[tauri::command]
+pub fn get_asv_report(
+    paths: State<'_, AppPaths>,
+    engagement_slug: String,
+) -> Result<AsvReport, CommandError> {
+    let runs_dir = paths.0.engagement_dir(&engagement_slug).join("runs");
+    if !runs_dir.exists() {
+        return Ok(AsvReport::default());
+    }
+
+    let library = prompts::load_all(&paths.0.prompts_dir())?;
+    let mut library_by_id = std::collections::HashMap::new();
+    for entries in library.values() {
+        for entry in entries {
+            library_by_id.insert(entry.id.clone(), entry.clone());
+        }
+    }
+
+    // Read every `<run_id>.jsonl` + matching `<run_id>.verdicts.jsonl`.
+    // Replays live in the same directory but represent ad-hoc reruns —
+    // they're surfaced inline in the UI rather than as standalone runs,
+    // so we exclude them here to keep the rollup focused on the
+    // engagement's primary attempts.
+    let mut run_files: Vec<(Vec<RunRecord>, Vec<verdicts::VerdictRecord>)> = Vec::new();
+    for entry in std::fs::read_dir(&runs_dir).map_err(|e| anyhow::anyhow!(e))? {
+        let entry = entry.map_err(|e| anyhow::anyhow!(e))?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !name.ends_with(".jsonl") || name.ends_with(".verdicts.jsonl") {
+            continue;
+        }
+        if name.contains("-replay-") {
+            continue;
+        }
+        let run_records = read_all(&path)?;
+        let verdict_path = path.with_extension("verdicts.jsonl");
+        let verdict_records = if verdict_path.exists() {
+            verdicts::read_all(&verdict_path)?
+        } else {
+            Vec::new()
+        };
+        run_files.push((run_records, verdict_records));
+    }
+
+    let inputs: Vec<RunInputs<'_>> = run_files
+        .iter()
+        .map(|(r, v)| RunInputs {
+            run_records: r,
+            verdict_records: v,
+        })
+        .collect();
+    Ok(compute_asv(&inputs, &library_by_id))
 }
 
 #[tauri::command]

@@ -4607,3 +4607,41 @@ iframe.eng-report-preview {
   gap: 2px;
   align-items: center;
 }
+
+/* ── ASV panel (engagement dashboard, Milestone B of TODO-opi-integration) ── */
+.asv-panel {
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  padding: 12px 14px;
+  margin-bottom: 1rem;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.asv-summary { display: flex; gap: 24px; margin-bottom: 12px; flex-wrap: wrap; }
+.asv-summary-item { display: inline-flex; align-items: baseline; gap: 6px; }
+.asv-summary-item .asv-label {
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-2); font-size: 10px;
+}
+.asv-summary-item strong { color: var(--text-0); font-size: 14px; }
+.asv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.asv-col h4 {
+  margin: 0 0 6px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-2); font-weight: 600;
+}
+.asv-table { width: 100%; border-collapse: collapse; }
+.asv-table td { padding: 2px 4px; vertical-align: middle; }
+.asv-table .asv-name { color: var(--text-1); white-space: nowrap; }
+.asv-table .asv-value { width: 42px; text-align: right; color: var(--text-0); }
+.asv-table .asv-count { width: 60px; text-align: right; color: var(--text-3); font-size: 10px; }
+.asv-table .asv-bar-cell { width: 100%; }
+.asv-bar {
+  position: relative; height: 8px; background: var(--bg-2);
+  border: 1px solid var(--border); overflow: hidden;
+}
+.asv-bar-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--accent, #4a9eff);
+}
+.asv-empty { color: var(--text-3); font-style: italic; padding: 4px 2px; }

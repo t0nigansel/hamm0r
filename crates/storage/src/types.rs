@@ -46,6 +46,40 @@ impl Phase {
     }
 }
 
+/// Attack-delivery strategy classification (Liu et al. 2024 / OPI).
+/// Describes *how* an attack is delivered, independent of *what* the
+/// payload is. Stored per-prompt in the YAML library and rolled up in
+/// the engagement-level ASV report.
+///
+/// `Naive` is the default so existing prompt files (which omit the
+/// `strategy` field) keep loading unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttackStrategy {
+    #[default]
+    Naive,
+    EscapeChar,
+    Ignore,
+    FakeCompletion,
+    Combined,
+}
+
+impl AttackStrategy {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AttackStrategy::Naive => "naive",
+            AttackStrategy::EscapeChar => "escape_char",
+            AttackStrategy::Ignore => "ignore",
+            AttackStrategy::FakeCompletion => "fake_completion",
+            AttackStrategy::Combined => "combined",
+        }
+    }
+}
+
+fn is_strategy_naive(s: &AttackStrategy) -> bool {
+    *s == AttackStrategy::Naive
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Turn {
     pub role: String,
@@ -83,6 +117,12 @@ pub struct PromptEntry {
     /// a barrier. Single-session scenarios ignore this field.
     #[serde(default, skip_serializing_if = "is_phase_any")]
     pub phase: Phase,
+    /// Attack-delivery strategy (Liu et al. 2024 / OPI taxonomy). Optional
+    /// in YAML; defaults to `Naive` so existing files load unchanged.
+    /// Read by the engagement ASV report to bucket success rates by
+    /// strategy.
+    #[serde(default, skip_serializing_if = "is_strategy_naive")]
+    pub strategy: AttackStrategy,
 }
 
 fn is_phase_any(p: &Phase) -> bool {
@@ -779,6 +819,7 @@ mod tests {
             tags: vec!["direct".into(), "classic".into()],
             owasp_ref: Some("A01".into()),
             phase: Phase::Any,
+            strategy: AttackStrategy::Naive,
         };
         assert_eq!(file_roundtrip(&dir, "prompt.yaml", &entry), entry);
     }
@@ -804,6 +845,7 @@ mod tests {
             tags: vec!["multiturn".into(), "memory".into()],
             owasp_ref: Some("A02".into()),
             phase: Phase::Any,
+            strategy: AttackStrategy::Naive,
         };
         assert_eq!(yaml_roundtrip(&entry), entry);
     }
@@ -1176,9 +1218,70 @@ scope:
                 tags: vec![],
                 owasp_ref: None,
                 phase,
+                strategy: AttackStrategy::Naive,
             };
             assert_eq!(yaml_roundtrip(&entry), entry);
         }
+    }
+
+    #[test]
+    fn attack_strategy_default_is_naive() {
+        assert_eq!(AttackStrategy::default(), AttackStrategy::Naive);
+    }
+
+    #[test]
+    fn attack_strategy_serializes_as_snake_case() {
+        assert_eq!(
+            serde_yaml::to_string(&AttackStrategy::EscapeChar)
+                .unwrap()
+                .trim(),
+            "escape_char"
+        );
+        assert_eq!(
+            serde_yaml::to_string(&AttackStrategy::FakeCompletion)
+                .unwrap()
+                .trim(),
+            "fake_completion"
+        );
+    }
+
+    #[test]
+    fn prompt_entry_strategy_field_round_trips() {
+        for strategy in [
+            AttackStrategy::Naive,
+            AttackStrategy::EscapeChar,
+            AttackStrategy::Ignore,
+            AttackStrategy::FakeCompletion,
+            AttackStrategy::Combined,
+        ] {
+            let entry = PromptEntry {
+                id: "p".into(),
+                name: None,
+                text: "x".into(),
+                severity: Severity::Low,
+                mode: PromptMode::Single,
+                turns: vec![],
+                tags: vec![],
+                owasp_ref: None,
+                phase: Phase::Any,
+                strategy,
+            };
+            assert_eq!(yaml_roundtrip(&entry), entry);
+        }
+    }
+
+    #[test]
+    fn legacy_prompt_entry_without_strategy_defaults_to_naive() {
+        // Pre-strategy prompt YAML had no `strategy` field. Legacy files
+        // must still load and default to `naive`.
+        let yaml = "\
+id: legacy
+text: hello
+severity: LOW
+mode: single
+";
+        let entry: PromptEntry = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(entry.strategy, AttackStrategy::Naive);
     }
 
     #[test]

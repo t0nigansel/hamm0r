@@ -117,6 +117,7 @@ mod tests {
                 tags: vec!["direct".into()],
                 owasp_ref: Some("A01".into()),
                 phase: Phase::Any,
+                strategy: crate::types::AttackStrategy::Naive,
             },
             PromptEntry {
                 id: "inj-002".into(),
@@ -128,6 +129,7 @@ mod tests {
                 tags: vec!["direct".into()],
                 owasp_ref: Some("A01".into()),
                 phase: Phase::Any,
+                strategy: crate::types::AttackStrategy::Naive,
             },
         ]
     }

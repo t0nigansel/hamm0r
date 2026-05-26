@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use storage::prompts;
-use storage::types::{PromptEntry, PromptMode, Severity};
+use storage::types::{AttackStrategy, PromptEntry, PromptMode, Severity};
 use tauri::State;
 
 use super::AppPaths;
@@ -33,6 +33,10 @@ const BUNDLED: &[(&str, &str)] = &[
     (
         "owasp-agentic-2026.yaml",
         include_str!("../../../../prompts/owasp-agentic-2026.yaml"),
+    ),
+    (
+        "injection-strategies.yaml",
+        include_str!("../../../../prompts/injection-strategies.yaml"),
     ),
 ];
 
@@ -106,6 +110,8 @@ pub struct PromptDto {
     pub tags: Vec<String>,
     #[serde(default)]
     pub owasp_ref: Option<String>,
+    #[serde(default)]
+    pub strategy: AttackStrategy,
 }
 
 fn default_mode() -> PromptMode {
@@ -168,6 +174,7 @@ pub fn create_prompt(
         tags: dedupe_tags(dto.tags),
         owasp_ref: normalize_owasp_ref(dto.owasp_ref),
         phase: storage::types::Phase::Any,
+        strategy: dto.strategy,
     };
     prompts::save_one(&paths.0.prompts_dir(), &category, &entry)?;
     Ok(entry)
@@ -215,6 +222,7 @@ pub fn update_prompt(
         tags: dedupe_tags(dto.tags),
         owasp_ref: normalize_owasp_ref(dto.owasp_ref),
         phase: storage::types::Phase::Any,
+        strategy: dto.strategy,
     };
 
     if old_category != new_category {
