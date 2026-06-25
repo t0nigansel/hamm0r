@@ -378,6 +378,21 @@
       </div>
     </div>
 
+    <!-- Generic confirm dialog. Native confirm() is a no-op in this
+         webview (wry's WKUIDelegate does not implement the JS confirm
+         panel, so WKWebView resolves confirm() to false without ever
+         showing a prompt). This in-app dialog restores a working flow. -->
+    <div id="confirm-dialog" class="dialog is-hidden">
+      <div class="dialog-content">
+        <h3 id="confirm-dialog-title">Are you sure?</h3>
+        <p id="confirm-dialog-message" style="white-space:pre-line;font-size:12px;"></p>
+        <div class="form-actions">
+          <button type="button" id="confirm-dialog-ok" class="btn btn-primary danger">Confirm</button>
+          <button type="button" id="confirm-dialog-cancel" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ==============================================================
          T-22 · Library view (reskinned)
          ============================================================== -->

@@ -21,6 +21,41 @@ const setHidden = (el, hidden) => {
   el.classList.toggle('is-hidden', !!hidden);
 };
 
+// In-app confirmation dialog, returning a Promise<boolean>. The native
+// confirm() cannot be used here: wry's WKUIDelegate does not implement
+// the JavaScript confirm panel, so WKWebView resolves confirm() to false
+// without showing anything — every confirm()-guarded action silently does
+// nothing. This vanilla dialog (markup: #confirm-dialog) restores it.
+function confirmDialog({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm' } = {}) {
+  return new Promise((resolve) => {
+    const dialog = $('#confirm-dialog');
+    const okBtn = $('#confirm-dialog-ok');
+    const cancelBtn = $('#confirm-dialog-cancel');
+    if (!dialog || !okBtn || !cancelBtn) {
+      // Markup missing — fail safe by treating the action as cancelled.
+      resolve(false);
+      return;
+    }
+    $('#confirm-dialog-title').textContent = title;
+    $('#confirm-dialog-message').textContent = message;
+    okBtn.textContent = confirmLabel;
+
+    const close = (result) => {
+      setHidden(dialog, true);
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onOk = () => close(true);
+    const onCancel = () => close(false);
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+
+    setHidden(dialog, false);
+    okBtn.focus();
+  });
+}
+
 // Top-level "always-on" handlers. Registered immediately on script
 // load (not inside DOMContentLoaded) so they survive any synchronous
 // failure that aborts DCL setup. Covers the Settings modal, the
@@ -2864,7 +2899,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const id = typeof scenario === 'string' ? scenario : scenario?.id;
     if (!id) return;
     const label = typeof scenario === 'object' ? (scenario.name || scenario.id) : id;
-    if (!confirm(`Delete scenario "${label}"?`)) return;
+    const ok = await confirmDialog({
+      title: 'Delete scenario?',
+      message: `Delete scenario "${label}"?`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     try {
       await API.call('delete_scenario', { id });
       if (currentScenarioId === id) {
@@ -3561,7 +3601,12 @@ document.addEventListener('DOMContentLoaded', () => {
       `This removes the engagement folder on disk: every run JSONL, every ` +
       `verdict log, every response file, and every generated report. ` +
       `The action cannot be undone.`;
-    if (!confirm(msg)) return;
+    const ok = await confirmDialog({
+      title: 'Delete engagement?',
+      message: msg,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
 
     try {
       const res = await API.call('delete_engagement', { slug: eng.slug });
