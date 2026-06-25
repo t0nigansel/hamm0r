@@ -1,8 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" fill="#0A0C12"/>
-  <g font-family="Arial, Helvetica, sans-serif" font-size="190" font-weight="800" letter-spacing="0">
-    <text x="92" y="594" fill="#F3F5FF">hamm</text>
-    <text x="616" y="594" fill="#7CB7FF">0</text>
-    <text x="746" y="594" fill="#F3F5FF">r</text>
-  </g>
+  <rect width="1024" height="1024" rx="192" fill="#111318"/>
+
+  <path d="M212 292H438C474 292 504 322 504 358V396C504 432 474 462 438 462H212C174 462 144 432 144 394V360C144 322 174 292 212 292Z" fill="#F4F1E8"/>
+  <path d="M576 292H804C858 292 902 336 902 390V462H576C540 462 510 432 510 396V358C510 322 540 292 576 292Z" fill="#F4F1E8"/>
+  <circle cx="512" cy="377" r="130" fill="#F4F1E8"/>
+  <circle cx="512" cy="377" r="58" fill="#111318"/>
+  <rect x="502" y="246" width="20" height="58" fill="#111318"/>
+  <rect x="502" y="450" width="20" height="58" fill="#111318"/>
+  <rect x="382" y="367" width="58" height="20" fill="#111318"/>
+  <rect x="584" y="367" width="58" height="20" fill="#111318"/>
+  <path d="M462 462H594L724 838H600L462 462Z" fill="#F4F1E8"/>
 </svg>
