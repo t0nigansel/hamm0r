@@ -450,9 +450,12 @@ input, select, textarea {
 .breadcrumb .sep { color: rgba(231, 234, 244, 0.42); }
 .breadcrumb .current { color: #F3F5FF; }
 
+/* Right-anchored, not centred in the breadcrumb's leftover space, so its
+   position no longer depends on the breadcrumb's text width. The breadcrumb
+   is left-anchored and the progress sits at the right, so neither shifts
+   when the user switches views — and they cannot overlap. */
 .topbar-progress {
   margin-left: auto;
-  margin-right: auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -526,8 +529,7 @@ input, select, textarea {
 .topbar-progress-detail {
   position: absolute;
   top: 44px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 16px;
   min-width: 360px;
   background: var(--bg-1, #1c1f26);
   border: 1px solid rgba(231, 234, 244, 0.18);
