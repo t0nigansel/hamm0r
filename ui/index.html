@@ -393,6 +393,21 @@
       </div>
     </div>
 
+    <!-- Generic text-prompt dialog. Native window.prompt() is also a no-op
+         in this webview (same missing WKUIDelegate panel as confirm), so it
+         returns null without showing anything. This restores a text prompt. -->
+    <div id="prompt-dialog" class="dialog is-hidden">
+      <div class="dialog-content">
+        <h3 id="prompt-dialog-title">Enter a value</h3>
+        <p id="prompt-dialog-message" style="white-space:pre-line;font-size:12px;"></p>
+        <input type="text" id="prompt-dialog-input" style="width:100%;margin-bottom:14px;">
+        <div class="form-actions">
+          <button type="button" id="prompt-dialog-ok" class="btn btn-primary">OK</button>
+          <button type="button" id="prompt-dialog-cancel" class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ==============================================================
          T-22 · Library view (reskinned)
          ============================================================== -->

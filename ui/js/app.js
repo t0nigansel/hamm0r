@@ -56,6 +56,51 @@ function confirmDialog({ title = 'Are you sure?', message = '', confirmLabel = '
   });
 }
 
+// In-app text prompt, returning a Promise<string|null> (null = cancelled).
+// Like confirm(), the native window.prompt() is a no-op in this webview and
+// returns null without showing anything (see confirmDialog above). Markup:
+// #prompt-dialog. Enter submits, Escape cancels.
+function promptDialog({ title = 'Enter a value', message = '', defaultValue = '', confirmLabel = 'OK' } = {}) {
+  return new Promise((resolve) => {
+    const dialog = $('#prompt-dialog');
+    const input = $('#prompt-dialog-input');
+    const okBtn = $('#prompt-dialog-ok');
+    const cancelBtn = $('#prompt-dialog-cancel');
+    if (!dialog || !input || !okBtn || !cancelBtn) {
+      // Markup missing — fail safe by treating the prompt as cancelled.
+      resolve(null);
+      return;
+    }
+    $('#prompt-dialog-title').textContent = title;
+    const msgEl = $('#prompt-dialog-message');
+    msgEl.textContent = message;
+    setHidden(msgEl, !message);
+    input.value = defaultValue;
+    okBtn.textContent = confirmLabel;
+
+    const close = (result) => {
+      setHidden(dialog, true);
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onOk = () => close(input.value);
+    const onCancel = () => close(null);
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+      else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    };
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    input.addEventListener('keydown', onKey);
+
+    setHidden(dialog, false);
+    input.focus();
+    input.select();
+  });
+}
+
 // Top-level "always-on" handlers. Registered immediately on script
 // load (not inside DOMContentLoaded) so they survive any synchronous
 // failure that aborts DCL setup. Covers the Settings modal, the
@@ -1964,7 +2009,12 @@ document.addEventListener('DOMContentLoaded', () => {
   async function forgetRequestAuthToken() {
     const varName = ($('#req-auth-token-env').value || '').trim();
     if (!varName) return;
-    if (!confirm(`Remove the keychain entry for ${varName}?`)) return;
+    const ok = await confirmDialog({
+      title: 'Remove token?',
+      message: `Remove the keychain entry for ${varName}?`,
+      confirmLabel: 'Remove',
+    });
+    if (!ok) return;
     try {
       await API.call('forget_bearer_token', { var: varName });
       toast(`Token removed for ${varName}.`, 'success');
@@ -2314,7 +2364,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   async function deletePrompt(id) {
-    if (!confirm(`Delete prompt ${id}?`)) return;
+    const ok = await confirmDialog({
+      title: 'Delete prompt?',
+      message: `Delete prompt ${id}?`,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     try {
       await API.call('delete_prompt', { id });
       toast('Prompt deleted', 'success');
@@ -3576,7 +3631,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const slug = engagementDetail.slug;
     if (!slug) return;
     const current = engagementDetail.name || '';
-    const next = window.prompt('New engagement name:', current);
+    const next = await promptDialog({
+      title: 'Rename engagement',
+      defaultValue: current,
+      confirmLabel: 'Rename',
+    });
     if (next == null) return;
     const trimmed = next.trim();
     if (!trimmed || trimmed === current) return;
@@ -4139,7 +4198,7 @@ document.addEventListener('DOMContentLoaded', () => {
           analyzeBtn.disabled = true;
           analyzeBtn.title = reason;
         }
-        analyzeBtn.addEventListener('click', (e) => {
+        analyzeBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
           // Mid-flight click is a cancel; otherwise start a new analysis.
           if (analyzeBtn.dataset.analyzing === 'true') {
@@ -4148,8 +4207,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             return;
           }
-          if (r.analyzed && !window.confirm('Re-analyze this run? Existing verdicts will be overwritten.')) {
-            return;
+          if (r.analyzed) {
+            const ok = await confirmDialog({
+              title: 'Re-analyze run?',
+              message: 'Re-analyze this run? Existing verdicts will be overwritten.',
+              confirmLabel: 'Re-analyze',
+            });
+            if (!ok) return;
           }
           analyzeRun({ engagementSlug, runId: r.id });
         });
@@ -4779,7 +4843,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const msg = `Permanently delete run ${shortId}?\n\n` +
       `This removes the run JSONL, its verdicts, every response file, and any generated report. ` +
       `The action cannot be undone.`;
-    if (!confirm(msg)) return;
+    const ok = await confirmDialog({
+      title: 'Delete run?',
+      message: msg,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
 
     try {
       const res = await API.call('delete_run', {
