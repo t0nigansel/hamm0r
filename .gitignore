@@ -17,3 +17,7 @@ artifacts/
 #
 # Installed analyzer bundles belong in the user data directory
 # (~/hamm0r/analyzer), not inside the repo.
+
+# Local Claude Code settings — personal, may hold secrets/tokens.
+# The shared .claude/settings.json stays tracked.
+.claude/settings.local.json
