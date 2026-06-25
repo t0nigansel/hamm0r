@@ -84,6 +84,5 @@ Old zips do not need to be deleted from the release.
 
 The manifest currently lists **no variants**. Until real bundles are
 published, the Settings install flow will show "No variants available"
-and the install button will remain disabled. This is intentional: see
-the discussion of the placeholder-fallback removal in
-[`docs/analyzorPlan.md`](../docs/analyzorPlan.md).
+and the install button will remain disabled. This is intentional — no
+client attempts a download until the manifest references a bundle SHA.

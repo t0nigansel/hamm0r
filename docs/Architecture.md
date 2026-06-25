@@ -25,9 +25,8 @@ Core invokes the analyzer as a **subprocess**, not as a linked library.
 That is the deliberate boundary: the analyzer never shares an address
 space with core, and core never compiles in an LLM runtime. See
 [*The analyzer as a separable module*](#the-analyzer-as-a-separable-module)
-below for the install plan and
-[`plans/cloudLLMPlan.md`](plans/cloudLLMPlan.md) for the hosted judge
-plan.
+below for the install plan and the hosted-judge mode (a remote-endpoint
+alternative to the local judge).
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐

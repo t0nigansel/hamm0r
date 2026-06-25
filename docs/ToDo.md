@@ -1,12 +1,10 @@
 # TODO — hamm0r
 
 Master work-list derived from [`productVision.md`](productVision.md).
-Each chunk is sized for one focused commit. Bigger efforts reference
-their dedicated plan in [`plans/`](plans/).
+Each chunk is sized for one focused commit.
 
-Completed and shipped refactor work lives in
-[`plans/RefactorPlan.md`](plans/RefactorPlan.md). Hosted Judge work
-is tracked in [`plans/cloudLLMPlan.md`](plans/cloudLLMPlan.md).
+The Request/Scenario refactor, Hosted Judge, and multi-session work
+have all shipped; their planning docs were retired once complete.
 
 ---
 
@@ -16,8 +14,6 @@ _Vision: "A scenario can fire across N parallel sessions with distinct
 session identifiers." First-class scenario type, not an afterthought._
 
 Reference: `productVision.md` § Multi-session testing
-
-Full plan: [`plans/multiSessionPlan.md`](plans/multiSessionPlan.md)
 
 - [x] **1.1 — Session identity model.** `SessionIdentityConfig` +
       `SessionIdentityKind` (`CookieJar` / `ConversationHeader` /
@@ -30,8 +26,7 @@ Full plan: [`plans/multiSessionPlan.md`](plans/multiSessionPlan.md)
       `runner::multi_session::execute_multi_session_run`. Per-session
       `reqwest::Client` with its own cookie jar + optional default
       identity header. V1 runs sessions sequentially within each phase;
-      the plan's parallel-across-sessions optimization is deferred (see
-      `plans/multiSessionPlan.md` Q7).
+      the parallel-across-sessions optimization is deferred.
 - [x] **1.3 — Canary token generation.** `runner::canary::generate(run_id,
       session_idx, scenario_id)` returns `HAMM0R-<11-hex>` deterministically
       via SHA-256. Sibling `runner::canary::inject(text, canary)`
@@ -296,8 +291,6 @@ Reference: `productVision.md` § Core product principles #5
 _Vision: "The user activates [the analyzer] once and chooses between a
 local LLM or a configured remote endpoint."_
 
-Full plan: [`plans/cloudLLMPlan.md`](plans/cloudLLMPlan.md)
-
 - [x] **8.1 — Spec realignment.** Update `ProductVision.md`,
       `Architecture.md`, `Stack.md`, `Datamodel.md` per the plan's
       Phase 1. `productVision.md` updated by user. `Architecture.md`
@@ -414,7 +407,7 @@ Reference: `productVision.md` § UI conventions; `STYLEGUIDE.md`
 ## 12 · Miscellaneous (small items)
 
 - [x] **12.1 — `analyzorPlan.md` references fixed.** `Architecture.md`
-      now points to the in-document analyzer section + `cloudLLMPlan.md`.
+      now points to the in-document analyzer section.
       `Stack.md` now points to `Architecture.md § The analyzer as a
       separable module`.
 - [x] **12.2 — clippy clean.** `cargo clippy --workspace --all-targets

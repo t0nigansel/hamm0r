@@ -298,7 +298,7 @@ response:
       path: total
 ```
 
-### Request dependencies (Phase 2 of `RefactorPlan.md`)
+### Request dependencies
 
 Two optional fields turn isolated Requests into a directed acyclic
 graph that the runner resolves before firing.
@@ -350,7 +350,7 @@ Cycles are detected statically and fail the run with a clear error.
 
 `tag` (string, optional) is a free-text label used by the UI to group
 Requests. It has no effect on execution. Targets used to provide this
-grouping; Phase 2 of `RefactorPlan.md` replaced them with `tag`.
+grouping; that role was later replaced with `tag`.
 
 Starter Request templates bundled with the app are copied into
 `~/hamm0r/requests/` when their filenames are missing there. Existing
@@ -787,8 +787,8 @@ prompt libraries work unchanged in single-session scenarios.
 ### Legacy scenario YAML
 
 Scenarios used to carry a `target_id` and an ordered `steps:` array.
-Those fields are no longer part of the schema (Phase 2G of
-`RefactorPlan.md`). Old YAML files with them still load — serde drops
+Those fields are no longer part of the schema. Old YAML files with
+them still load — serde drops
 unknown keys — and become **inert** matrix scenarios with no Requests
 and no library. Open them in the Scenarios view to re-author as a
 matrix.

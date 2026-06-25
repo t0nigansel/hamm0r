@@ -6,7 +6,7 @@ this document disagree: ask, don't silently fix.
 
 ## Before anything else
 
-Read `ProductVision.md`. It is the north star. When a feature, refactor, or
+Read `docs/productVision.md`. It is the north star. When a feature, refactor, or
 decision feels ambiguous, the vision decides — not this file, not the code,
 not the task description. If the vision and a task conflict, the task is
 wrong.
@@ -60,10 +60,10 @@ Nothing in core may depend on `crates/analyzer/` or a model runtime.
 - Rust + Tauri 2 + HTML/JS/CSS (vanilla, no framework)
 - Files on disk as source of truth: YAML for prompts and requests,
   append-only JSONL for run logs, plain files for responses. No
-  database in core. See `Datamodel.md`.
+  database in core. See `docs/Datamodel.md`.
 - `reqwest` / Rust async HTTP in the runner
 - Local LLM runtime for analyzer (model is replaceable, see
-  `Architecture.md`)
+  `docs/Architecture.md`)
 - Rust test tooling via `cargo test`
 
 ## Project structure
@@ -77,16 +77,16 @@ Nothing in core may depend on `crates/analyzer/` or a model runtime.
   folder on first run
 - `tests/` — tests for all layers
 - User's on-disk layout (not part of this repo, documented in
-  `Datamodel.md`): `~/hamm0r/prompts/`, `~/hamm0r/requests/`,
+  `docs/Datamodel.md`): `~/hamm0r/prompts/`, `~/hamm0r/requests/`,
   `~/hamm0r/engagements/<slug>/`
 
 ## How Claude works here
 
 ### Before any task
 
-1. Read `ProductVision.md`. Check whether the task aligns with it.
-2. Read the relevant spec file: `Architecture.md`, `Datamodel.md`,
-   `PromptsSpec.md`, `Stack.md`. These are binding.
+1. Read `docs/productVision.md`. Check whether the task aligns with it.
+2. Read the relevant spec file: `docs/Architecture.md`, `docs/Datamodel.md`,
+   `docs/PromptsSpec.md`, `docs/Stack.md`. These are binding.
 3. Read the affected files in full before changing them. Do not speculate
    about code you have not read.
 4. Check whether the task touches an invariant (see below). If yes: ask
@@ -148,8 +148,8 @@ task is misstated — not the rule.
    enforcement point for paths, encoding, and atomic writes. Exception:
    tests that use the storage layer's own helpers.
 7. **The run JSONL file is the handoff contract** between core and
-   analyzer. Its schema is defined in `Datamodel.md`. Changes require:
-   update in `Datamodel.md`, a migration path for existing files, and
+   analyzer. Its schema is defined in `docs/Datamodel.md`. Changes require:
+   update in `docs/Datamodel.md`, a migration path for existing files, and
    an explicit note in the commit.
 8. **The Tauri command layer never talks to the LLM directly.** The
    app shell calls runner/storage logic, and runner calls the target.
@@ -166,7 +166,7 @@ task is misstated — not the rule.
     existing line. Never truncate. A crash during a run may leave a
     truncated last line — that is acceptable and handled on read.
 13. **No database in core.** If a feature seems to need one, stop and
-    ask. Files are the source of truth. See `ProductVision.md`
+    ask. Files are the source of truth. See `docs/productVision.md`
     principle 7.
 
 ## What not to do
@@ -175,19 +175,19 @@ task is misstated — not the rule.
 - No binary formats for user artifacts. Files must be human-readable
   (YAML for configs, JSONL for logs, plain text for responses).
 - No Typescript/Node/framework migration in the UI without an explicit
-  decision documented in `ProductVision.md`
+  decision documented in `docs/productVision.md`
 - No async code without reason — if there is no suspension point, keep it
   synchronous
 - No "while-I'm-here" refactors. If you notice something: separate issue,
   not mixed into the current change.
 - No plugin systems, no YAML-driven workflows, no "power user" escape
-  hatches in core. These contradict `ProductVision.md`.
+  hatches in core. These contradict `docs/productVision.md`.
 
 ## When Claude should stop and ask
 
 Not every ambiguity is an invitation to guess. Stop and ask when:
 
-- A requirement conflicts with `ProductVision.md`
+- A requirement conflicts with `docs/productVision.md`
 - A requirement conflicts with one of the invariants above
 - The change is security-relevant (auth, crypto, secret handling, new
   network calls)
@@ -221,12 +221,12 @@ file, not a reason to guess. Open an issue with the label
 `docs:claude-md` before starting the implementation.
 
 ## Guidelines
-Respect /skills/guidelines.md
+Respect crates/skills/guidelines.md
 
 ## Dev workflow
 
 After any edit, the PostToolUse hook runs:
-`ruff check --fix . && ruff format --check . && mypy sidecar runner db`
+`cargo fmt && cargo clippy --all-targets -- -D warnings && cargo check`
 
-Do not write tests unless explicitly asked.
-Do not run pytest unless asked — UI and schema are still changing.
+Keep the workspace warning-clean — clippy denies warnings. Tests belong
+in the same change as the code (see "Definition of Done" above).
