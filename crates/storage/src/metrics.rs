@@ -221,10 +221,7 @@ mod tests {
     }
 
     fn lib_for(prompts: &[PromptEntry]) -> HashMap<String, PromptEntry> {
-        prompts
-            .iter()
-            .map(|p| (p.id.clone(), p.clone()))
-            .collect()
+        prompts.iter().map(|p| (p.id.clone(), p.clone())).collect()
     }
 
     #[test]
